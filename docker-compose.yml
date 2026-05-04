@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ferreteria-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sheba
+      POSTGRES_PASSWORD: Seba.2005
+      POSTGRES_DB: ferreteria
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheba -d ferreteria"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ferreteria-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: sheba
+      DB_PASSWORD: Seba.2005
+      DATABASE: ferreteria
+      COOKIE_KEY: local-cookie-key
+      JWT_SECRET: local-jwt-secret
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: ferreteria-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+  python:
+    build:
+      context: ./python
+    container_name: ferreteria-python
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:

@@ -1,3 +1,47 @@
-__pycache__
-*.pyc
-.venv
+# Dependencias y entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Builds y empaquetado
+build/
+dist/
+*.egg-info/
+
+# Control de versiones
+.git/
+.gitignore
+
+# Variables de entorno locales (NUNCA incluir en la imagen)
+.env
+.env.local
+.env.*.local
+
+# Archivos del editor e IDE
+.vscode/
+.idea/
+*.swp
+
+# Documentacion y tests
+README.md
+docs/
+tests/
+test/
+*_test.py
+test_*.py
+coverage/
+.coverage
+htmlcov/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

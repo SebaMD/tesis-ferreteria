@@ -3,48 +3,88 @@ services:
     image: postgres:16-alpine
     container_name: ferreteria-db
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Seba.2005}
+      POSTGRES_DB: ${POSTGRES_DB:-ferreteria}
     ports:
       - "5433:5432"
+    networks:
+      - backend_network
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sheba -d ferreteria"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ferreteria}"]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 30s
 
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - NODE_ENV=${NODE_ENV:-production}
     container_name: ferreteria-backend
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-Seba.2005}
+      DATABASE: ${DATABASE:-ferreteria}
+      PORT: ${PORT:-3000}
+      JWT_SECRET: ${JWT_SECRET:-super_secret}
+      COOKIE_KEY: ${COOKIE_KEY:-cookie_key}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "3000:3000"
+    networks:
+      - backend_network
+      - frontend_network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-3000}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
+      target: production
     container_name: ferreteria-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
-      - "5173:5173"
+      - "5173:80"
+    networks:
+      - frontend_network
 
   python:
     build:
       context: ./python
+      dockerfile: Dockerfile
+      target: production
     container_name: ferreteria-python
     restart: unless-stopped
     ports:
       - "8000:8000"
+    networks:
+      - backend_network
+
+networks:
+  backend_network:
+    driver: bridge
+  frontend_network:
+    driver: bridge
 
 volumes:
   postgres_data:

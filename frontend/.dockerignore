@@ -1,3 +1,32 @@
-node_modules
-dist
+# Dependencias (se instalan dentro del contenedor)
+node_modules/
 npm-debug.log
+
+# Build anterior (se genera dentro del contenedor)
+dist/
+build/
+
+# Control de versiones
+.git/
+.gitignore
+
+# Variables de entorno locales (¡NUNCA incluir en la imagen!)
+.env
+.env.local
+.env.*.local
+
+# Archivos del editor e IDE
+.vscode/
+.idea/
+*.swp
+
+# Documentación y tests
+README.md
+docs/
+__tests__/
+*.test.js
+coverage/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

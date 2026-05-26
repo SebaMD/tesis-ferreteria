@@ -1,7 +1,10 @@
-# -- Etapa de Desarrollo --
-FROM node:22-alpine
+# -- Base --
+FROM node:22-alpine AS base
 
 WORKDIR /app
+
+# -- Etapa de Desarrollo --
+FROM base AS development
 
 COPY package*.json ./
 RUN npm ci
@@ -9,25 +12,28 @@ RUN npm ci
 COPY . .
 
 EXPOSE 3000
+CMD ["npm", "run", "dev"]
 
-CMD ["npm", "start"]
-
-# -- Etapa de Producción --
-FROM node:22-alpine AS production
-
-WORKDIR /app
+# -- Etapa de Build --
+FROM base AS build
 
 COPY package*.json ./
-
-# Define entorno de producción
-ENV NODE_ENV=production
-
-# Instala dependencias ignorando devDependencies
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY . .
+RUN npm run build
+
+# -- Etapa de Producción --
+FROM base AS production
+
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=build /app/dist ./dist
 
 USER node
 
 EXPOSE 3000
-CMD ["node", "src/index.js"]
+CMD ["node", "dist/server.js"]

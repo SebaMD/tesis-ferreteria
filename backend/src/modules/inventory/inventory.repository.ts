@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "../../db/index.js";
+import { db, type DbTransaction } from "../../db/index.js";
 import { inventoryMovementsTable, productsTable, usersTable, type NewInventoryMovement } from "../../db/schema/index.js";
 
 const movementColumns = {
@@ -36,15 +36,11 @@ export async function findInventoryMovementById(id: number) {
   return movement;
 }
 
-export async function createInventoryMovement(data: NewInventoryMovement) {
-  const [movement] = await db.insert(inventoryMovementsTable).values(data).returning({ id: inventoryMovementsTable.id });
-  return findInventoryMovementById(movement.id);
-}
-
-export async function deleteInventoryMovementById(id: number) {
-  const [movement] = await db
-    .delete(inventoryMovementsTable)
-    .where(eq(inventoryMovementsTable.id, id))
+export async function createInventoryMovement(tx: DbTransaction, data: NewInventoryMovement) {
+  const [movement] = await tx
+    .insert(inventoryMovementsTable)
+    .values(data)
     .returning({ id: inventoryMovementsTable.id });
-  return movement ?? null;
+
+  return movement;
 }

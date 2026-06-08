@@ -2,7 +2,7 @@ import type { NewProduct } from "../../db/schema/index.js";
 
 export type ProductBody = Pick<
   NewProduct,
-  "categoryId" | "name" | "description" | "price" | "unitMeasure" | "currentStock" | "minimumStock" | "status"
+  "categoryId" | "name" | "description" | "price" | "unitMeasure" | "minimumStock" | "status"
 >;
 export type EditProductBody = Partial<ProductBody>;
 
@@ -31,7 +31,7 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
 
   const input = body as Record<string, unknown>;
   const value: EditProductBody = {};
-  const allowed = ["categoryId", "name", "description", "price", "unitMeasure", "currentStock", "minimumStock", "status"];
+  const allowed = ["categoryId", "name", "description", "price", "unitMeasure", "minimumStock", "status"];
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -69,12 +69,6 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
     const unitMeasure = text(input.unitMeasure);
     if (unitMeasure.length < 1 || unitMeasure.length > 50) return { success: false, error: "La unidad de medida no es valida" };
     value.unitMeasure = unitMeasure;
-  }
-
-  if (input.currentStock !== undefined) {
-    const parsed = positiveInt(input.currentStock, "El stock actual", true);
-    if (!parsed.success) return { success: false, error: parsed.error };
-    value.currentStock = parsed.value;
   }
 
   if (input.minimumStock !== undefined) {

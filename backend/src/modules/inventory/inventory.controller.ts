@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
+import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import {
   createInventoryMovementService,
-  deleteInventoryMovementService,
   getInventoryMovementByIdService,
   getInventoryMovementsService,
+  InventoryMovementError,
 } from "./inventory.service.js";
 import { validateCreateInventoryMovementBody } from "./inventory.validation.js";
 
@@ -16,10 +17,6 @@ function parseId(id: unknown) {
 
 function msg(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
-}
-
-function dbConflict(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "23503";
 }
 
 export async function getInventoryMovements(_req: Request, res: Response) {
@@ -42,24 +39,23 @@ export async function getInventoryMovementById(req: Request, res: Response) {
   }
 }
 
-export async function createInventoryMovementController(req: Request, res: Response) {
+export async function createInventoryMovementController(req: AuthenticatedRequest, res: Response) {
   try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
     const validation = validateCreateInventoryMovementBody(req.body);
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
-    return handleSuccess(res, 201, "Movimiento creado exitosamente", await createInventoryMovementService(validation.value));
-  } catch (error) {
-    if (dbConflict(error)) return handleErrorClient(res, 409, "Producto o usuario no existe");
-    return handleErrorServer(res, 500, "Error al crear movimiento", msg(error));
-  }
-}
 
-export async function deleteInventoryMovement(req: Request, res: Response) {
-  try {
-    const id = parseId(req.params.id);
-    if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    if (!(await deleteInventoryMovementService(id))) return handleErrorClient(res, 404, "Movimiento no encontrado");
-    return handleSuccess(res, 200, "Movimiento eliminado exitosamente");
+    const movement = await createInventoryMovementService({
+      ...validation.value,
+      userId: req.user.id,
+    });
+
+    return handleSuccess(res, 201, "Movimiento creado exitosamente", movement);
   } catch (error) {
-    return handleErrorServer(res, 500, "Error al eliminar movimiento", msg(error));
+    if (error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al crear movimiento", msg(error));
   }
 }

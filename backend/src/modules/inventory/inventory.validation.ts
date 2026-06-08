@@ -1,12 +1,21 @@
 import type { NewInventoryMovement } from "../../db/schema/index.js";
 
-export type InventoryMovementBody = Pick<NewInventoryMovement, "productId" | "userId" | "movementType" | "quantity" | "reason" | "date">;
+export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
+
+export type InventoryMovementBody = Omit<
+  Pick<NewInventoryMovement, "productId" | "movementType" | "quantity" | "reason" | "date">,
+  "movementType"
+> & {
+  movementType: InventoryMovementType;
+};
 
 type ValidationResult<T> = { success: true; value: T } | { success: false; error: string };
 
-function int(value: unknown, field: string): { success: true; value: number } | { success: false; error: string } {
+function int(value: unknown, field: string, allowZero = false): { success: true; value: number } | { success: false; error: string } {
   const number = Number(value);
-  if (!Number.isInteger(number) || number < 1) return { success: false, error: `${field} debe ser un numero entero valido` };
+  if (!Number.isInteger(number) || (allowZero ? number < 0 : number < 1)) {
+    return { success: false, error: `${field} debe ser un numero entero valido` };
+  }
   return { success: true, value: number };
 }
 
@@ -14,17 +23,22 @@ export function validateCreateInventoryMovementBody(body: unknown): ValidationRe
   if (!body || typeof body !== "object" || Array.isArray(body)) return { success: false, error: "Debe enviar datos validos" };
 
   const input = body as Record<string, unknown>;
+  const allowed = ["productId", "movementType", "quantity", "reason", "date"];
+
+  for (const field of Object.keys(input)) {
+    if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
+  }
+
   const productId = int(input.productId, "El producto");
-  const userId = int(input.userId, "El usuario");
-  const quantity = int(input.quantity, "La cantidad");
 
   if (!productId.success) return { success: false, error: productId.error };
-  if (!userId.success) return { success: false, error: userId.error };
-  if (!quantity.success) return { success: false, error: quantity.error };
 
   if (input.movementType !== "ENTRY" && input.movementType !== "EXIT" && input.movementType !== "ADJUSTMENT") {
     return { success: false, error: "El tipo de movimiento debe ser: ENTRY, EXIT o ADJUSTMENT" };
   }
+
+  const quantity = int(input.quantity, "La cantidad", input.movementType === "ADJUSTMENT");
+  if (!quantity.success) return { success: false, error: quantity.error };
 
   let reason: string | null | undefined;
   if (input.reason !== undefined) {
@@ -46,7 +60,6 @@ export function validateCreateInventoryMovementBody(body: unknown): ValidationRe
     success: true,
     value: {
       productId: productId.value,
-      userId: userId.value,
       movementType: input.movementType,
       quantity: quantity.value,
       reason,

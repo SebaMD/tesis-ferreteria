@@ -20,3 +20,5 @@ function getDatabaseUrl() {
 }
 
 export const db = drizzle(getDatabaseUrl());
+
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

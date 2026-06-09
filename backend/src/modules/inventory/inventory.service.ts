@@ -13,8 +13,12 @@ import {
 } from "./inventory.repository.js";
 import type { InventoryMovementBody } from "./inventory.validation.js";
 
-export type ApplyInventoryMovementData = InventoryMovementBody & {
+export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
+
+export type ApplyInventoryMovementData = Omit<InventoryMovementBody, "movementType"> & {
+  movementType: InventoryMovementType;
   userId: number;
+  allowInactive?: boolean;
 };
 
 export class InventoryMovementError extends Error {
@@ -50,13 +54,13 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
     throw new InventoryMovementError("Producto no encontrado", 404);
   }
 
-  if (!product.status) {
+  if (!product.status && !data.allowInactive) {
     throw new InventoryMovementError("No se pueden realizar movimientos sobre un producto inactivo", 409);
   }
 
   switch (data.movementType) {
     case "ENTRY": {
-      const updatedProduct = await increaseProductStock(tx, data.productId, data.quantity);
+      const updatedProduct = await increaseProductStock(tx, data.productId, data.quantity, data.allowInactive);
 
       if (!updatedProduct) {
         throw new InventoryMovementError("El producto ya no esta disponible para realizar movimientos", 409);
@@ -94,6 +98,10 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
 }
 
 export async function createInventoryMovementService(data: ApplyInventoryMovementData) {
+  if (data.movementType === "EXIT") {
+    throw new InventoryMovementError("Los movimientos EXIT solo pueden ser generados internamente", 403);
+  }
+
   const movement = await db.transaction((tx) => applyInventoryMovement(tx, data));
   return findInventoryMovementById(movement.id);
 }

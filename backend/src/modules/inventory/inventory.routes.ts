@@ -13,6 +13,6 @@ router.use(authenticateJwt);
 
 router.get("/", verifyRoles(["ADMIN", "MANAGER", "WAREHOUSE"]), getInventoryMovements);
 router.get("/:id", verifyRoles(["ADMIN", "MANAGER", "WAREHOUSE"]), getInventoryMovementById);
-router.post("/", verifyRoles(["ADMIN", "WAREHOUSE"]), createInventoryMovementController);
+router.post("/", verifyRoles(["ADMIN"]), createInventoryMovementController);
 
 export default router;

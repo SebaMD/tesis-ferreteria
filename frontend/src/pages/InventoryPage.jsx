@@ -12,7 +12,7 @@ export default function InventoryPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canCreate = user?.role === "ADMIN" || user?.role === "WAREHOUSE";
+  const canCreate = user?.role === "ADMIN";
 
   const loadData = async () => {
     const [productData, movementData] = await Promise.all([getProductsRequest(), getInventoryMovementsRequest()]);
@@ -32,7 +32,6 @@ export default function InventoryPage() {
     try {
       await createInventoryMovementRequest({
         productId: Number(form.productId),
-        userId: user.id,
         movementType: "ENTRY",
         quantity: Number(form.quantity),
         reason: form.reason,

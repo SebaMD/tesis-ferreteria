@@ -1,11 +1,13 @@
 import type { Request, Response } from "express";
+import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
+import { InventoryMovementError } from "../inventory/inventory.service.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import {
+  cancelSaleService,
   createSaleService,
-  deleteSaleService,
-  editSaleStatusService,
   getSaleByIdService,
   getSalesService,
+  SaleError,
 } from "./sales.service.js";
 import { validateCreateSaleBody } from "./sales.validation.js";
 
@@ -17,10 +19,6 @@ function parseId(id: unknown) {
 
 function msg(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
-}
-
-function fkError(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "23503";
 }
 
 export async function getSales(_req: Request, res: Response) {
@@ -43,40 +41,40 @@ export async function getSaleById(req: Request, res: Response) {
   }
 }
 
-export async function createSaleController(req: Request, res: Response) {
+export async function createSaleController(req: AuthenticatedRequest, res: Response) {
   try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
     const validation = validateCreateSaleBody(req.body);
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
-    return handleSuccess(res, 201, "Venta creada exitosamente", await createSaleService(validation.value));
+
+    const sale = await createSaleService({
+      ...validation.value,
+      userId: req.user.id,
+    });
+
+    return handleSuccess(res, 201, "Venta creada exitosamente", sale);
   } catch (error) {
-    if (fkError(error)) return handleErrorClient(res, 409, "Usuario o producto no existe");
+    if (error instanceof SaleError || error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
     return handleErrorServer(res, 500, "Error al crear venta", msg(error));
   }
 }
 
-export async function editSaleStatus(req: Request, res: Response) {
+export async function cancelSaleController(req: AuthenticatedRequest, res: Response) {
   try {
-    const id = parseId(req.params.id);
-    if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    const { status } = req.body as { status?: unknown };
-    if (status !== "ACTIVE" && status !== "CANCELLED") {
-      return handleErrorClient(res, 400, "El estado debe ser: ACTIVE o CANCELLED");
-    }
-    return handleSuccess(res, 200, "Venta actualizada exitosamente", await editSaleStatusService(id, status));
-  } catch (error) {
-    const message = msg(error);
-    if (message === "Venta no encontrada") return handleErrorClient(res, 404, message);
-    return handleErrorServer(res, 500, "Error al actualizar venta", message);
-  }
-}
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
 
-export async function deleteSale(req: Request, res: Response) {
-  try {
     const id = parseId(req.params.id);
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    if (!(await deleteSaleService(id))) return handleErrorClient(res, 404, "Venta no encontrada");
-    return handleSuccess(res, 200, "Venta cancelada exitosamente");
+
+    const sale = await cancelSaleService(id, req.user.id);
+    return handleSuccess(res, 200, "Venta cancelada exitosamente", sale);
   } catch (error) {
-    return handleErrorServer(res, 500, "Error al eliminar venta", msg(error));
+    if (error instanceof SaleError || error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al cancelar venta", msg(error));
   }
 }

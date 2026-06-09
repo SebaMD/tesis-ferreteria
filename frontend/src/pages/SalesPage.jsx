@@ -37,13 +37,11 @@ export default function SalesPage() {
 
     try {
       await createSaleRequest({
-        userId: user.id,
         paymentMethod: form.paymentMethod,
         details: [
           {
             productId: product.id,
             quantity: Number(form.quantity),
-            unitPrice: Number(product.price),
           },
         ],
       });

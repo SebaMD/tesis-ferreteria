@@ -1,4 +1,4 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import { categoriesTable, productsTable, type NewProduct } from "../../db/schema/index.js";
 
@@ -65,14 +65,31 @@ export async function findProductStockById(tx: DbTransaction, id: number) {
     return product ?? null;
 }
 
-export async function increaseProductStock(tx: DbTransaction, productId: number, quantity: number) {
+export async function findProductsForSale(tx: DbTransaction, ids: number[]) {
+    return tx
+        .select({
+            id: productsTable.id,
+            name: productsTable.name,
+            price: productsTable.price,
+            status: productsTable.status,
+        })
+        .from(productsTable)
+        .where(inArray(productsTable.id, ids));
+}
+
+export async function increaseProductStock(
+    tx: DbTransaction,
+    productId: number,
+    quantity: number,
+    allowInactive = false,
+) {
     const [product] = await tx
         .update(productsTable)
         .set({
             currentStock: sql`${productsTable.currentStock} + ${quantity}`,
             updatedAt: new Date(),
         })
-        .where(and(eq(productsTable.id, productId), eq(productsTable.status, true)))
+        .where(allowInactive ? eq(productsTable.id, productId) : and(eq(productsTable.id, productId), eq(productsTable.status, true)))
         .returning({ id: productsTable.id, currentStock: productsTable.currentStock });
 
     return product ?? null;

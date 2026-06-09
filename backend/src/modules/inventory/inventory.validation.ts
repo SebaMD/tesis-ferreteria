@@ -1,12 +1,12 @@
 import type { NewInventoryMovement } from "../../db/schema/index.js";
 
-export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
+export type ManualInventoryMovementType = "ENTRY" | "ADJUSTMENT";
 
 export type InventoryMovementBody = Omit<
   Pick<NewInventoryMovement, "productId" | "movementType" | "quantity" | "reason" | "date">,
   "movementType"
 > & {
-  movementType: InventoryMovementType;
+  movementType: ManualInventoryMovementType;
 };
 
 type ValidationResult<T> = { success: true; value: T } | { success: false; error: string };
@@ -33,8 +33,8 @@ export function validateCreateInventoryMovementBody(body: unknown): ValidationRe
 
   if (!productId.success) return { success: false, error: productId.error };
 
-  if (input.movementType !== "ENTRY" && input.movementType !== "EXIT" && input.movementType !== "ADJUSTMENT") {
-    return { success: false, error: "El tipo de movimiento debe ser: ENTRY, EXIT o ADJUSTMENT" };
+  if (input.movementType !== "ENTRY" && input.movementType !== "ADJUSTMENT") {
+    return { success: false, error: "El tipo de movimiento manual debe ser: ENTRY o ADJUSTMENT" };
   }
 
   const quantity = int(input.quantity, "La cantidad", input.movementType === "ADJUSTMENT");

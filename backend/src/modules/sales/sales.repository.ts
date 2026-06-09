@@ -1,7 +1,6 @@
-import { eq } from "drizzle-orm";
-import { db } from "../../db/index.js";
-import { productsTable, saleDetailsTable, salesTable, usersTable } from "../../db/schema/index.js";
-import type { SaleBody } from "./sales.validation.js";
+import { and, eq } from "drizzle-orm";
+import { db, type DbTransaction } from "../../db/index.js";
+import { productsTable, saleDetailsTable, salesTable, usersTable, type NewSaleDetail } from "../../db/schema/index.js";
 
 const saleColumns = {
   id: salesTable.id,
@@ -46,53 +45,63 @@ export async function findSaleById(id: number) {
   return { ...sale, details };
 }
 
-export async function createSale(data: SaleBody) {
-  const total = data.details.reduce((sum, detail) => sum + detail.quantity * Number(detail.unitPrice), 0);
-
-  const [sale] = await db.transaction(async (tx) => {
-    const [createdSale] = await tx
-      .insert(salesTable)
-      .values({
-        userId: data.userId,
-        paymentMethod: data.paymentMethod,
-        status: data.status,
-        date: data.date,
-        total: total.toFixed(2),
-      })
-      .returning({ id: salesTable.id });
-
-    await tx.insert(saleDetailsTable).values(
-      data.details.map((detail) => ({
-        saleId: createdSale.id,
-        productId: detail.productId,
-        quantity: detail.quantity,
-        unitPrice: detail.unitPrice,
-        subtotal: (detail.quantity * Number(detail.unitPrice)).toFixed(2),
-      })),
-    );
-
-    return [createdSale];
-  });
-
-  return findSaleById(sale.id);
-}
-
-export async function updateSaleStatusById(id: number, status: string) {
-  const [sale] = await db
-    .update(salesTable)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(salesTable.id, id))
+export async function createSale(
+  tx: DbTransaction,
+  data: {
+    userId: number;
+    paymentMethod: string;
+    total: string;
+  },
+) {
+  const [sale] = await tx
+    .insert(salesTable)
+    .values({
+      userId: data.userId,
+      paymentMethod: data.paymentMethod,
+      total: data.total,
+      status: "ACTIVE",
+    })
     .returning({ id: salesTable.id });
 
-  if (!sale) return null;
-  return findSaleById(sale.id);
+  return sale;
 }
 
-export async function deleteSaleById(id: number) {
-  const [sale] = await db
-    .update(salesTable)
-    .set({ status: "CANCELLED", updatedAt: new Date() })
+export async function createSaleDetails(tx: DbTransaction, details: NewSaleDetail[]) {
+  return tx.insert(saleDetailsTable).values(details);
+}
+
+export async function findSaleForCancellation(tx: DbTransaction, id: number) {
+  const [sale] = await tx
+    .select({
+      id: salesTable.id,
+      status: salesTable.status,
+    })
+    .from(salesTable)
     .where(eq(salesTable.id, id))
+    .limit(1)
+    .for("update");
+
+  return sale ?? null;
+}
+
+export async function findSaleDetailsForCancellation(tx: DbTransaction, saleId: number) {
+  return tx
+    .select({
+      productId: saleDetailsTable.productId,
+      quantity: saleDetailsTable.quantity,
+    })
+    .from(saleDetailsTable)
+    .where(eq(saleDetailsTable.saleId, saleId));
+}
+
+export async function markSaleAsCancelled(tx: DbTransaction, id: number) {
+  const [sale] = await tx
+    .update(salesTable)
+    .set({
+      status: "CANCELLED",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(salesTable.id, id), eq(salesTable.status, "ACTIVE")))
     .returning({ id: salesTable.id });
 
   return sale ?? null;

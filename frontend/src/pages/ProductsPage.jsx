@@ -1,8 +1,13 @@
+import { Pencil, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createCategoryRequest, getCategoriesRequest } from "../api/categories.api.js";
 import { getApiError } from "../api/api.js";
-import { createProductRequest, getProductsRequest } from "../api/products.api.js";
+import { createProductRequest, getProductsRequest, updateProductRequest } from "../api/products.api.js";
 import { useAuth } from "../context/AuthContext.jsx";
+
+function normalizeProductName(name) {
+  return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
 
 const emptyForm = {
   categoryId: "",
@@ -10,7 +15,6 @@ const emptyForm = {
   description: "",
   price: "",
   unitMeasure: "unidad",
-  currentStock: 0,
   minimumStock: 0,
   status: true,
 };
@@ -20,6 +24,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [editingProductId, setEditingProductId] = useState(null);
   const [categoryName, setCategoryName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -27,9 +32,13 @@ export default function ProductsPage() {
   const canManage = user?.role === "ADMIN";
 
   const loadData = async () => {
-    const [productData, categoryData] = await Promise.all([getProductsRequest(), getCategoriesRequest()]);
+    const productData = await getProductsRequest();
     setProducts(productData);
-    setCategories(categoryData);
+
+    if (canManage) {
+      const categoryData = await getCategoriesRequest();
+      setCategories(categoryData);
+    }
   };
 
   useEffect(() => {
@@ -56,20 +65,59 @@ export default function ProductsPage() {
     setError("");
     setMessage("");
 
+    const duplicate = products.some(
+      (product) =>
+        product.id !== editingProductId &&
+        product.categoryId === Number(form.categoryId) &&
+        normalizeProductName(product.name) === normalizeProductName(form.name),
+    );
+
+    if (duplicate) {
+      setError("Ya existe un producto con ese nombre en la categoria seleccionada");
+      return;
+    }
+
     try {
-      await createProductRequest({
+      const productData = {
         ...form,
         categoryId: Number(form.categoryId),
         price: Number(form.price),
-        currentStock: Number(form.currentStock),
         minimumStock: Number(form.minimumStock),
-      });
+      };
+
+      if (editingProductId) {
+        await updateProductRequest(editingProductId, productData);
+      } else {
+        await createProductRequest(productData);
+      }
+
       setForm(emptyForm);
-      setMessage("Producto creado exitosamente");
+      setEditingProductId(null);
+      setMessage(editingProductId ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
       await loadData();
     } catch (err) {
       setError(getApiError(err, "No se pudo crear el producto"));
     }
+  };
+
+  const startEditing = (product) => {
+    setEditingProductId(product.id);
+    setForm({
+      categoryId: String(product.categoryId),
+      name: product.name,
+      description: product.description || "",
+      price: product.price,
+      unitMeasure: product.unitMeasure,
+      minimumStock: product.minimumStock,
+      status: product.status,
+    });
+    setError("");
+    setMessage("");
+  };
+
+  const cancelEditing = () => {
+    setEditingProductId(null);
+    setForm(emptyForm);
   };
 
   return (
@@ -77,7 +125,11 @@ export default function ProductsPage() {
       <div className="page-header">
         <div>
           <h1>Productos</h1>
-          <p>Listado, stock y creacion basica de productos.</p>
+          <p>
+            {canManage
+              ? "Listado y gestión de productos. El stock se modifica desde inventario."
+              : "Consulta de productos, precios y stock disponible."}
+          </p>
         </div>
       </div>
 
@@ -96,7 +148,7 @@ export default function ProductsPage() {
           </form>
 
           <form className="panel" onSubmit={handleCreateProduct}>
-            <h2>Crear producto</h2>
+            <h2>{editingProductId ? "Editar producto" : "Crear producto"}</h2>
             <label>
               Categoria
               <select
@@ -142,25 +194,24 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            <div className="inline-fields">
-              <label>
-                Stock actual
-                <input
-                  type="number"
-                  value={form.currentStock}
-                  onChange={(event) => setForm((current) => ({ ...current, currentStock: event.target.value }))}
-                />
-              </label>
-              <label>
-                Stock minimo
-                <input
-                  type="number"
-                  value={form.minimumStock}
-                  onChange={(event) => setForm((current) => ({ ...current, minimumStock: event.target.value }))}
-                />
-              </label>
+            <label>
+              Stock minimo
+              <input
+                type="number"
+                min="0"
+                value={form.minimumStock}
+                onChange={(event) => setForm((current) => ({ ...current, minimumStock: event.target.value }))}
+              />
+            </label>
+            <div className="form-actions">
+              {editingProductId && (
+                <button className="secondary-button" type="button" onClick={cancelEditing}>
+                  <X size={17} />
+                  Cancelar edición
+                </button>
+              )}
+              <button type="submit">{editingProductId ? "Actualizar producto" : "Guardar producto"}</button>
             </div>
-            <button type="submit">Guardar producto</button>
           </form>
         </div>
       )}
@@ -175,6 +226,8 @@ export default function ProductsPage() {
               <th>Precio</th>
               <th>Stock</th>
               <th>Minimo</th>
+              <th>Estado stock</th>
+              {canManage && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -186,6 +239,21 @@ export default function ProductsPage() {
                 <td>${product.price}</td>
                 <td>{product.currentStock}</td>
                 <td>{product.minimumStock}</td>
+                <td>
+                  {product.currentStock <= product.minimumStock ? (
+                    <span className="status-badge warning">Reponer</span>
+                  ) : (
+                    <span className="status-badge success">Disponible</span>
+                  )}
+                </td>
+                {canManage && (
+                  <td>
+                    <button className="secondary-button" type="button" onClick={() => startEditing(product)}>
+                      <Pencil size={17} />
+                      Editar
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

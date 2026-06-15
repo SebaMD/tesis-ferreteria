@@ -5,8 +5,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { categoriesTable } from "./categories.js";
 
 export const productsTable = pgTable(
@@ -24,7 +26,13 @@ export const productsTable = pgTable(
     status: boolean().notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  }
+  },
+  (table) => [
+    uniqueIndex("products_category_name_unique").on(
+      table.categoryId,
+      sql`lower(${table.name})`,
+    ),
+  ],
 );
 
 export type Product = typeof productsTable.$inferSelect;

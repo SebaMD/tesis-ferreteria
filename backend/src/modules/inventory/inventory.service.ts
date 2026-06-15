@@ -58,6 +58,8 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
     throw new InventoryMovementError("No se pueden realizar movimientos sobre un producto inactivo", 409);
   }
 
+  let finalStock: number;
+
   switch (data.movementType) {
     case "ENTRY": {
       const updatedProduct = await increaseProductStock(tx, data.productId, data.quantity, data.allowInactive);
@@ -65,6 +67,7 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       if (!updatedProduct) {
         throw new InventoryMovementError("El producto ya no esta disponible para realizar movimientos", 409);
       }
+      finalStock = updatedProduct.currentStock;
       break;
     }
     case "EXIT": {
@@ -73,6 +76,7 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       if (!updatedProduct) {
         throw new InventoryMovementError("Stock insuficiente para realizar el movimiento", 409);
       }
+      finalStock = updatedProduct.currentStock;
       break;
     }
     case "ADJUSTMENT": {
@@ -81,6 +85,7 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       if (!updatedProduct) {
         throw new InventoryMovementError("El producto ya no esta disponible para realizar movimientos", 409);
       }
+      finalStock = updatedProduct.currentStock;
       break;
     }
   }
@@ -94,7 +99,18 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
     date: data.date,
   };
 
-  return createInventoryMovement(tx, movementData);
+  const movement = await createInventoryMovement(tx, movementData);
+
+  return {
+    movement,
+    stock: {
+      productId: product.id,
+      productName: product.name,
+      currentStock: finalStock,
+      minimumStock: product.minimumStock,
+      lowStock: finalStock <= product.minimumStock,
+    },
+  };
 }
 
 export async function createInventoryMovementService(data: ApplyInventoryMovementData) {
@@ -102,6 +118,11 @@ export async function createInventoryMovementService(data: ApplyInventoryMovemen
     throw new InventoryMovementError("Los movimientos EXIT solo pueden ser generados internamente", 403);
   }
 
-  const movement = await db.transaction((tx) => applyInventoryMovement(tx, data));
-  return findInventoryMovementById(movement.id);
+  const result = await db.transaction((tx) => applyInventoryMovement(tx, data));
+  const movement = await findInventoryMovementById(result.movement.id);
+
+  return {
+    ...movement,
+    stock: result.stock,
+  };
 }

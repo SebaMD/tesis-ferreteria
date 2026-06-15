@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import { categoriesTable, productsTable, type NewProduct } from "../../db/schema/index.js";
 
@@ -31,6 +31,25 @@ export async function findProductById(id: number) {
     return product;
 }
 
+export async function findProductByCategoryAndName(categoryId: number, name: string, excludeId?: number) {
+    const conditions = [
+        eq(productsTable.categoryId, categoryId),
+        sql`lower(${productsTable.name}) = lower(${name})`,
+    ];
+
+    if (excludeId !== undefined) {
+        conditions.push(ne(productsTable.id, excludeId));
+    }
+
+    const [product] = await db
+        .select({ id: productsTable.id })
+        .from(productsTable)
+        .where(and(...conditions))
+        .limit(1);
+
+    return product ?? null;
+}
+
 export async function createProduct(data: NewProduct) {
     const [product] = await db.insert(productsTable).values(data).returning({ id: productsTable.id });
     return findProductById(product.id);
@@ -55,7 +74,9 @@ export async function findProductStockById(tx: DbTransaction, id: number) {
     const [product] = await tx
         .select({
             id: productsTable.id,
+            name: productsTable.name,
             currentStock: productsTable.currentStock,
+            minimumStock: productsTable.minimumStock,
             status: productsTable.status,
         })
         .from(productsTable)

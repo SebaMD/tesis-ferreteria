@@ -1,18 +1,24 @@
-import { useEffect, useState } from "react";
+import { Plus, Trash2, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/api.js";
 import { getProductsRequest } from "../api/products.api.js";
-import { createSaleRequest, getSalesRequest } from "../api/sales.api.js";
+import { cancelSaleRequest, createSaleRequest, getSalesRequest } from "../api/sales.api.js";
 import { useAuth } from "../context/AuthContext.jsx";
+
+const emptyDetail = () => ({ productId: "", quantity: 1 });
 
 export default function SalesPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
-  const [form, setForm] = useState({ productId: "", quantity: 1, paymentMethod: "efectivo" });
+  const [paymentMethod, setPaymentMethod] = useState("efectivo");
+  const [details, setDetails] = useState([emptyDetail()]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const canCreate = user?.role === "CASHIER";
+  const canCancel = user?.role === "ADMIN";
 
   const loadData = async () => {
     const [productData, saleData] = await Promise.all([getProductsRequest(), getSalesRequest()]);
@@ -24,32 +30,76 @@ export default function SalesPage() {
     loadData().catch((err) => setError(getApiError(err, "No se pudieron cargar ventas")));
   }, []);
 
+  const productById = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products],
+  );
+
+  const estimatedTotal = details.reduce((total, detail) => {
+    const product = productById.get(Number(detail.productId));
+    return total + (product ? Number(product.price) * Number(detail.quantity || 0) : 0);
+  }, 0);
+
+  const updateDetail = (index, field, value) => {
+    setDetails((current) =>
+      current.map((detail, detailIndex) =>
+        detailIndex === index ? { ...detail, [field]: value } : detail,
+      ),
+    );
+  };
+
+  const addDetail = () => setDetails((current) => [...current, emptyDetail()]);
+
+  const removeDetail = (index) => {
+    setDetails((current) => current.filter((_, detailIndex) => detailIndex !== index));
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setMessage("");
 
-    const product = products.find((item) => item.id === Number(form.productId));
-    if (!product) {
-      setError("Selecciona un producto");
+    if (details.some((detail) => !detail.productId || Number(detail.quantity) < 1)) {
+      setError("Selecciona un producto y una cantidad valida en cada linea");
       return;
     }
 
     try {
+      setSubmitting(true);
       await createSaleRequest({
-        paymentMethod: form.paymentMethod,
-        details: [
-          {
-            productId: product.id,
-            quantity: Number(form.quantity),
-          },
-        ],
+        paymentMethod,
+        details: details.map((detail) => ({
+          productId: Number(detail.productId),
+          quantity: Number(detail.quantity),
+        })),
       });
-      setForm({ productId: "", quantity: 1, paymentMethod: "efectivo" });
+      setPaymentMethod("efectivo");
+      setDetails([emptyDetail()]);
       setMessage("Venta registrada exitosamente");
       await loadData();
     } catch (err) {
       setError(getApiError(err, "No se pudo registrar la venta"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async (sale) => {
+    const confirmed = window.confirm(`¿Cancelar la venta #${sale.id}? El stock sera restaurado.`);
+    if (!confirmed) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      setSubmitting(true);
+      await cancelSaleRequest(sale.id);
+      setMessage(`Venta #${sale.id} cancelada y stock restaurado`);
+      await loadData();
+    } catch (err) {
+      setError(getApiError(err, "No se pudo cancelar la venta"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -66,36 +116,90 @@ export default function SalesPage() {
       {error && <div className="alert error">{error}</div>}
 
       {canCreate && (
-        <form className="panel compact-form" onSubmit={handleSubmit}>
+        <form className="panel sale-form" onSubmit={handleSubmit}>
           <h2>Nueva venta</h2>
           <label>
-            Producto
-            <select value={form.productId} onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value }))} required>
-              <option value="">Seleccionar</option>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} - stock {product.currentStock} - ${product.price}
-                </option>
-              ))}
+            Metodo de pago
+            <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+              <option value="efectivo">Efectivo</option>
+              <option value="debito">Debito</option>
+              <option value="credito">Credito</option>
+              <option value="transferencia">Transferencia</option>
             </select>
           </label>
-          <label>
-            Cantidad
-            <input
-              type="number"
-              min="1"
-              value={form.quantity}
-              onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
-            />
-          </label>
-          <label>
-            Metodo de pago
-            <input
-              value={form.paymentMethod}
-              onChange={(event) => setForm((current) => ({ ...current, paymentMethod: event.target.value }))}
-            />
-          </label>
-          <button type="submit">Registrar venta</button>
+
+          <div className="sale-lines">
+            {details.map((detail, index) => {
+              const selectedProduct = productById.get(Number(detail.productId));
+
+              return (
+                <div className="sale-line" key={index}>
+                  <label>
+                    Producto
+                    <select
+                      value={detail.productId}
+                      onChange={(event) => updateDetail(index, "productId", event.target.value)}
+                      required
+                    >
+                      <option value="">Seleccionar</option>
+                      {products.map((product) => (
+                        <option
+                          disabled={
+                            !product.status ||
+                            details.some(
+                              (item, itemIndex) => itemIndex !== index && Number(item.productId) === product.id,
+                            )
+                          }
+                          key={product.id}
+                          value={product.id}
+                        >
+                          {product.name} - stock {product.currentStock} - ${product.price}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Cantidad
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedProduct ? selectedProduct.currentStock : undefined}
+                      value={detail.quantity}
+                      onChange={(event) => updateDetail(index, "quantity", event.target.value)}
+                      required
+                    />
+                  </label>
+                  <div className="line-reference">
+                    <span>Subtotal referencial</span>
+                    <strong>
+                      ${(Number(selectedProduct?.price || 0) * Number(detail.quantity || 0)).toFixed(2)}
+                    </strong>
+                  </div>
+                  <button
+                    className="danger-icon-button"
+                    type="button"
+                    onClick={() => removeDetail(index)}
+                    disabled={details.length === 1}
+                    title="Quitar producto"
+                    aria-label="Quitar producto"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="form-actions">
+            <button className="secondary-button" type="button" onClick={addDetail}>
+              <Plus size={18} />
+              Agregar producto
+            </button>
+            <strong>Total referencial: ${estimatedTotal.toFixed(2)}</strong>
+            <button type="submit" disabled={submitting}>
+              Registrar venta
+            </button>
+          </div>
         </form>
       )}
 
@@ -108,6 +212,7 @@ export default function SalesPage() {
               <th>Metodo</th>
               <th>Total</th>
               <th>Estado</th>
+              {canCancel && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -120,6 +225,21 @@ export default function SalesPage() {
                 <td>{sale.paymentMethod}</td>
                 <td>${sale.total}</td>
                 <td>{sale.status}</td>
+                {canCancel && (
+                  <td>
+                    {sale.status === "ACTIVE" && (
+                      <button
+                        className="danger-button"
+                        type="button"
+                        onClick={() => handleCancel(sale)}
+                        disabled={submitting}
+                      >
+                        <XCircle size={17} />
+                        Cancelar
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

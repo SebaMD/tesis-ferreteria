@@ -8,9 +8,16 @@ export default function InventoryPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [movements, setMovements] = useState([]);
-  const [form, setForm] = useState({ productId: "", quantity: 1, reason: "Ingreso de stock" });
+  const [form, setForm] = useState({
+    productId: "",
+    movementType: "ENTRY",
+    quantity: 1,
+    reason: "Ingreso de stock",
+  });
   const [message, setMessage] = useState("");
+  const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const canCreate = user?.role === "ADMIN";
 
@@ -24,23 +31,46 @@ export default function InventoryPage() {
     loadData().catch((err) => setError(getApiError(err, "No se pudo cargar inventario")));
   }, []);
 
+  const selectedProduct = products.find((product) => product.id === Number(form.productId));
+  const estimatedStock = selectedProduct
+    ? form.movementType === "ENTRY"
+      ? selectedProduct.currentStock + Number(form.quantity || 0)
+      : Number(form.quantity || 0)
+    : null;
+  const estimatedLowStock =
+    selectedProduct && estimatedStock !== null && estimatedStock <= selectedProduct.minimumStock;
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setMessage("");
+    setWarning("");
 
     try {
-      await createInventoryMovementRequest({
+      setSubmitting(true);
+      const movement = await createInventoryMovementRequest({
         productId: Number(form.productId),
-        movementType: "ENTRY",
+        movementType: form.movementType,
         quantity: Number(form.quantity),
         reason: form.reason,
       });
-      setForm({ productId: "", quantity: 1, reason: "Ingreso de stock" });
-      setMessage("Entrada registrada exitosamente");
+      setForm({
+        productId: "",
+        movementType: "ENTRY",
+        quantity: 1,
+        reason: "Ingreso de stock",
+      });
+      setMessage(form.movementType === "ENTRY" ? "Entrada registrada exitosamente" : "Ajuste registrado exitosamente");
+      if (movement.stock?.lowStock) {
+        setWarning(
+          `${movement.stock.productName} quedo con stock bajo: ${movement.stock.currentStock} unidades. Minimo: ${movement.stock.minimumStock}.`,
+        );
+      }
       await loadData();
     } catch (err) {
       setError(getApiError(err, "No se pudo registrar el movimiento"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -49,16 +79,34 @@ export default function InventoryPage() {
       <div className="page-header">
         <div>
           <h1>Inventario</h1>
-          <p>Ver stock y registrar entradas simples.</p>
+          <p>Consultar movimientos y registrar entradas o ajustes administrativos.</p>
         </div>
       </div>
 
       {message && <div className="alert success">{message}</div>}
+      {warning && <div className="alert warning">{warning}</div>}
       {error && <div className="alert error">{error}</div>}
 
       {canCreate && (
         <form className="panel compact-form" onSubmit={handleSubmit}>
-          <h2>Nueva entrada</h2>
+          <h2>Nuevo movimiento</h2>
+          <label>
+            Tipo
+            <select
+              value={form.movementType}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  movementType: event.target.value,
+                  quantity: event.target.value === "ADJUSTMENT" ? 0 : 1,
+                  reason: event.target.value === "ADJUSTMENT" ? "Ajuste administrativo" : "Ingreso de stock",
+                }))
+              }
+            >
+              <option value="ENTRY">Entrada de stock</option>
+              <option value="ADJUSTMENT">Ajustar stock exacto</option>
+            </select>
+          </label>
           <label>
             Producto
             <select value={form.productId} onChange={(event) => setForm((current) => ({ ...current, productId: event.target.value }))} required>
@@ -74,16 +122,28 @@ export default function InventoryPage() {
             Cantidad
             <input
               type="number"
-              min="1"
+              min={form.movementType === "ADJUSTMENT" ? "0" : "1"}
               value={form.quantity}
               onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
+              required
             />
           </label>
           <label>
             Motivo
             <input value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
           </label>
-          <button type="submit">Registrar entrada</button>
+          {selectedProduct && (
+            <div className={estimatedLowStock ? "stock-preview warning" : "stock-preview"}>
+              <span>Stock final estimado</span>
+              <strong>
+                {estimatedStock} unidades · mínimo {selectedProduct.minimumStock}
+              </strong>
+              {estimatedLowStock && <span>Este movimiento dejará el producto con stock bajo.</span>}
+            </div>
+          )}
+          <button type="submit" disabled={submitting}>
+            Registrar movimiento
+          </button>
         </form>
       )}
 

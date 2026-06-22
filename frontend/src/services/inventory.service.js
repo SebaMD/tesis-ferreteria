@@ -1,4 +1,4 @@
-import api from "./api.js";
+import api from "../api/httpClient.js";
 
 export async function getInventoryMovementsRequest() {
   const response = await api.get("/inventory");

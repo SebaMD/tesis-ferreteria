@@ -1,7 +1,6 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { loginRequest, logoutRequest } from "../api/auth.api.js";
-
-const AuthContext = createContext(null);
+import { useMemo, useState } from "react";
+import { loginRequest, logoutRequest } from "../services/auth.service.js";
+import AuthContext from "./AuthContext.js";
 
 function readStoredUser() {
   const rawUser = localStorage.getItem("user");
@@ -16,7 +15,7 @@ function readStoredUser() {
   }
 }
 
-export function AuthProvider({ children }) {
+export default function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
   const [token, setToken] = useState(() => localStorage.getItem("token"));
 
@@ -52,10 +51,4 @@ export function AuthProvider({ children }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth debe usarse dentro de AuthProvider");
-  return context;
 }

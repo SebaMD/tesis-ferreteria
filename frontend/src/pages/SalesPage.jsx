@@ -1,11 +1,27 @@
 import { Plus, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getApiError } from "../api/api.js";
-import { getProductsRequest } from "../api/products.api.js";
-import { cancelSaleRequest, createSaleRequest, getSalesRequest } from "../api/sales.api.js";
-import { useAuth } from "../context/AuthContext.jsx";
+import { getApiError } from "../api/httpClient.js";
+import AppModal from "../components/AppModal.jsx";
+import { formatClp } from "../helpers/formatters.js";
+import { getSaleStatusLabel } from "../helpers/labels.js";
+import { PAYMENT_METHODS } from "../helpers/options.js";
+import useAuth from "../hooks/useAuth.js";
+import { getProductsRequest } from "../services/products.service.js";
+import { cancelSaleRequest, createSaleRequest, getSalesRequest } from "../services/sales.service.js";
+import {
+  alertClasses,
+  badgeClass,
+  dangerButtonClass,
+  formActionsClass,
+  numericCellClass,
+  pageClass,
+  pageHeaderClass,
+  secondaryButtonClass,
+  tableHeadingClass,
+  tablePanelClass,
+} from "../helpers/uiClasses.js";
 
-const emptyDetail = () => ({ productId: "", quantity: 1 });
+const emptyDetail = () => ({ productId: "", quantity: 1, categoryId: "", productSearch: "" });
 
 export default function SalesPage() {
   const { user } = useAuth();
@@ -16,6 +32,7 @@ export default function SalesPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [saleFormOpen, setSaleFormOpen] = useState(false);
 
   const canCreate = user?.role === "CASHIER";
   const canCancel = user?.role === "ADMIN";
@@ -27,12 +44,25 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData().catch((err) => setError(getApiError(err, "No se pudieron cargar ventas")));
   }, []);
 
   const productById = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products],
+  );
+  const activeProducts = useMemo(
+    () => products.filter((product) => product.status !== false),
+    [products],
+  );
+  const productCategories = useMemo(
+    () =>
+      [...new Map(activeProducts.map((product) => [product.categoryId, {
+        id: product.categoryId,
+        name: product.categoryName,
+      }])).values()].sort((left, right) => left.name.localeCompare(right.name, "es")),
+    [activeProducts],
   );
 
   const estimatedTotal = details.reduce((total, detail) => {
@@ -48,10 +78,33 @@ export default function SalesPage() {
     );
   };
 
+  const updateProductFilter = (index, field, value) => {
+    setDetails((current) =>
+      current.map((detail, detailIndex) =>
+        detailIndex === index ? { ...detail, [field]: value, productId: "" } : detail,
+      ),
+    );
+  };
+
   const addDetail = () => setDetails((current) => [...current, emptyDetail()]);
 
   const removeDetail = (index) => {
     setDetails((current) => current.filter((_, detailIndex) => detailIndex !== index));
+  };
+
+  const startNewSale = () => {
+    setPaymentMethod("efectivo");
+    setDetails([emptyDetail()]);
+    setMessage("");
+    setError("");
+    setSaleFormOpen(true);
+  };
+
+  const closeSaleForm = () => {
+    setPaymentMethod("efectivo");
+    setDetails([emptyDetail()]);
+    setError("");
+    setSaleFormOpen(false);
   };
 
   const handleSubmit = async (event) => {
@@ -77,6 +130,7 @@ export default function SalesPage() {
       setDetails([emptyDetail()]);
       setMessage("Venta registrada exitosamente");
       await loadData();
+      setSaleFormOpen(false);
     } catch (err) {
       setError(getApiError(err, "No se pudo registrar la venta"));
     } finally {
@@ -104,60 +158,105 @@ export default function SalesPage() {
   };
 
   return (
-    <section className="page">
-      <div className="page-header">
+    <section className={pageClass}>
+      <div className={pageHeaderClass}>
         <div>
           <h1>Ventas</h1>
           <p>Registro simple de venta presencial.</p>
         </div>
+        {canCreate && (
+          <button type="button" onClick={startNewSale}>
+            <Plus size={18} />
+            Registrar nueva venta
+          </button>
+        )}
       </div>
 
-      {message && <div className="alert success">{message}</div>}
-      {error && <div className="alert error">{error}</div>}
+      {message && <div className={alertClasses.success}>{message}</div>}
+      {error && !saleFormOpen && <div className={alertClasses.error}>{error}</div>}
 
-      {canCreate && (
-        <form className="panel sale-form" onSubmit={handleSubmit}>
-          <h2>Nueva venta</h2>
+      <AppModal
+        open={canCreate && saleFormOpen}
+        title="Registrar nueva venta"
+        description="Agrega productos y selecciona el método de pago."
+        onClose={closeSaleForm}
+        size="xlarge"
+      >
+        <form className="grid gap-3.75" onSubmit={handleSubmit}>
+          {error && <div className={alertClasses.error}>{error}</div>}
           <label>
             Metodo de pago
             <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-              <option value="efectivo">Efectivo</option>
-              <option value="debito">Debito</option>
-              <option value="credito">Credito</option>
-              <option value="transferencia">Transferencia</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method.value} value={method.value}>{method.label}</option>
+              ))}
             </select>
           </label>
 
-          <div className="sale-lines">
+          <div className="grid gap-2.5">
             {details.map((detail, index) => {
               const selectedProduct = productById.get(Number(detail.productId));
+              const normalizedProductSearch = detail.productSearch.trim().toLocaleLowerCase("es");
+              const hasProductFilter = Boolean(detail.categoryId || normalizedProductSearch);
+              const availableProducts = hasProductFilter ? activeProducts.filter((product) => {
+                const matchesCategory = !detail.categoryId || String(product.categoryId) === detail.categoryId;
+                const matchesSearch =
+                  !normalizedProductSearch ||
+                  product.name.toLocaleLowerCase("es").includes(normalizedProductSearch) ||
+                  String(product.id).includes(normalizedProductSearch);
+                return matchesCategory && matchesSearch;
+              }) : [];
 
               return (
-                <div className="sale-line" key={index}>
-                  <label>
-                    Producto
-                    <select
-                      value={detail.productId}
-                      onChange={(event) => updateDetail(index, "productId", event.target.value)}
-                      required
-                    >
-                      <option value="">Seleccionar</option>
-                      {products.map((product) => (
-                        <option
-                          disabled={
-                            !product.status ||
-                            details.some(
-                              (item, itemIndex) => itemIndex !== index && Number(item.productId) === product.id,
-                            )
-                          }
-                          key={product.id}
-                          value={product.id}
-                        >
-                          {product.name} - stock {product.currentStock} - ${product.price}
+                <div className="grid grid-cols-[minmax(0,1fr)_120px_175px_42px] items-end gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.25 max-[980px]:grid-cols-[minmax(0,1fr)_110px_145px_42px] max-[720px]:grid-cols-1" key={index}>
+                  <div className="grid min-w-0 grid-cols-[150px_minmax(150px,0.8fr)_minmax(220px,1.3fr)] gap-2.5 max-[980px]:grid-cols-2 max-[980px]:[&>label:last-child]:col-span-full max-[720px]:grid-cols-1 max-[720px]:[&>label:last-child]:col-auto">
+                    <label>
+                      Categoría
+                      <select
+                        value={detail.categoryId}
+                        onChange={(event) => updateProductFilter(index, "categoryId", event.target.value)}
+                      >
+                        <option value="">Todas</option>
+                        {productCategories.map((category) => (
+                          <option key={category.id} value={category.id}>{category.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Buscar producto
+                      <input
+                        value={detail.productSearch}
+                        onChange={(event) => updateProductFilter(index, "productSearch", event.target.value)}
+                        placeholder="Nombre o ID"
+                      />
+                    </label>
+                    <label>
+                      Producto
+                      <select
+                        value={detail.productId}
+                        onChange={(event) => updateDetail(index, "productId", event.target.value)}
+                        required
+                      >
+                        <option value="">
+                          {hasProductFilter ? "Seleccionar producto" : "Elige categoría o busca por nombre"}
                         </option>
-                      ))}
-                    </select>
-                  </label>
+                        {hasProductFilter && availableProducts.length === 0 && (
+                          <option disabled>Sin productos activos para este filtro</option>
+                        )}
+                        {availableProducts.map((product) => (
+                          <option
+                            disabled={details.some(
+                              (item, itemIndex) => itemIndex !== index && Number(item.productId) === product.id,
+                            )}
+                            key={product.id}
+                            value={product.id}
+                          >
+                            #{product.id} · {product.name} · {product.categoryName} · stock {product.currentStock}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <label>
                     Cantidad
                     <input
@@ -169,14 +268,14 @@ export default function SalesPage() {
                       required
                     />
                   </label>
-                  <div className="line-reference">
-                    <span>Subtotal referencial</span>
-                    <strong>
-                      ${(Number(selectedProduct?.price || 0) * Number(detail.quantity || 0)).toFixed(2)}
+                  <div className="grid min-h-10.25 content-center gap-0.5">
+                    <span className="text-[11px] text-slate-500">{selectedProduct ? `Stock disponible: ${selectedProduct.currentStock}` : "Subtotal referencial"}</span>
+                    <strong className="font-mono text-sm text-ink-950">
+                      {formatClp(Number(selectedProduct?.price || 0) * Number(detail.quantity || 0))}
                     </strong>
                   </div>
                   <button
-                    className="danger-icon-button"
+                    className={`${dangerButtonClass} w-10 p-0 max-[720px]:w-full`}
                     type="button"
                     onClick={() => removeDetail(index)}
                     disabled={details.length === 1}
@@ -190,20 +289,26 @@ export default function SalesPage() {
             })}
           </div>
 
-          <div className="form-actions">
-            <button className="secondary-button" type="button" onClick={addDetail}>
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={addDetail}>
               <Plus size={18} />
               Agregar producto
             </button>
-            <strong>Total referencial: ${estimatedTotal.toFixed(2)}</strong>
+            <strong>Total referencial: {formatClp(estimatedTotal)}</strong>
             <button type="submit" disabled={submitting}>
               Registrar venta
             </button>
           </div>
         </form>
-      )}
+      </AppModal>
 
-      <div className="table-panel">
+      <div className={tablePanelClass}>
+        <div className={tableHeadingClass}>
+          <div>
+            <h2>Ventas registradas</h2>
+            <p>Historial de ventas presenciales</p>
+          </div>
+        </div>
         <table>
           <thead>
             <tr>
@@ -223,13 +328,17 @@ export default function SalesPage() {
                   {sale.userNames} {sale.userSurnames}
                 </td>
                 <td>{sale.paymentMethod}</td>
-                <td>${sale.total}</td>
-                <td>{sale.status}</td>
+                <td className={numericCellClass}>{formatClp(sale.total)}</td>
+                <td>
+                  <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
+                    {getSaleStatusLabel(sale.status)}
+                  </span>
+                </td>
                 {canCancel && (
                   <td>
                     {sale.status === "ACTIVE" && (
                       <button
-                        className="danger-button"
+                        className={dangerButtonClass}
                         type="button"
                         onClick={() => handleCancel(sale)}
                         disabled={submitting}

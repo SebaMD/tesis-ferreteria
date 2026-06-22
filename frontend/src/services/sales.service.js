@@ -1,4 +1,4 @@
-import api from "./api.js";
+import api from "../api/httpClient.js";
 
 export async function getSalesRequest() {
   const response = await api.get("/sales");

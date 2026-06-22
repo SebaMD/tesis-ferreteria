@@ -48,6 +48,10 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
     throw new InventoryMovementError("La cantidad del movimiento no es valida", 400);
   }
 
+  if (data.movementType === "ADJUSTMENT" && (!data.reason || !data.reason.trim())) {
+    throw new InventoryMovementError("El motivo del ajuste administrativo es obligatorio", 400);
+  }
+
   const product = await findProductStockById(tx, data.productId);
 
   if (!product) {

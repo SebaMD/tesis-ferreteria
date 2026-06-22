@@ -42,11 +42,15 @@ export function validateCreateInventoryMovementBody(body: unknown): ValidationRe
 
   let reason: string | null | undefined;
   if (input.reason !== undefined) {
-    if (input.reason === null || input.reason === "") reason = null;
+    if (input.reason === null) reason = null;
     else {
       if (typeof input.reason !== "string") return { success: false, error: "La razon debe ser texto" };
-      reason = input.reason.trim();
+      reason = input.reason.trim() || null;
     }
+  }
+
+  if (input.movementType === "ADJUSTMENT" && !reason) {
+    return { success: false, error: "El motivo del ajuste administrativo es obligatorio" };
   }
 
   let date: Date | undefined;

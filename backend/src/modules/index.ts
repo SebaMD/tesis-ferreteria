@@ -3,6 +3,7 @@ import authRoutes from "./auth/auth.routes.js";
 import categoriesRoutes from "./categories/categories.routes.js";
 import inventoryRoutes from "./inventory/inventory.routes.js";
 import productsRoutes from "./products/products.routes.js";
+import reportsRoutes from "./reports/reports.routes.js";
 import salesRoutes from "./sales/sales.routes.js";
 import usersRoutes from "./users/users.routes.js";
 
@@ -16,6 +17,7 @@ router.use("/auth", authRoutes);
 router.use("/categories", categoriesRoutes);
 router.use("/inventory", inventoryRoutes);
 router.use("/products", productsRoutes);
+router.use("/reports", reportsRoutes);
 router.use("/sales", salesRoutes);
 router.use("/users", usersRoutes);
 

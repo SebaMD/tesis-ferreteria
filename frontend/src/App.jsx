@@ -11,6 +11,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 import ProductsPage from "./pages/ProductsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SalesPage from "./pages/SalesPage.jsx";
+import UsersPage from "./pages/UsersPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,6 +79,14 @@ export default function App() {
         element={
           <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.reports}>
             <ReportsPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.users}>
+            <UsersPage />
           </ProtectedPage>
         }
       />

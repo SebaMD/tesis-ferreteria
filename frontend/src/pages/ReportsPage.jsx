@@ -1,9 +1,12 @@
-import { BarChart3, DollarSign, Filter, RotateCcw, ShoppingCart, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BarChart3, DollarSign, FileSpreadsheet, Filter, RotateCcw, ShoppingCart, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
-import { formatClp, formatDate } from "../helpers/formatters.js";
+import Pagination from "../components/Pagination.jsx";
+import { downloadExcel } from "../helpers/excelExport.js";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio } from "../helpers/formatters.js";
 import { getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
+import usePagination from "../hooks/usePagination.js";
 import { getSalesByCashierReportRequest, getSalesReportRequest } from "../services/reports.service.js";
 import {
   alertClasses,
@@ -11,10 +14,9 @@ import {
   dashboardListRowClass,
   dashboardPanelClass,
   dashboardPanelHeadingClass,
+  emptyTableCellClass,
   emptyStateClass,
   listRowEndClass,
-  metricCardClass,
-  metricIconClasses,
   numericCellClass,
   pageClass,
   pageHeaderClass,
@@ -30,6 +32,16 @@ const REPORT_DATE_OPTIONS = {
   timeStyle: "short",
 };
 
+const reportMetricCardClass = "grid min-h-[136px] content-start gap-3 rounded-md border border-slate-200 bg-white p-[18px] shadow-[0_1px_2px_rgba(16,21,31,0.04)]";
+const reportMetricHeaderClass = "flex items-center gap-3 [&>span:last-child]:text-xs [&>span:last-child]:font-bold [&>span:last-child]:uppercase [&>span:last-child]:tracking-[0.02em] [&>span:last-child]:text-slate-500";
+const reportMetricValueClass = "font-mono text-[28px] font-bold leading-tight text-ink-950";
+const reportMetricDescriptionClass = "text-xs font-semibold text-slate-500";
+const reportMetricIconClasses = {
+  neutral: "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[5px] bg-slate-100 text-ink-700",
+  warning: "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600",
+  positive: "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[5px] bg-positive-50 text-positive-600",
+};
+
 function dateInputValue(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -38,17 +50,19 @@ function dateInputValue(date) {
 }
 
 function initialFilters() {
-  const today = new Date();
+  const today = dateInputValue(new Date());
   return {
-    from: dateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),
-    to: dateInputValue(today),
+    from: today,
+    to: today,
     cashierId: "",
     paymentMethod: "",
   };
 }
 
 export default function ReportsPage() {
+  const [dateMode, setDateMode] = useState("single");
   const [filters, setFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
   const [cashiers, setCashiers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +79,7 @@ export default function ReportsPage() {
       ]);
       setReport(reportData);
       setCashiers(cashierData.cashiers || []);
+      setAppliedFilters(nextFilters);
     } catch (requestError) {
       setError(getApiError(requestError, "No se pudo cargar el reporte de ventas"));
     } finally {
@@ -82,6 +97,19 @@ export default function ReportsPage() {
     setFilters((current) => ({ ...current, [name]: value }));
   };
 
+  const handleSingleDateChange = (event) => {
+    const { value } = event.target;
+    setFilters((current) => ({ ...current, from: value, to: value }));
+  };
+
+  const handleDateModeChange = (mode) => {
+    setDateMode(mode);
+
+    if (mode === "single") {
+      setFilters((current) => ({ ...current, to: current.from }));
+    }
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
     loadReport(filters);
@@ -89,11 +117,51 @@ export default function ReportsPage() {
 
   const handleReset = () => {
     const nextFilters = initialFilters();
+    setDateMode("single");
     setFilters(nextFilters);
     loadReport(nextFilters);
   };
 
   const topCashier = report?.byCashier?.find((cashier) => cashier.salesCount > 0);
+  const today = dateInputValue(new Date());
+  const reportSales = useMemo(
+    () => [...(report?.sales || [])].sort(compareByNewest),
+    [report],
+  );
+  const salesPagination = usePagination(reportSales, {
+    resetKey: `${appliedFilters.from}|${appliedFilters.to}|${appliedFilters.cashierId}|${appliedFilters.paymentMethod}|${reportSales.length}`,
+  });
+  const showingTodayReport =
+    appliedFilters.from === today &&
+    appliedFilters.to === today;
+  const showingSingleDayReport = appliedFilters.from === appliedFilters.to;
+  const exportFilenameDate =
+    appliedFilters.from === appliedFilters.to
+      ? appliedFilters.from
+      : `${appliedFilters.from}_a_${appliedFilters.to}`;
+
+  const handleExportSales = () => {
+    downloadExcel({
+      filename: `reporte-ventas-${exportFilenameDate}.xlsx`,
+      sheetName: "Ventas",
+      columns: [
+        { key: "folio", header: "Folio de venta" },
+        { key: "fecha", header: "Fecha" },
+        { key: "cajero", header: "Cajero" },
+        { key: "metodoPago", header: "Método de pago" },
+        { key: "estado", header: "Estado" },
+        { key: "total", header: "Total" },
+      ],
+      rows: reportSales.map((sale) => ({
+        folio: formatSaleFolio(sale.id),
+        fecha: formatDate(sale.date, REPORT_DATE_OPTIONS, "-"),
+        cajero: `${sale.cashierNames || ""} ${sale.cashierSurnames || ""}`.trim(),
+        metodoPago: getPaymentMethodLabel(sale.paymentMethod),
+        estado: getSaleStatusLabel(sale.status),
+        total: Number(sale.total || 0),
+      })),
+    });
+  };
 
   return (
     <section className={`${pageClass} content-start`}>
@@ -105,22 +173,49 @@ export default function ReportsPage() {
       </div>
 
       <form className={`${panelClass} gap-4.5`} onSubmit={handleSubmit}>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex size-9 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
-          <div>
-            <h2 className="m-0 text-base font-bold text-ink-950">Filtros</h2>
-            <p className="mt-1 mb-0 text-xs text-slate-500">Las ventas canceladas se muestran en el historial, pero no se suman.</p>
+        <div className="flex items-center justify-between gap-4 max-[720px]:flex-col max-[720px]:items-stretch">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
+            <div>
+              <h2 className="m-0 text-base font-bold text-ink-950">Filtros</h2>
+              <p className="mt-1 mb-0 text-xs text-slate-500">Las ventas canceladas se muestran en el historial, pero no se suman.</p>
+            </div>
+          </div>
+          <div className="flex w-fit max-w-full shrink-0 rounded-[5px] border border-slate-200 bg-slate-50 p-1 max-[720px]:w-full">
+            <button
+              className={`min-h-8 flex-1 px-3 py-1.5 text-xs ${dateMode === "single" ? "bg-rust-500 text-white hover:bg-rust-600" : "bg-transparent text-ink-700 hover:bg-slate-100"}`}
+              type="button"
+              onClick={() => handleDateModeChange("single")}
+            >
+              Un día
+            </button>
+            <button
+              className={`min-h-8 flex-1 px-3 py-1.5 text-xs ${dateMode === "range" ? "bg-rust-500 text-white hover:bg-rust-600" : "bg-transparent text-ink-700 hover:bg-slate-100"}`}
+              type="button"
+              onClick={() => handleDateModeChange("range")}
+            >
+              Rango de fechas
+            </button>
           </div>
         </div>
-        <div className="grid grid-cols-[repeat(4,minmax(150px,1fr))_auto] items-end gap-3 max-[980px]:grid-cols-2 max-[720px]:grid-cols-1">
-          <label>
-            Desde
-            <input type="date" name="from" value={filters.from} max={filters.to} onChange={handleChange} required />
-          </label>
-          <label>
-            Hasta
-            <input type="date" name="to" value={filters.to} min={filters.from} onChange={handleChange} required />
-          </label>
+        <div className={`${dateMode === "single" ? "grid-cols-[repeat(3,minmax(150px,1fr))_auto]" : "grid-cols-[repeat(4,minmax(150px,1fr))_auto]"} grid items-end gap-3 max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`}>
+          {dateMode === "single" ? (
+            <label>
+              Fecha
+              <input type="date" value={filters.from} onChange={handleSingleDateChange} required />
+            </label>
+          ) : (
+            <>
+              <label>
+                Desde
+                <input type="date" name="from" value={filters.from} max={filters.to} onChange={handleChange} required />
+              </label>
+              <label>
+                Hasta
+                <input type="date" name="to" value={filters.to} min={filters.from} onChange={handleChange} required />
+              </label>
+            </>
+          )}
           <label>
             Cajero
             <select name="cashierId" value={filters.cashierId} onChange={handleChange}>
@@ -152,26 +247,40 @@ export default function ReportsPage() {
         </div>
       </form>
 
+      <div className="w-fit max-w-full rounded-[5px] border border-rust-500 bg-rust-50 px-3.5 py-2.5 text-[13px] font-semibold text-[#92400e]">
+        {showingTodayReport
+          ? "Mostrando reportes de ventas de hoy"
+          : showingSingleDayReport
+            ? `Mostrando ventas del día ${appliedFilters.from}`
+            : `Mostrando ventas desde ${appliedFilters.from} hasta ${appliedFilters.to}`}
+      </div>
+
       {error && <div className={alertClasses.error}>{error}</div>}
 
       <div className="grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
-        <article className={metricCardClass}>
-          <span>Total vendido</span>
-          <strong>{formatClp(report?.total)}</strong>
-          <span className={metricIconClasses.positive}><DollarSign size={20} /></span>
-          <span>Solo ventas activas del período</span>
+        <article className={reportMetricCardClass}>
+          <div className={reportMetricHeaderClass}>
+            <span className={reportMetricIconClasses.positive}><DollarSign size={20} /></span>
+            <span>Total vendido</span>
+          </div>
+          <strong className={reportMetricValueClass}>{formatClp(report?.total)}</strong>
+          <span className={reportMetricDescriptionClass}>Solo ventas activas del período</span>
         </article>
-        <article className={metricCardClass}>
-          <span>Ventas activas</span>
-          <strong>{report?.salesCount ?? 0}</strong>
-          <span className={metricIconClasses.neutral}><ShoppingCart size={20} /></span>
-          <span>Operaciones incluidas en el total</span>
+        <article className={reportMetricCardClass}>
+          <div className={reportMetricHeaderClass}>
+            <span className={reportMetricIconClasses.neutral}><ShoppingCart size={20} /></span>
+            <span>Ventas activas</span>
+          </div>
+          <strong className={reportMetricValueClass}>{report?.salesCount ?? 0}</strong>
+          <span className={reportMetricDescriptionClass}>Operaciones incluidas en el total</span>
         </article>
-        <article className={metricCardClass}>
-          <span>Mayor total por cajero</span>
-          <strong className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-sans! text-xl!">{topCashier?.cashierName || "Sin ventas"}</strong>
-          <span className={metricIconClasses.warning}><UserRound size={20} /></span>
-          <span>{topCashier ? formatClp(topCashier.total) : "Sin ventas activas en el período"}</span>
+        <article className={reportMetricCardClass}>
+          <div className={reportMetricHeaderClass}>
+            <span className={reportMetricIconClasses.warning}><UserRound size={20} /></span>
+            <span>Mayor total por cajero</span>
+          </div>
+          <strong className={`${reportMetricValueClass} max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-sans text-xl`}>{topCashier?.cashierName || "Sin ventas"}</strong>
+          <span className={reportMetricDescriptionClass}>{topCashier ? formatClp(topCashier.total) : "Sin ventas activas en el período"}</span>
         </article>
       </div>
 
@@ -230,7 +339,18 @@ export default function ReportsPage() {
             <h2>Ventas del período</h2>
             <p>Historial activo y cancelado según los filtros seleccionados</p>
           </div>
-          {loading && <span className={badgeClass("neutral")}>Cargando</span>}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {loading && <span className={badgeClass("neutral")}>Cargando</span>}
+            <button
+              className={`${secondaryButtonClass} mr-0`}
+              type="button"
+              onClick={handleExportSales}
+              disabled={loading || reportSales.length === 0}
+            >
+              <FileSpreadsheet size={17} />
+              Exportar Excel
+            </button>
+          </div>
         </div>
         <table>
           <thead>
@@ -244,7 +364,7 @@ export default function ReportsPage() {
             </tr>
           </thead>
           <tbody>
-            {report?.sales?.length ? report.sales.map((sale) => (
+            {reportSales.length ? salesPagination.paginatedItems.map((sale) => (
               <tr key={sale.id}>
                 <td>#{sale.id}</td>
                 <td>{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</td>
@@ -259,11 +379,18 @@ export default function ReportsPage() {
               </tr>
             )) : (
               <tr>
-                <td className="p-[34px_18px]! text-center text-slate-500" colSpan="6">No hay ventas para los filtros seleccionados.</td>
+                <td className={emptyTableCellClass} colSpan="6">No hay ventas para los filtros seleccionados.</td>
               </tr>
             )}
           </tbody>
         </table>
+        <Pagination
+          page={salesPagination.page}
+          pageSize={salesPagination.pageSize}
+          totalItems={salesPagination.totalItems}
+          totalPages={salesPagination.totalPages}
+          onPageChange={salesPagination.setPage}
+        />
       </div>
     </section>
   );

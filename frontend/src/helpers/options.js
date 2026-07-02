@@ -25,6 +25,19 @@ export const UNIT_OPTIONS = [
   "galón",
 ];
 
+export const CATEGORY_SUGGESTIONS = [
+  "Herramientas manuales",
+  "Tornillería y fijaciones",
+  "Electricidad",
+  "Plomería",
+  "Pinturas y solventes",
+  "Seguridad industrial",
+  "Materiales de construcción",
+  "Jardinería",
+  "Adhesivos y sellantes",
+  "Ferretería general",
+];
+
 export const ADJUSTMENT_REASONS = [
   "Conteo físico",
   "Corrección de registro",

@@ -1,17 +1,20 @@
-import { Plus, Trash2, XCircle } from "lucide-react";
+import { Plus, Search, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
-import { formatClp } from "../helpers/formatters.js";
-import { getSaleStatusLabel } from "../helpers/labels.js";
+import Pagination from "../components/Pagination.jsx";
+import { compareByNewest, formatClp, formatSaleFolio } from "../helpers/formatters.js";
+import { getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
+import usePagination from "../hooks/usePagination.js";
 import { getProductsRequest } from "../services/products.service.js";
 import { cancelSaleRequest, createSaleRequest, getSalesRequest } from "../services/sales.service.js";
 import {
   alertClasses,
   badgeClass,
   dangerButtonClass,
+  emptyTableCellClass,
   formActionsClass,
   numericCellClass,
   pageClass,
@@ -28,14 +31,41 @@ export default function SalesPage() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
+  const [cashReceived, setCashReceived] = useState("");
   const [details, setDetails] = useState([emptyDetail()]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [saleFormOpen, setSaleFormOpen] = useState(false);
+  const [saleToCancel, setSaleToCancel] = useState(null);
+  const [search, setSearch] = useState("");
 
   const canCreate = user?.role === "CASHIER";
   const canCancel = user?.role === "ADMIN";
+  const normalizedSearch = search.trim().toLocaleLowerCase("es");
+  const filteredSales = useMemo(
+    () => sales.filter((sale) => {
+      if (!normalizedSearch) return true;
+
+      const cashierName = `${sale.userNames || ""} ${sale.userSurnames || ""}`;
+      const searchableValues = [
+        String(sale.id),
+        formatSaleFolio(sale.id),
+        cashierName,
+        sale.paymentMethod,
+        getPaymentMethodLabel(sale.paymentMethod),
+        String(sale.total),
+        String(Number(sale.total || 0)),
+        formatClp(sale.total),
+      ];
+
+      return searchableValues.some((value) => String(value).toLocaleLowerCase("es").includes(normalizedSearch));
+    }).sort(compareByNewest),
+    [normalizedSearch, sales],
+  );
+  const salesPagination = usePagination(filteredSales, {
+    resetKey: `${normalizedSearch}|${sales.length}`,
+  });
 
   const loadData = async () => {
     const [productData, saleData] = await Promise.all([getProductsRequest(), getSalesRequest()]);
@@ -69,6 +99,11 @@ export default function SalesPage() {
     const product = productById.get(Number(detail.productId));
     return total + (product ? Number(product.price) * Number(detail.quantity || 0) : 0);
   }, 0);
+  const isCashPayment = paymentMethod === "efectivo";
+  const receivedAmount = Number(cashReceived || 0);
+  const cashChange = receivedAmount - estimatedTotal;
+  const hasInsufficientCash = isCashPayment && cashReceived !== "" && receivedAmount < estimatedTotal;
+  const canSubmitSale = !submitting && (!isCashPayment || (cashReceived !== "" && receivedAmount >= estimatedTotal));
 
   const updateDetail = (index, field, value) => {
     setDetails((current) =>
@@ -94,6 +129,7 @@ export default function SalesPage() {
 
   const startNewSale = () => {
     setPaymentMethod("efectivo");
+    setCashReceived("");
     setDetails([emptyDetail()]);
     setMessage("");
     setError("");
@@ -102,6 +138,7 @@ export default function SalesPage() {
 
   const closeSaleForm = () => {
     setPaymentMethod("efectivo");
+    setCashReceived("");
     setDetails([emptyDetail()]);
     setError("");
     setSaleFormOpen(false);
@@ -117,6 +154,18 @@ export default function SalesPage() {
       return;
     }
 
+    if (isCashPayment) {
+      if (cashReceived === "") {
+        setError("Ingresa el monto recibido para calcular el vuelto");
+        return;
+      }
+
+      if (receivedAmount < estimatedTotal) {
+        setError("El monto recibido es menor al total de la venta");
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       await createSaleRequest({
@@ -127,6 +176,7 @@ export default function SalesPage() {
         })),
       });
       setPaymentMethod("efectivo");
+      setCashReceived("");
       setDetails([emptyDetail()]);
       setMessage("Venta registrada exitosamente");
       await loadData();
@@ -138,17 +188,35 @@ export default function SalesPage() {
     }
   };
 
-  const handleCancel = async (sale) => {
-    const confirmed = window.confirm(`¿Cancelar la venta #${sale.id}? El stock sera restaurado.`);
-    if (!confirmed) return;
+  const openCancelModal = (sale) => {
+    if (!canCancel || sale.status !== "ACTIVE") return;
+    setSaleToCancel(sale);
+    setError("");
+    setMessage("");
+  };
+
+  const closeCancelModal = () => {
+    if (submitting) return;
+    setSaleToCancel(null);
+  };
+
+  const handleCancel = async () => {
+    if (!saleToCancel) return;
+
+    if (saleToCancel.status !== "ACTIVE") {
+      setError("No se puede cancelar una venta que ya fue cancelada");
+      setSaleToCancel(null);
+      return;
+    }
 
     setError("");
     setMessage("");
 
     try {
       setSubmitting(true);
-      await cancelSaleRequest(sale.id);
-      setMessage(`Venta #${sale.id} cancelada y stock restaurado`);
+      await cancelSaleRequest(saleToCancel.id);
+      setMessage(`Venta ${formatSaleFolio(saleToCancel.id)} cancelada y stock restaurado`);
+      setSaleToCancel(null);
       await loadData();
     } catch (err) {
       setError(getApiError(err, "No se pudo cancelar la venta"));
@@ -186,7 +254,13 @@ export default function SalesPage() {
           {error && <div className={alertClasses.error}>{error}</div>}
           <label>
             Metodo de pago
-            <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+            <select
+              value={paymentMethod}
+              onChange={(event) => {
+                setPaymentMethod(event.target.value);
+                if (event.target.value !== "efectivo") setCashReceived("");
+              }}
+            >
               {PAYMENT_METHODS.map((method) => (
                 <option key={method.value} value={method.value}>{method.label}</option>
               ))}
@@ -289,18 +363,91 @@ export default function SalesPage() {
             })}
           </div>
 
+          {isCashPayment && (
+            <div className="grid grid-cols-[minmax(180px,260px)_minmax(0,1fr)] items-end gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[720px]:grid-cols-1">
+              <label>
+                Monto recibido
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cashReceived}
+                  onChange={(event) => setCashReceived(event.target.value)}
+                  placeholder="Ej: 10000"
+                  required={isCashPayment}
+                />
+              </label>
+              <div className={`grid gap-1 border-l-4 px-3.25 py-2.75 ${hasInsufficientCash ? "border-l-critical-600 bg-critical-50 text-critical-600" : "border-l-positive-600 bg-positive-50 text-positive-600"}`}>
+                <span className="text-xs font-semibold">
+                  {cashReceived === "" ? "Ingresa el monto recibido" : hasInsufficientCash ? "Monto recibido insuficiente" : "Vuelto"}
+                </span>
+                <strong className="font-mono text-lg text-ink-950">
+                  {cashReceived === "" ? "-" : formatClp(Math.max(cashChange, 0))}
+                </strong>
+                <span className="text-xs">
+                  Total venta: {formatClp(estimatedTotal)}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className={formActionsClass}>
             <button className={secondaryButtonClass} type="button" onClick={addDetail}>
               <Plus size={18} />
               Agregar producto
             </button>
             <strong>Total referencial: {formatClp(estimatedTotal)}</strong>
-            <button type="submit" disabled={submitting}>
+            <button type="submit" disabled={!canSubmitSale}>
               Registrar venta
             </button>
           </div>
         </form>
       </AppModal>
+
+      <AppModal
+        open={canCancel && Boolean(saleToCancel)}
+        title="Cancelar venta"
+        description="¿Estás seguro de cancelar esta venta? El stock será restaurado automáticamente."
+        onClose={closeCancelModal}
+        size="small"
+      >
+        <div className="grid gap-4">
+          {saleToCancel && (
+            <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
+              <span className="text-xs font-semibold text-slate-500">Venta seleccionada</span>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <strong className="font-mono text-ink-950">{formatSaleFolio(saleToCancel.id)}</strong>
+                <strong className={numericCellClass}>{formatClp(saleToCancel.total)}</strong>
+              </div>
+            </div>
+          )}
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeCancelModal} disabled={submitting}>
+              No, volver
+            </button>
+            <button className={dangerButtonClass} type="button" onClick={handleCancel} disabled={submitting}>
+              <XCircle size={17} />
+              Sí, cancelar venta
+            </button>
+          </div>
+        </div>
+      </AppModal>
+
+      <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:items-stretch">
+        <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
+          <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+          <input
+            className="pl-9.75"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por folio, ID, cajero, método o total"
+            aria-label="Buscar ventas"
+          />
+        </label>
+        <span className="text-xs font-semibold text-slate-500">
+          {filteredSales.length} de {sales.length} ventas
+        </span>
+      </div>
 
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
@@ -312,7 +459,7 @@ export default function SalesPage() {
         <table>
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Folio</th>
               <th>Usuario</th>
               <th>Metodo</th>
               <th>Total</th>
@@ -321,13 +468,18 @@ export default function SalesPage() {
             </tr>
           </thead>
           <tbody>
-            {sales.map((sale) => (
+            {salesPagination.paginatedItems.map((sale) => (
               <tr key={sale.id}>
-                <td>{sale.id}</td>
+                <td>
+                  <div className="grid gap-0.5">
+                    <strong className="font-mono text-xs text-ink-950">{formatSaleFolio(sale.id)}</strong>
+                    <span className="text-[11px] text-slate-500">ID {sale.id}</span>
+                  </div>
+                </td>
                 <td>
                   {sale.userNames} {sale.userSurnames}
                 </td>
-                <td>{sale.paymentMethod}</td>
+                <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
                 <td className={numericCellClass}>{formatClp(sale.total)}</td>
                 <td>
                   <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
@@ -340,7 +492,7 @@ export default function SalesPage() {
                       <button
                         className={dangerButtonClass}
                         type="button"
-                        onClick={() => handleCancel(sale)}
+                        onClick={() => openCancelModal(sale)}
                         disabled={submitting}
                       >
                         <XCircle size={17} />
@@ -351,8 +503,22 @@ export default function SalesPage() {
                 )}
               </tr>
             ))}
+            {filteredSales.length === 0 && (
+              <tr>
+                <td className={emptyTableCellClass} colSpan={canCancel ? 6 : 5}>
+                  {sales.length === 0 ? "No hay ventas registradas." : "No se encontraron ventas con la búsqueda ingresada."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
+        <Pagination
+          page={salesPagination.page}
+          pageSize={salesPagination.pageSize}
+          totalItems={salesPagination.totalItems}
+          totalPages={salesPagination.totalPages}
+          onPageChange={salesPagination.setPage}
+        />
       </div>
     </section>
   );

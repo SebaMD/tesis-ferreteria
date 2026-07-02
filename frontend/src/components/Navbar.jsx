@@ -9,6 +9,7 @@ const pageNames = {
   "/sales": "Ventas",
   "/inventory": "Inventario",
   "/reports": "Reportes",
+  "/users": "Usuarios",
 };
 
 export default function Navbar({ onToggleSidebar }) {

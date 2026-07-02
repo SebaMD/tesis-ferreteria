@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Home, Package, ShoppingCart } from "lucide-react";
+import { BarChart3, Boxes, Home, Package, ShoppingCart, UsersRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
@@ -10,6 +10,7 @@ const items = [
   { to: "/sales", label: "Ventas", icon: ShoppingCart, roles: ROUTE_PERMISSIONS.sales },
   { to: "/inventory", label: "Inventario", icon: Boxes, roles: ROUTE_PERMISSIONS.inventory },
   { to: "/reports", label: "Reportes", icon: BarChart3, roles: ROUTE_PERMISSIONS.reports },
+  { to: "/users", label: "Usuarios", icon: UsersRound, roles: ROUTE_PERMISSIONS.users },
 ];
 
 export default function Sidebar({ open, onNavigate }) {

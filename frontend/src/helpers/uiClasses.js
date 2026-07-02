@@ -6,7 +6,7 @@ export const panelClass = "grid content-start gap-[15px] rounded-md border borde
 
 export const tablePanelClass = "overflow-auto rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,21,31,0.04)] [&_table]:min-w-[720px]";
 
-export const tableHeadingClass = "flex items-start justify-between gap-4 border-b border-slate-200 px-[18px] py-[17px] [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
+export const tableHeadingClass = "flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3.5 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
 
 export const secondaryButtonClass = "mr-auto border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:mr-0";
 
@@ -54,6 +54,6 @@ export const emptyStateClass = "m-0 px-[18px] py-[34px] text-center text-[13px] 
 export const numericCellClass = "font-mono font-semibold text-ink-950";
 export const codeCellClass = "font-mono text-xs font-semibold text-ink-950";
 export const dateCellClass = "whitespace-nowrap text-xs text-slate-600";
-export const emptyTableCellClass = "h-[110px] text-center text-slate-500";
+export const emptyTableCellClass = "h-24 text-center text-slate-500";
 
 export const formActionsClass = "flex flex-wrap items-center justify-end gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>*]:w-full";

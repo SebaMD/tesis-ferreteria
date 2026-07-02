@@ -2,9 +2,11 @@ import { FolderPlus, Pencil, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
-import { formatClp } from "../helpers/formatters.js";
-import { OTHER_UNIT, UNIT_OPTIONS } from "../helpers/options.js";
+import Pagination from "../components/Pagination.jsx";
+import { compareByNewest, formatClp } from "../helpers/formatters.js";
+import { CATEGORY_SUGGESTIONS, OTHER_UNIT, UNIT_OPTIONS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
+import usePagination from "../hooks/usePagination.js";
 import { createCategoryRequest, getCategoriesRequest } from "../services/categories.service.js";
 import { createProductRequest, getProductsRequest, updateProductRequest } from "../services/products.service.js";
 import {
@@ -22,6 +24,10 @@ import {
 } from "../helpers/uiClasses.js";
 
 function normalizeProductName(name) {
+  return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function normalizeCategoryName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 
@@ -43,6 +49,7 @@ export default function ProductsPage() {
   const [editingProductId, setEditingProductId] = useState(null);
   const [activeForm, setActiveForm] = useState(null);
   const [categoryName, setCategoryName] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [unitSelection, setUnitSelection] = useState("unidad");
@@ -59,17 +66,38 @@ export default function ProductsPage() {
     [products],
   );
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
-    if (!matchesCategory) return false;
-    if (!normalizedSearch) return true;
+  const filteredProducts = useMemo(
+    () => products.filter((product) => {
+      const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
+      if (!matchesCategory) return false;
+      if (!normalizedSearch) return true;
 
-    return (
-      String(product.id).includes(normalizedSearch) ||
-      product.name.toLocaleLowerCase("es").includes(normalizedSearch) ||
-      product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
-    );
+      return (
+        String(product.id).includes(normalizedSearch) ||
+        product.name.toLocaleLowerCase("es").includes(normalizedSearch) ||
+        product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
+      );
+    }).sort(compareByNewest),
+    [categoryFilter, normalizedSearch, products],
+  );
+  const filteredFormCategories = useMemo(() => {
+    const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase("es");
+
+    return [...categories]
+      .filter((category) =>
+        !normalizedCategorySearch ||
+        category.name.toLocaleLowerCase("es").includes(normalizedCategorySearch) ||
+        String(category.id).includes(normalizedCategorySearch),
+      )
+      .sort((left, right) => left.name.localeCompare(right.name, "es"));
+  }, [categories, categorySearch]);
+  const productsPagination = usePagination(filteredProducts, {
+    resetKey: `${categoryFilter}|${normalizedSearch}`,
   });
+  const existingCategoryNames = useMemo(
+    () => new Set(categories.map((category) => normalizeCategoryName(category.name))),
+    [categories],
+  );
 
   const loadData = async () => {
     const productData = await getProductsRequest();
@@ -91,6 +119,13 @@ export default function ProductsPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    const normalizedCategoryName = normalizeCategoryName(categoryName);
+
+    if (existingCategoryNames.has(normalizedCategoryName)) {
+      setError("Ya existe una categoría con ese nombre");
+      return;
+    }
 
     try {
       const category = await createCategoryRequest({ name: categoryName, description: "", status: true });
@@ -135,6 +170,7 @@ export default function ProductsPage() {
       }
 
       setForm(emptyForm);
+      setCategorySearch("");
       setUnitSelection("unidad");
       setEditingProductId(null);
       setActiveForm(null);
@@ -158,6 +194,7 @@ export default function ProductsPage() {
       status: product.status,
     });
     setUnitSelection(UNIT_OPTIONS.includes(product.unitMeasure) ? product.unitMeasure : OTHER_UNIT);
+    setCategorySearch("");
     setError("");
     setMessage("");
   };
@@ -165,6 +202,7 @@ export default function ProductsPage() {
   const cancelEditing = () => {
     setEditingProductId(null);
     setForm(emptyForm);
+    setCategorySearch("");
     setUnitSelection("unidad");
     setActiveForm(null);
   };
@@ -173,6 +211,7 @@ export default function ProductsPage() {
     setActiveForm("category");
     setEditingProductId(null);
     setForm(emptyForm);
+    setCategorySearch("");
     setUnitSelection("unidad");
     setError("");
     setMessage("");
@@ -182,6 +221,7 @@ export default function ProductsPage() {
     setActiveForm("product");
     setEditingProductId(null);
     setForm(emptyForm);
+    setCategorySearch("");
     setUnitSelection("unidad");
     setError("");
     setMessage("");
@@ -267,6 +307,27 @@ export default function ProductsPage() {
               Nombre
               <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required />
             </label>
+            <div className="grid gap-2">
+              <span className="text-[13px] font-[650] text-ink-700">Sugerencias comunes</span>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_SUGGESTIONS.map((category) => {
+                  const exists = existingCategoryNames.has(normalizeCategoryName(category));
+
+                  return (
+                    <button
+                      className={`${secondaryButtonClass} mr-0 min-h-8 px-2.75 text-xs ${exists ? "opacity-50" : ""}`}
+                      type="button"
+                      key={category}
+                      onClick={() => setCategoryName(category)}
+                      disabled={exists}
+                      title={exists ? "Esta categoría ya existe" : "Usar esta sugerencia"}
+                    >
+                      {category}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className={formActionsClass}>
               <button className={secondaryButtonClass} type="button" onClick={closeCategoryForm}>Cancelar</button>
               <button type="submit">Guardar categoría</button>
@@ -292,18 +353,33 @@ export default function ProductsPage() {
                   required
                 >
                   <option value="">Seleccionar</option>
-                  {categories.map((category) => (
+                  {filteredFormCategories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
                   ))}
+                  {filteredFormCategories.length === 0 && (
+                    <option disabled>No se encontraron categorías</option>
+                  )}
                 </select>
               </label>
               <label>
-                Nombre
-                <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+                Buscar categoría
+                <div className="relative">
+                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                  <input
+                    className="pl-9.75"
+                    value={categorySearch}
+                    onChange={(event) => setCategorySearch(event.target.value)}
+                    placeholder="Nombre o ID de categoría"
+                  />
+                </div>
               </label>
             </div>
+            <label>
+              Nombre
+              <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+            </label>
             <label>
               Descripción
               <input
@@ -322,7 +398,7 @@ export default function ProductsPage() {
                 />
               </label>
               <label>
-                Unidad
+                Unidad de medida
                 <select value={unitSelection} onChange={(event) => handleUnitSelection(event.target.value)} required>
                   {UNIT_OPTIONS.map((unit) => (
                     <option key={unit} value={unit}>{unit}</option>
@@ -381,7 +457,7 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.map((product) => (
+            {productsPagination.paginatedItems.map((product) => (
               <tr key={product.id}>
                 <td className={codeCellClass}>#{product.id}</td>
                 <td>{product.name}</td>
@@ -416,6 +492,13 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={productsPagination.page}
+          pageSize={productsPagination.pageSize}
+          totalItems={productsPagination.totalItems}
+          totalPages={productsPagination.totalPages}
+          onPageChange={productsPagination.setPage}
+        />
       </div>
     </section>
   );

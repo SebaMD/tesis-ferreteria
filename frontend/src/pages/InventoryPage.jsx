@@ -1,11 +1,14 @@
-import { AlertTriangle, Info, PackagePlus, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Info, PackagePlus, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import Pagination from "../components/Pagination.jsx";
+import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatDate } from "../helpers/formatters.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
+import usePagination from "../hooks/usePagination.js";
 import { createInventoryMovementRequest, getInventoryMovementsRequest } from "../services/inventory.service.js";
 import { getProductsRequest } from "../services/products.service.js";
 import {
@@ -40,6 +43,13 @@ function initialMovementForm(movementType = "ENTRY") {
   };
 }
 
+function dateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function InventoryPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
@@ -54,6 +64,7 @@ export default function InventoryPage() {
   const [productSearch, setProductSearch] = useState("");
 
   const canCreate = user?.role === "ADMIN";
+  const canExport = user?.role === "ADMIN";
   const activeProducts = useMemo(
     () => products.filter((product) => product.status !== false),
     [products],
@@ -79,7 +90,10 @@ export default function InventoryPage() {
   const lowStockProducts = products.filter(
     (product) => product.status !== false && product.currentStock <= product.minimumStock,
   );
-  const sortedMovements = [...movements].sort(compareByNewest);
+  const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
+  const movementsPagination = usePagination(sortedMovements, {
+    resetKey: String(movements.length),
+  });
 
   const loadData = async () => {
     const [productData, movementData] = await Promise.all([getProductsRequest(), getInventoryMovementsRequest()]);
@@ -169,6 +183,31 @@ export default function InventoryPage() {
     setForm((current) => ({ ...current, productId: "" }));
   };
 
+  const handleExportInventory = () => {
+    downloadExcel({
+      filename: `movimientos-inventario-${dateInputValue(new Date())}.xlsx`,
+      sheetName: "Inventario",
+      columns: [
+        { key: "fecha", header: "Fecha" },
+        { key: "producto", header: "Producto" },
+        { key: "tipo", header: "Tipo de movimiento" },
+        { key: "cantidad", header: "Cantidad" },
+        { key: "responsable", header: "Responsable" },
+        { key: "motivo", header: "Motivo" },
+      ],
+      rows: sortedMovements.map((movement) => ({
+        fecha: formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS),
+        producto: movement.productName,
+        tipo: MOVEMENT_LABELS[movement.movementType] || movement.movementType,
+        cantidad: Number(movement.quantity || 0),
+        responsable: movement.userNames || movement.userSurnames
+          ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim()
+          : "Sistema",
+        motivo: movement.reason || "Sin motivo",
+      })),
+    });
+  };
+
   return (
     <section className={pageClass}>
       <div className={pageHeaderClass}>
@@ -203,6 +242,12 @@ export default function InventoryPage() {
                 <SlidersHorizontal size={18} />
                 Ajuste administrativo
               </button>
+              {canExport && (
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={handleExportInventory} disabled={sortedMovements.length === 0}>
+                  <FileSpreadsheet size={17} />
+                  Exportar Excel
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -348,7 +393,7 @@ export default function InventoryPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedMovements.map((movement) => (
+            {movementsPagination.paginatedItems.map((movement) => (
               <tr key={movement.id}>
                 <td className={dateCellClass}>{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</td>
                 <td>{movement.productName}</td>
@@ -373,6 +418,13 @@ export default function InventoryPage() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={movementsPagination.page}
+          pageSize={movementsPagination.pageSize}
+          totalItems={movementsPagination.totalItems}
+          totalPages={movementsPagination.totalPages}
+          onPageChange={movementsPagination.setPage}
+        />
       </div>
     </section>
   );

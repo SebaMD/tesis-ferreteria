@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowLeftRight, PackageCheck, ShoppingCart } from "lucid
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
-import { getSaleStatusLabel } from "../helpers/labels.js";
+import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
 import { getInventoryMovementsRequest } from "../services/inventory.service.js";
 import { getProductsRequest } from "../services/products.service.js";
@@ -95,6 +95,18 @@ export default function DashboardPage() {
     () => movements.filter((movement) => isRecent(movement.date || movement.createdAt)),
     [movements],
   );
+  const priorityLowStockProducts = useMemo(
+    () =>
+      [...lowStockProducts]
+        .sort((left, right) => {
+          const leftDifference = Number(left.currentStock) - Number(left.minimumStock);
+          const rightDifference = Number(right.currentStock) - Number(right.minimumStock);
+          if (leftDifference !== rightDifference) return leftDifference - rightDifference;
+          return left.name.localeCompare(right.name, "es");
+        })
+        .slice(0, 5),
+    [lowStockProducts],
+  );
   const latestSales = useMemo(() => [...sales].sort(compareByNewest).slice(0, 5), [sales]);
   const latestMovements = useMemo(() => [...movements].sort(compareByNewest).slice(0, 5), [movements]);
 
@@ -118,6 +130,7 @@ export default function DashboardPage() {
       ? [{ label: "Movimientos recientes", value: recentMovements.length, icon: ArrowLeftRight, tone: "neutral" }]
       : []),
   ];
+  const metricsGridClass = `grid gap-3.5 ${metrics.length >= 4 ? "grid-cols-4" : "grid-cols-3"} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
 
   return (
     <section className={`${pageClass} gap-4.5`}>
@@ -134,7 +147,7 @@ export default function DashboardPage() {
         <div className={`${panelClass} text-center text-[13px] text-slate-500`}>Cargando información del sistema...</div>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-3.5 max-[980px]:grid-cols-2 max-[720px]:grid-cols-1">
+          <div className={metricsGridClass}>
             {metrics.map((metric) => {
               const Icon = metric.icon;
               return (
@@ -147,7 +160,7 @@ export default function DashboardPage() {
             })}
           </div>
 
-          <div className="grid grid-cols-2 items-start gap-4 max-[720px]:grid-cols-1">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
             <section className={dashboardPanelClass}>
               <div className={dashboardPanelHeadingClass}>
                 <div>
@@ -158,10 +171,10 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid">
-                {lowStockProducts.length === 0 ? (
+                {priorityLowStockProducts.length === 0 ? (
                   <p className={emptyStateClass}>No hay productos con stock bajo.</p>
                 ) : (
-                  lowStockProducts.slice(0, 5).map((product) => (
+                  priorityLowStockProducts.map((product) => (
                     <article className={dashboardListRowClass} key={product.id}>
                       <div>
                         <strong>{product.name}</strong>
@@ -177,7 +190,7 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {canViewSales ? (
+            {canViewSales && (
               <section className={dashboardPanelClass}>
                 <div className={dashboardPanelHeadingClass}>
                   <div>
@@ -208,7 +221,9 @@ export default function DashboardPage() {
                   )}
                 </div>
               </section>
-            ) : (
+            )}
+
+            {canViewInventory && (
               <section className={dashboardPanelClass}>
                 <div className={dashboardPanelHeadingClass}>
                   <div>
@@ -231,7 +246,7 @@ export default function DashboardPage() {
                         <div className={listRowEndClass}>
                           <strong>{movement.quantity} unidades</strong>
                           <span className={badgeClass(movement.movementType === "EXIT" ? "critical" : movement.movementType === "ADJUSTMENT" ? "neutral" : "success")}>
-                            {movement.movementType}
+                            {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
                           </span>
                         </div>
                       </article>

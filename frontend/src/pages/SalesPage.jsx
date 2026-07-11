@@ -1,15 +1,15 @@
-import { Plus, Search, Trash2, XCircle } from "lucide-react";
+import { Plus, RotateCcw, Search, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
-import { compareByNewest, formatClp, formatSaleFolio } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
 import { getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
 import usePagination from "../hooks/usePagination.js";
 import { getProductsRequest } from "../services/products.service.js";
-import { cancelSaleRequest, createSaleRequest, getSalesRequest } from "../services/sales.service.js";
+import { cancelSaleRequest, createSaleRequest, getSalesRequest, undoCancelSaleRequest } from "../services/sales.service.js";
 import {
   alertClasses,
   badgeClass,
@@ -20,6 +20,7 @@ import {
   pageClass,
   pageHeaderClass,
   secondaryButtonClass,
+  tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
 } from "../helpers/uiClasses.js";
@@ -38,6 +39,7 @@ export default function SalesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saleFormOpen, setSaleFormOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState(null);
+  const [saleToReactivate, setSaleToReactivate] = useState(null);
   const [search, setSearch] = useState("");
 
   const canCreate = user?.role === "CASHIER";
@@ -66,6 +68,7 @@ export default function SalesPage() {
   const salesPagination = usePagination(filteredSales, {
     resetKey: `${normalizedSearch}|${sales.length}`,
   });
+  const hasSalesFilters = Boolean(normalizedSearch);
 
   const loadData = async () => {
     const [productData, saleData] = await Promise.all([getProductsRequest(), getSalesRequest()]);
@@ -191,6 +194,7 @@ export default function SalesPage() {
   const openCancelModal = (sale) => {
     if (!canCancel || sale.status !== "ACTIVE") return;
     setSaleToCancel(sale);
+    setSaleToReactivate(null);
     setError("");
     setMessage("");
   };
@@ -225,6 +229,44 @@ export default function SalesPage() {
     }
   };
 
+  const openUndoCancelModal = (sale) => {
+    if (!canCancel || sale.status !== "CANCELLED") return;
+    setSaleToReactivate(sale);
+    setSaleToCancel(null);
+    setError("");
+    setMessage("");
+  };
+
+  const closeUndoCancelModal = () => {
+    if (submitting) return;
+    setSaleToReactivate(null);
+  };
+
+  const handleUndoCancel = async () => {
+    if (!saleToReactivate) return;
+
+    if (saleToReactivate.status !== "CANCELLED") {
+      setError("Solo se puede deshacer la cancelación de una venta cancelada");
+      setSaleToReactivate(null);
+      return;
+    }
+
+    setError("");
+    setMessage("");
+
+    try {
+      setSubmitting(true);
+      await undoCancelSaleRequest(saleToReactivate.id);
+      setMessage(`Cancelación de la venta ${formatSaleFolio(saleToReactivate.id)} deshecha y stock descontado nuevamente`);
+      setSaleToReactivate(null);
+      await loadData();
+    } catch (err) {
+      setError(getApiError(err, "No se pudo deshacer la cancelación de la venta"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <section className={pageClass}>
       <div className={pageHeaderClass}>
@@ -232,16 +274,10 @@ export default function SalesPage() {
           <h1>Ventas</h1>
           <p>Registro simple de venta presencial.</p>
         </div>
-        {canCreate && (
-          <button type="button" onClick={startNewSale}>
-            <Plus size={18} />
-            Registrar nueva venta
-          </button>
-        )}
       </div>
 
       {message && <div className={alertClasses.success}>{message}</div>}
-      {error && !saleFormOpen && <div className={alertClasses.error}>{error}</div>}
+      {error && !saleFormOpen && !saleToCancel && !saleToReactivate && <div className={alertClasses.error}>{error}</div>}
 
       <AppModal
         open={canCreate && saleFormOpen}
@@ -412,6 +448,7 @@ export default function SalesPage() {
         size="small"
       >
         <div className="grid gap-4">
+          {error && <div className={alertClasses.error}>{error}</div>}
           {saleToCancel && (
             <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
               <span className="text-xs font-semibold text-slate-500">Venta seleccionada</span>
@@ -433,7 +470,37 @@ export default function SalesPage() {
         </div>
       </AppModal>
 
-      <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:items-stretch">
+      <AppModal
+        open={canCancel && Boolean(saleToReactivate)}
+        title="Deshacer cancelación"
+        description="¿Estás seguro de deshacer la cancelación de esta venta? El stock será descontado nuevamente."
+        onClose={closeUndoCancelModal}
+        size="small"
+      >
+        <div className="grid gap-4">
+          {error && <div className={alertClasses.error}>{error}</div>}
+          {saleToReactivate && (
+            <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
+              <span className="text-xs font-semibold text-slate-500">Venta seleccionada</span>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <strong className="font-mono text-ink-950">Folio: {formatSaleFolio(saleToReactivate.id)}</strong>
+                <strong className={numericCellClass}>{formatClp(saleToReactivate.total)}</strong>
+              </div>
+            </div>
+          )}
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeUndoCancelModal} disabled={submitting}>
+              No, volver
+            </button>
+            <button type="button" onClick={handleUndoCancel} disabled={submitting}>
+              <RotateCcw size={17} />
+              Sí, deshacer cancelación
+            </button>
+          </div>
+        </div>
+      </AppModal>
+
+      <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
         <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
           <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
           <input
@@ -444,16 +511,24 @@ export default function SalesPage() {
             aria-label="Buscar ventas"
           />
         </label>
-        <span className="text-xs font-semibold text-slate-500">
-          {filteredSales.length} de {sales.length} ventas
-        </span>
+        {canCreate && (
+          <button type="button" onClick={startNewSale}>
+            <Plus size={18} />
+            Registrar nueva venta
+          </button>
+        )}
       </div>
 
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
             <h2>Ventas registradas</h2>
-            <p>Historial de ventas presenciales</p>
+            <p>{formatTableRecordCount({
+              visibleCount: salesPagination.paginatedItems.length,
+              totalCount: sales.length,
+              filteredCount: filteredSales.length,
+              hasFilters: hasSalesFilters,
+            })}</p>
           </div>
         </div>
         <table>
@@ -464,7 +539,7 @@ export default function SalesPage() {
               <th>Metodo</th>
               <th>Total</th>
               <th>Estado</th>
-              {canCancel && <th>Acciones</th>}
+              {canCancel && <th className="text-left">Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -487,10 +562,10 @@ export default function SalesPage() {
                   </span>
                 </td>
                 {canCancel && (
-                  <td>
-                    {sale.status === "ACTIVE" && (
+                  <td className="text-left">
+                    {sale.status === "ACTIVE" ? (
                       <button
-                        className={dangerButtonClass}
+                        className={`${dangerButtonClass} ${tableActionButtonClass}`}
                         type="button"
                         onClick={() => openCancelModal(sale)}
                         disabled={submitting}
@@ -498,7 +573,17 @@ export default function SalesPage() {
                         <XCircle size={17} />
                         Cancelar
                       </button>
-                    )}
+                    ) : sale.status === "CANCELLED" ? (
+                      <button
+                        className={`${secondaryButtonClass} ${tableActionButtonClass}`}
+                        type="button"
+                        onClick={() => openUndoCancelModal(sale)}
+                        disabled={submitting}
+                      >
+                        <RotateCcw size={17} />
+                        Deshacer
+                      </button>
+                    ) : null}
                   </td>
                 )}
               </tr>

@@ -1,9 +1,10 @@
-import { Pencil, Search, UserPlus } from "lucide-react";
+import { Clock3, Pencil, Search, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
-import { compareByNewest, formatDate } from "../helpers/formatters.js";
+import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
+import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
 import {
   alertClasses,
@@ -14,11 +15,17 @@ import {
   pageClass,
   pageHeaderClass,
   secondaryButtonClass,
+  tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
 } from "../helpers/uiClasses.js";
 import usePagination from "../hooks/usePagination.js";
-import { createUserRequest, getUsersRequest, updateUserRequest } from "../services/users.service.js";
+import {
+  createUserRequest,
+  getUsersRequest,
+  updateCashierScheduleRequest,
+  updateUserRequest,
+} from "../services/users.service.js";
 
 const ROLE_ORDER = ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"];
 const ROLE_FALLBACK_IDS = {
@@ -42,6 +49,75 @@ const emptyForm = {
   roleName: "CASHIER",
   status: "ACTIVE",
 };
+const emptyScheduleForm = {
+  workShift: "MORNING",
+  shiftStartTime: "",
+  shiftEndTime: "",
+  shiftNote: "",
+};
+const WORK_SHIFT_OPTIONS = [
+  { value: "MORNING", label: "Mañana" },
+  { value: "AFTERNOON", label: "Tarde" },
+  { value: "OTHER", label: "Otro" },
+];
+const WORK_SHIFT_TIME_CONFIG = {
+  MORNING: { start: "08:00", end: "13:30", defaultStart: "08:00", defaultEnd: "13:30" },
+  AFTERNOON: { start: "14:00", end: "20:00", defaultStart: "14:00", defaultEnd: "20:00" },
+  OTHER: { start: "08:00", end: "20:00", defaultStart: "08:00", defaultEnd: "20:00" },
+};
+
+function timeToMinutes(time) {
+  const [hours, minutes] = String(time || "").split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes) {
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minutes = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function buildTimeOptions(start, end, step = 30) {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+
+  if (startMinutes === null || endMinutes === null || startMinutes > endMinutes) return [];
+
+  const options = [];
+  for (let current = startMinutes; current <= endMinutes; current += step) {
+    options.push(minutesToTime(current));
+  }
+
+  return options;
+}
+
+function getShiftTimeConfig(workShift) {
+  return WORK_SHIFT_TIME_CONFIG[workShift] || WORK_SHIFT_TIME_CONFIG.OTHER;
+}
+
+function getShiftTimeOptions(workShift) {
+  const config = getShiftTimeConfig(workShift);
+  return buildTimeOptions(config.start, config.end);
+}
+
+function isTimeAllowedForShift(workShift, time) {
+  return getShiftTimeOptions(workShift).includes(time);
+}
+
+function normalizeScheduleTimes(workShift, startTime, endTime) {
+  const config = getShiftTimeConfig(workShift);
+  const options = getShiftTimeOptions(workShift);
+  const startOptions = options.slice(0, -1);
+  const start = startOptions.includes(startTime) ? startTime : config.defaultStart;
+  const endOptions = options.filter((time) => timeToMinutes(time) > timeToMinutes(start));
+  const end = endOptions.includes(endTime) ? endTime : config.defaultEnd;
+
+  return {
+    shiftStartTime: start,
+    shiftEndTime: endOptions.includes(end) ? end : endOptions[0] || "",
+  };
+}
 
 function getRoleOptions(users) {
   const roleIdByName = new Map(users.map((user) => [user.roleName, user.roleId]));
@@ -56,8 +132,10 @@ function getRoleOptions(users) {
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
   const [activeForm, setActiveForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
+  const [scheduleUser, setScheduleUser] = useState(null);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -79,6 +157,11 @@ export default function UsersPage() {
         user.roleName,
         ROLE_NAMES[user.roleName],
         user.status,
+        user.workShift,
+        getWorkShiftLabel(user.workShift),
+        user.shiftStartTime,
+        user.shiftEndTime,
+        user.shiftNote,
       ];
 
       return searchableValues.some((value) => String(value || "").toLocaleLowerCase("es").includes(normalizedSearch));
@@ -88,7 +171,13 @@ export default function UsersPage() {
   const usersPagination = usePagination(filteredUsers, {
     resetKey: `${normalizedSearch}|${users.length}`,
   });
+  const hasUserFilters = Boolean(normalizedSearch);
   const isEditing = Boolean(editingUserId);
+  const shiftTimeOptions = getShiftTimeOptions(scheduleForm.workShift);
+  const shiftStartOptions = shiftTimeOptions.slice(0, -1);
+  const shiftEndOptions = shiftTimeOptions.filter(
+    (time) => timeToMinutes(time) > timeToMinutes(scheduleForm.shiftStartTime),
+  );
 
   const loadUsers = async () => {
     const data = await getUsersRequest();
@@ -103,6 +192,7 @@ export default function UsersPage() {
   const openCreateForm = () => {
     setForm(emptyForm);
     setEditingUserId(null);
+    setScheduleUser(null);
     setActiveForm(true);
     setError("");
     setMessage("");
@@ -120,7 +210,23 @@ export default function UsersPage() {
       status: user.status || "ACTIVE",
     });
     setEditingUserId(user.id);
+    setScheduleUser(null);
     setActiveForm(true);
+    setError("");
+    setMessage("");
+  };
+
+  const openScheduleForm = (user) => {
+    const workShift = user.workShift || "MORNING";
+    const scheduleTimes = normalizeScheduleTimes(workShift, user.shiftStartTime || "", user.shiftEndTime || "");
+
+    setScheduleUser(user);
+    setScheduleForm({
+      workShift,
+      ...scheduleTimes,
+      shiftNote: user.shiftNote || "",
+    });
+    setActiveForm(false);
     setError("");
     setMessage("");
   };
@@ -130,6 +236,12 @@ export default function UsersPage() {
     setForm(emptyForm);
     setEditingUserId(null);
     setActiveForm(false);
+  };
+
+  const closeScheduleForm = () => {
+    if (submitting) return;
+    setScheduleUser(null);
+    setScheduleForm(emptyScheduleForm);
   };
 
   const handleSubmit = async (event) => {
@@ -175,6 +287,69 @@ export default function UsersPage() {
     }
   };
 
+  const handleScheduleShiftChange = (workShift) => {
+    setScheduleForm((current) => ({
+      ...current,
+      workShift,
+      ...normalizeScheduleTimes(workShift, "", ""),
+    }));
+  };
+
+  const handleScheduleStartTimeChange = (shiftStartTime) => {
+    setScheduleForm((current) => {
+      const nextEndOptions = getShiftTimeOptions(current.workShift).filter(
+        (time) => timeToMinutes(time) > timeToMinutes(shiftStartTime),
+      );
+      const shiftEndTime = nextEndOptions.includes(current.shiftEndTime)
+        ? current.shiftEndTime
+        : nextEndOptions[0] || "";
+
+      return {
+        ...current,
+        shiftStartTime,
+        shiftEndTime,
+      };
+    });
+  };
+
+  const handleScheduleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (!scheduleUser) return;
+
+    if (
+      !isTimeAllowedForShift(scheduleForm.workShift, scheduleForm.shiftStartTime) ||
+      !isTimeAllowedForShift(scheduleForm.workShift, scheduleForm.shiftEndTime)
+    ) {
+      setError("Selecciona horas validas para el turno elegido");
+      return;
+    }
+
+    if (scheduleForm.shiftStartTime >= scheduleForm.shiftEndTime) {
+      setError("La hora de inicio debe ser menor a la hora de termino");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await updateCashierScheduleRequest(scheduleUser.id, {
+        workShift: scheduleForm.workShift,
+        shiftStartTime: scheduleForm.shiftStartTime,
+        shiftEndTime: scheduleForm.shiftEndTime,
+        shiftNote: scheduleForm.shiftNote.trim() || null,
+      });
+      setMessage("Horario de cajero actualizado exitosamente");
+      closeScheduleForm();
+      await loadUsers();
+    } catch (err) {
+      setError(getApiError(err, "No se pudo actualizar el horario del cajero"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <section className={pageClass}>
       <div className={pageHeaderClass}>
@@ -182,13 +357,9 @@ export default function UsersPage() {
           <h1>Usuarios</h1>
           <p>Creación y edición de usuarios internos del sistema.</p>
         </div>
-        <button type="button" onClick={openCreateForm}>
-          <UserPlus size={18} />
-          Nuevo usuario
-        </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:items-stretch">
+      <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
         <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
           <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
           <input
@@ -199,13 +370,14 @@ export default function UsersPage() {
             aria-label="Buscar usuarios"
           />
         </label>
-        <span className="text-xs font-semibold text-slate-500">
-          {filteredUsers.length} de {users.length} usuarios
-        </span>
+        <button type="button" onClick={openCreateForm}>
+          <UserPlus size={18} />
+          Nuevo usuario
+        </button>
       </div>
 
       {message && <div className={alertClasses.success}>{message}</div>}
-      {error && !activeForm && <div className={alertClasses.error}>{error}</div>}
+      {error && !activeForm && !scheduleUser && <div className={alertClasses.error}>{error}</div>}
 
       <AppModal
         open={activeForm}
@@ -290,11 +462,79 @@ export default function UsersPage() {
         </form>
       </AppModal>
 
+      <AppModal
+        open={Boolean(scheduleUser)}
+        title={scheduleUser ? `Horario de ${scheduleUser.names} ${scheduleUser.surnames}` : "Horario de cajero"}
+        description="Esta configuración aplica solo a usuarios con rol Cajero."
+        onClose={closeScheduleForm}
+      >
+        <form className="grid gap-3.75" onSubmit={handleScheduleSubmit}>
+          {error && <div className={alertClasses.error}>{error}</div>}
+          <label>
+            Turno
+            <select
+              value={scheduleForm.workShift}
+              onChange={(event) => handleScheduleShiftChange(event.target.value)}
+              required
+            >
+              {WORK_SHIFT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+            <label>
+              Hora de inicio
+              <select
+                value={scheduleForm.shiftStartTime}
+                onChange={(event) => handleScheduleStartTimeChange(event.target.value)}
+                required
+              >
+                {shiftStartOptions.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Hora de término
+              <select
+                value={scheduleForm.shiftEndTime}
+                onChange={(event) => setScheduleForm((current) => ({ ...current, shiftEndTime: event.target.value }))}
+                required
+              >
+                {shiftEndOptions.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label>
+            Observación
+            <textarea
+              className="min-h-24 resize-y px-4 py-3 leading-[1.45] outline-none focus:border-rust-500 focus:ring-2 focus:ring-rust-100"
+              rows="3"
+              value={scheduleForm.shiftNote}
+              onChange={(event) => setScheduleForm((current) => ({ ...current, shiftNote: event.target.value }))}
+              placeholder="Ej: reemplazo, media jornada, horario especial"
+            />
+          </label>
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeScheduleForm} disabled={submitting}>Cancelar</button>
+            <button type="submit" disabled={submitting}>Guardar horario</button>
+          </div>
+        </form>
+      </AppModal>
+
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
             <h2>Usuarios registrados</h2>
-            <p>No se muestran contraseñas ni hashes.</p>
+            <p>{formatTableRecordCount({
+              visibleCount: usersPagination.paginatedItems.length,
+              totalCount: users.length,
+              filteredCount: filteredUsers.length,
+              hasFilters: hasUserFilters,
+            })}</p>
           </div>
         </div>
         <table>
@@ -306,6 +546,7 @@ export default function UsersPage() {
               <th>Correo</th>
               <th>Teléfono</th>
               <th>Rol</th>
+              <th>Horario</th>
               <th>Estado</th>
               <th>Creado</th>
               <th>Acciones</th>
@@ -320,6 +561,7 @@ export default function UsersPage() {
                 <td>{user.correo}</td>
                 <td>{user.phone || "-"}</td>
                 <td>{ROLE_NAMES[user.roleName] || user.roleName}</td>
+                <td>{user.roleName === "CASHIER" ? formatWorkSchedule(user) : "-"}</td>
                 <td>
                   <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
                     {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
@@ -327,16 +569,24 @@ export default function UsersPage() {
                 </td>
                 <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
                 <td>
-                  <button className={secondaryButtonClass} type="button" onClick={() => startEditing(user)}>
-                    <Pencil size={17} />
-                    Editar
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => startEditing(user)}>
+                      <Pencil size={17} />
+                      Editar
+                    </button>
+                    {user.roleName === "CASHIER" && (
+                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => openScheduleForm(user)}>
+                        <Clock3 size={16} />
+                        {user.workShift ? "Modificar horario" : "Configurar horario"}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
             {filteredUsers.length === 0 && (
               <tr>
-                <td className={emptyTableCellClass} colSpan="9">
+                <td className={emptyTableCellClass} colSpan="10">
                   {users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con la búsqueda ingresada."}
                 </td>
               </tr>

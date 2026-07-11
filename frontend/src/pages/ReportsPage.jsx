@@ -1,13 +1,12 @@
-import { BarChart3, DollarSign, FileSpreadsheet, Filter, RotateCcw, ShoppingCart, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, DollarSign, FileSpreadsheet, Filter, RotateCcw, Search, ShoppingCart, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio } from "../helpers/formatters.js";
-import { getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
-import { PAYMENT_METHODS } from "../helpers/options.js";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
+import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
-import { getSalesByCashierReportRequest, getSalesReportRequest } from "../services/reports.service.js";
+import { getSalesReportRequest } from "../services/reports.service.js";
 import {
   alertClasses,
   badgeClass,
@@ -64,21 +63,18 @@ export default function ReportsPage() {
   const [filters, setFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
-  const [cashiers, setCashiers] = useState([]);
+  const [cashierSummarySearch, setCashierSummarySearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const today = dateInputValue(new Date());
 
   const loadReport = async (nextFilters) => {
     setLoading(true);
     setError("");
 
     try {
-      const [reportData, cashierData] = await Promise.all([
-        getSalesReportRequest(nextFilters),
-        getSalesByCashierReportRequest({ from: nextFilters.from, to: nextFilters.to }),
-      ]);
+      const reportData = await getSalesReportRequest(nextFilters);
       setReport(reportData);
-      setCashiers(cashierData.cashiers || []);
       setAppliedFilters(nextFilters);
     } catch (requestError) {
       setError(getApiError(requestError, "No se pudo cargar el reporte de ventas"));
@@ -94,12 +90,29 @@ export default function ReportsPage() {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+
+    if (name === "from" || name === "to") {
+      const safeValue = value > today ? today : value;
+      setFilters((current) => {
+        if (name === "from" && safeValue > current.to) {
+          return { ...current, from: safeValue, to: safeValue };
+        }
+
+        if (name === "to" && current.from > safeValue) {
+          return { ...current, from: safeValue, to: safeValue };
+        }
+
+        return { ...current, [name]: safeValue };
+      });
+      return;
+    }
+
     setFilters((current) => ({ ...current, [name]: value }));
   };
 
   const handleSingleDateChange = (event) => {
-    const { value } = event.target;
-    setFilters((current) => ({ ...current, from: value, to: value }));
+    const safeValue = event.target.value > today ? today : event.target.value;
+    setFilters((current) => ({ ...current, from: safeValue, to: safeValue }));
   };
 
   const handleDateModeChange = (mode) => {
@@ -119,11 +132,11 @@ export default function ReportsPage() {
     const nextFilters = initialFilters();
     setDateMode("single");
     setFilters(nextFilters);
+    setCashierSummarySearch("");
     loadReport(nextFilters);
   };
 
   const topCashier = report?.byCashier?.find((cashier) => cashier.salesCount > 0);
-  const today = dateInputValue(new Date());
   const reportSales = useMemo(
     () => [...(report?.sales || [])].sort(compareByNewest),
     [report],
@@ -135,6 +148,31 @@ export default function ReportsPage() {
     appliedFilters.from === today &&
     appliedFilters.to === today;
   const showingSingleDayReport = appliedFilters.from === appliedFilters.to;
+  const reportPeriodMessage = showingTodayReport
+    ? "Mostrando reportes de ventas de hoy"
+    : showingSingleDayReport
+      ? `Mostrando ventas del día ${appliedFilters.from}`
+      : `Mostrando ventas desde ${appliedFilters.from} hasta ${appliedFilters.to}`;
+  const normalizedCashierSummarySearch = cashierSummarySearch.trim().toLocaleLowerCase("es");
+  const displayedCashierSummary = useMemo(
+    () => (report?.byCashier || []).filter((cashier) => {
+      if (!normalizedCashierSummarySearch) return true;
+
+      const searchableValues = [
+        cashier.cashierName,
+        cashier.cashierEmail,
+        cashier.cashierId,
+        cashier.workShift,
+        cashier.shiftStartTime,
+        cashier.shiftEndTime,
+      ];
+
+      return searchableValues.some((value) =>
+        String(value || "").toLocaleLowerCase("es").includes(normalizedCashierSummarySearch),
+      );
+    }),
+    [normalizedCashierSummarySearch, report],
+  );
   const exportFilenameDate =
     appliedFilters.from === appliedFilters.to
       ? appliedFilters.from
@@ -178,19 +216,19 @@ export default function ReportsPage() {
             <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
             <div>
               <h2 className="m-0 text-base font-bold text-ink-950">Filtros</h2>
-              <p className="mt-1 mb-0 text-xs text-slate-500">Las ventas canceladas se muestran en el historial, pero no se suman.</p>
+              <p className="mt-1 mb-0 text-xs text-slate-500">Selecciona fecha o rango. No se permiten fechas futuras.</p>
             </div>
           </div>
-          <div className="flex w-fit max-w-full shrink-0 rounded-[5px] border border-slate-200 bg-slate-50 p-1 max-[720px]:w-full">
+          <div className="flex w-fit max-w-full shrink-0 gap-2 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
-              className={`min-h-8 flex-1 px-3 py-1.5 text-xs ${dateMode === "single" ? "bg-rust-500 text-white hover:bg-rust-600" : "bg-transparent text-ink-700 hover:bg-slate-100"}`}
+              className={`min-h-11 rounded-[4px] border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "single" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => handleDateModeChange("single")}
             >
               Un día
             </button>
             <button
-              className={`min-h-8 flex-1 px-3 py-1.5 text-xs ${dateMode === "range" ? "bg-rust-500 text-white hover:bg-rust-600" : "bg-transparent text-ink-700 hover:bg-slate-100"}`}
+              className={`min-h-11 rounded-[4px] border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "range" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => handleDateModeChange("range")}
             >
@@ -198,43 +236,40 @@ export default function ReportsPage() {
             </button>
           </div>
         </div>
-        <div className={`${dateMode === "single" ? "grid-cols-[repeat(3,minmax(150px,1fr))_auto]" : "grid-cols-[repeat(4,minmax(150px,1fr))_auto]"} grid items-end gap-3 max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`}>
-          {dateMode === "single" ? (
-            <label>
-              Fecha
-              <input type="date" value={filters.from} onChange={handleSingleDateChange} required />
-            </label>
-          ) : (
-            <>
+        <div className="grid grid-cols-[minmax(220px,1fr)_auto] items-end gap-4 max-[1120px]:grid-cols-1">
+
+          <div className={`${dateMode === "single" ? "grid-cols-[minmax(180px,260px)]" : "grid-cols-[repeat(2,minmax(160px,220px))]"} grid min-w-0 items-end gap-3 max-[720px]:grid-cols-1`}>
+            {dateMode === "single" ? (
               <label>
-                Desde
-                <input type="date" name="from" value={filters.from} max={filters.to} onChange={handleChange} required />
+                Fecha
+                <input type="date" value={filters.from} max={today} onChange={handleSingleDateChange} required />
               </label>
-              <label>
-                Hasta
-                <input type="date" name="to" value={filters.to} min={filters.from} onChange={handleChange} required />
-              </label>
-            </>
-          )}
-          <label>
-            Cajero
-            <select name="cashierId" value={filters.cashierId} onChange={handleChange}>
-              <option value="">Todos los cajeros</option>
-              {cashiers.map((cashier) => (
-                <option key={cashier.cashierId} value={cashier.cashierId}>{cashier.cashierName}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Método de pago
-            <select name="paymentMethod" value={filters.paymentMethod} onChange={handleChange}>
-              <option value="">Todos los métodos</option>
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method.value} value={method.value}>{method.label}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-center gap-2 max-[980px]:col-span-full max-[720px]:col-auto max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+            ) : (
+              <>
+                <label>
+                  Desde
+                  <input
+                    type="date"
+                    name="from"
+                    value={filters.from}
+                    max={filters.to && filters.to < today ? filters.to : today}
+                    onChange={handleChange}
+                    required
+                  />
+                </label>
+                <label>
+                  Hasta
+                  <input type="date" name="to" value={filters.to} min={filters.from} max={today} onChange={handleChange} required />
+                </label>
+              </>
+            )}
+          </div>
+
+          <div className="flex min-w-0 items-center justify-end gap-2 max-[1120px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch">
+            <div className="flex w-fit max-w-full items-center gap-2 rounded-[5px] border border-rust-500 bg-rust-50 px-3.5 py-2.5 text-[13px] font-semibold text-[#92400e] max-[720px]:w-full">
+              <CalendarDays className="shrink-0" size={17} />
+              <span>{reportPeriodMessage}</span>
+            </div>
             <button type="submit" disabled={loading}>
               <BarChart3 size={18} />
               Consultar
@@ -246,14 +281,6 @@ export default function ReportsPage() {
           </div>
         </div>
       </form>
-
-      <div className="w-fit max-w-full rounded-[5px] border border-rust-500 bg-rust-50 px-3.5 py-2.5 text-[13px] font-semibold text-[#92400e]">
-        {showingTodayReport
-          ? "Mostrando reportes de ventas de hoy"
-          : showingSingleDayReport
-            ? `Mostrando ventas del día ${appliedFilters.from}`
-            : `Mostrando ventas desde ${appliedFilters.from} hasta ${appliedFilters.to}`}
-      </div>
 
       {error && <div className={alertClasses.error}>{error}</div>}
 
@@ -291,21 +318,41 @@ export default function ReportsPage() {
               <h2>Resumen por cajero</h2>
               <p>Ventas activas y total recaudado</p>
             </div>
-            <span className={panelCountClass}>{report?.byCashier?.length || 0}</span>
+            <span className={panelCountClass}>{displayedCashierSummary.length}</span>
           </div>
+          {(report?.byCashier?.length || 0) > 0 && (
+            <label className="relative mx-[18px] mt-3 block">
+              <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={16} />
+              <input
+                className="min-h-9 pl-9.5 text-xs"
+                value={cashierSummarySearch}
+                onChange={(event) => setCashierSummarySearch(event.target.value)}
+                placeholder="Buscar cajero"
+                aria-label="Buscar cajero en resumen"
+              />
+            </label>
+          )}
           <div className="grid">
-            {report?.byCashier?.length ? report.byCashier.map((cashier) => (
+            {displayedCashierSummary.length ? displayedCashierSummary.map((cashier) => (
               <div className={dashboardListRowClass} key={cashier.cashierId}>
                 <div>
-                  <strong>{cashier.cashierName}</strong>
-                  <span>{cashier.salesCount} {cashier.salesCount === 1 ? "venta activa" : "ventas activas"}</span>
+                  <strong>{cashier.cashierName || "Cajero sin nombre"}</strong>
+                  <span>{cashier.cashierEmail || "Correo no registrado"}</span>
+                  <span>{formatWorkSchedule(cashier)}</span>
                 </div>
                 <div className={listRowEndClass}>
                   <strong>{formatClp(cashier.total)}</strong>
-                  <span>#{cashier.cashierId}</span>
+                  <span>{cashier.salesCount} {cashier.salesCount === 1 ? "venta activa" : "ventas activas"}</span>
+                  <span>ID #{cashier.cashierId}</span>
                 </div>
               </div>
-            )) : <p className={emptyStateClass}>No hay ventas para resumir.</p>}
+            )) : (
+              <p className={emptyStateClass}>
+                {(report?.byCashier?.length || 0) > 0
+                  ? "No hay cajeros que coincidan con la búsqueda."
+                  : "No hay ventas para resumir."}
+              </p>
+            )}
           </div>
         </article>
 
@@ -337,7 +384,12 @@ export default function ReportsPage() {
         <div className={tableHeadingClass}>
           <div>
             <h2>Ventas del período</h2>
-            <p>Historial activo y cancelado según los filtros seleccionados</p>
+            <p>{formatTableRecordCount({
+              visibleCount: salesPagination.paginatedItems.length,
+              totalCount: reportSales.length,
+              filteredCount: reportSales.length,
+              hasFilters: true,
+            })}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {loading && <span className={badgeClass("neutral")}>Cargando</span>}

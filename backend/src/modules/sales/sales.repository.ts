@@ -84,6 +84,20 @@ export async function findSaleForCancellation(tx: DbTransaction, id: number) {
   return sale ?? null;
 }
 
+export async function findSaleForStatusChange(tx: DbTransaction, id: number) {
+  const [sale] = await tx
+    .select({
+      id: salesTable.id,
+      status: salesTable.status,
+    })
+    .from(salesTable)
+    .where(eq(salesTable.id, id))
+    .limit(1)
+    .for("update");
+
+  return sale ?? null;
+}
+
 export async function findSaleDetailsForCancellation(tx: DbTransaction, saleId: number) {
   return tx
     .select({
@@ -102,6 +116,19 @@ export async function markSaleAsCancelled(tx: DbTransaction, id: number) {
       updatedAt: new Date(),
     })
     .where(and(eq(salesTable.id, id), eq(salesTable.status, "ACTIVE")))
+    .returning({ id: salesTable.id });
+
+  return sale ?? null;
+}
+
+export async function markSaleAsActive(tx: DbTransaction, id: number) {
+  const [sale] = await tx
+    .update(salesTable)
+    .set({
+      status: "ACTIVE",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(salesTable.id, id), eq(salesTable.status, "CANCELLED")))
     .returning({ id: salesTable.id });
 
   return sale ?? null;

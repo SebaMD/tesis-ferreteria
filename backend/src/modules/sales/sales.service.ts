@@ -1,5 +1,5 @@
 import { db } from "../../db/index.js";
-import { applyInventoryMovement } from "../inventory/inventory.service.js";
+import { applyInventoryMovement, InventoryMovementError } from "../inventory/inventory.service.js";
 import { findProductsForSale } from "../products/products.repository.js";
 import {
   createSale,
@@ -7,7 +7,9 @@ import {
   findSaleById,
   findSaleDetailsForCancellation,
   findSaleForCancellation,
+  findSaleForStatusChange,
   findSales,
+  markSaleAsActive,
   markSaleAsCancelled,
 } from "./sales.repository.js";
 import type { SaleBody } from "./sales.validation.js";
@@ -24,6 +26,10 @@ export class SaleError extends Error {
     super(message);
     this.name = "SaleError";
   }
+}
+
+function formatSaleFolio(id: number) {
+  return `V-${String(id).padStart(6, "0")}`;
 }
 
 export async function getSalesService() {
@@ -134,6 +140,55 @@ export async function cancelSaleService(id: number, userId: number) {
 
     if (!cancelledSale) {
       throw new SaleError("No se pudo cancelar la venta", 409);
+    }
+  });
+
+  return findSaleById(id);
+}
+
+export async function undoCancelSaleService(id: number, userId: number) {
+  await db.transaction(async (tx) => {
+    const sale = await findSaleForStatusChange(tx, id);
+
+    if (!sale) {
+      throw new SaleError("Venta no encontrada", 404);
+    }
+
+    if (sale.status !== "CANCELLED") {
+      throw new SaleError("Solo se puede deshacer la cancelación de una venta cancelada", 409);
+    }
+
+    const details = await findSaleDetailsForCancellation(tx, id);
+
+    if (details.length === 0) {
+      throw new SaleError("La venta no tiene detalles para descontar stock", 409);
+    }
+
+    for (const detail of details) {
+      try {
+        await applyInventoryMovement(tx, {
+          productId: detail.productId,
+          userId,
+          movementType: "EXIT",
+          quantity: detail.quantity,
+          reason: `Deshacer cancelación de venta ${formatSaleFolio(id)}`,
+        });
+      } catch (error) {
+        if (error instanceof InventoryMovementError && error.message === "Stock insuficiente para realizar el movimiento") {
+          throw new SaleError(
+            "No se puede deshacer la cancelación porque no existe stock suficiente para restaurar la venta.",
+            409,
+          );
+        }
+
+        throw error;
+      }
+    }
+
+    const activeSale = await markSaleAsActive(tx, id);
+
+    if (!activeSale) {
+      throw new SaleError("No se pudo deshacer la cancelación de la venta", 409);
     }
   });
 

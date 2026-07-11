@@ -8,6 +8,7 @@ import {
   getSaleByIdService,
   getSalesService,
   SaleError,
+  undoCancelSaleService,
 } from "./sales.service.js";
 import { validateCreateSaleBody } from "./sales.validation.js";
 
@@ -76,5 +77,22 @@ export async function cancelSaleController(req: AuthenticatedRequest, res: Respo
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "Error al cancelar venta", msg(error));
+  }
+}
+
+export async function undoCancelSaleController(req: AuthenticatedRequest, res: Response) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
+    const id = parseId(req.params.id);
+    if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
+
+    const sale = await undoCancelSaleService(id, req.user.id);
+    return handleSuccess(res, 200, "Cancelación deshecha exitosamente", sale);
+  } catch (error) {
+    if (error instanceof SaleError || error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al deshacer cancelación de venta", msg(error));
   }
 }

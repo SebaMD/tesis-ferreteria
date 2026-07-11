@@ -14,3 +14,8 @@ export async function cancelSaleRequest(id) {
   const response = await api.delete(`/sales/${id}`);
   return response.data.data;
 }
+
+export async function undoCancelSaleRequest(id) {
+  const response = await api.patch(`/sales/${id}/undo-cancel`);
+  return response.data.data;
+}

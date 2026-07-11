@@ -1,9 +1,10 @@
 import { LockKeyhole, Mail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
+import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
 import useAuth from "../hooks/useAuth.js";
 import { alertClasses } from "../helpers/uiClasses.js";
 
@@ -12,13 +13,25 @@ export default function LoginPage() {
   const { isAuthenticated, login } = useAuth();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
+  const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (sessionNotice) clearSessionNotice();
+  }, [sessionNotice]);
+
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+  const clearExpiredSessionMessage = () => {
+    if (!sessionNotice) return;
+    setSessionNotice("");
+    clearSessionNotice();
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    clearExpiredSessionMessage();
     setError("");
     setLoading(true);
 
@@ -40,7 +53,7 @@ export default function LoginPage() {
           <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
         </div>
         <div className="relative z-1 w-full max-w-120 -translate-y-20 place-self-center py-8 text-left max-[980px]:-translate-y-12">
-          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Control de inventario y ventas, con reportes.</h1>
+          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Control de inventario y ventas, con reportes</h1>
           <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Gestión interna de productos, stock y ventas presenciales para la ferretería.</p>
         </div>
         <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · USO INTERNO</span>
@@ -66,6 +79,7 @@ export default function LoginPage() {
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta institucional para continuar.</p>
           </div>
 
+          {sessionNotice && <div className={alertClasses.warning}>{sessionNotice}</div>}
           {error && <div className={alertClasses.error}>{error}</div>}
 
           <label>
@@ -76,7 +90,10 @@ export default function LoginPage() {
                 className="pl-9.75"
                 type="email"
                 value={correo}
-                onChange={(event) => setCorreo(event.target.value)}
+                onChange={(event) => {
+                  clearExpiredSessionMessage();
+                  setCorreo(event.target.value);
+                }}
                 placeholder="correo@ejemplo.cl"
                 autoComplete="username"
                 required
@@ -92,7 +109,10 @@ export default function LoginPage() {
                 className="pl-9.75"
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  clearExpiredSessionMessage();
+                  setPassword(event.target.value);
+                }}
                 placeholder="Ingresa tu contraseña"
                 autoComplete="current-password"
                 required

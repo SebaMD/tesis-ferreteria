@@ -14,3 +14,8 @@ export async function updateUserRequest(id, data) {
   const response = await api.patch(`/users/${id}`, data);
   return response.data.data;
 }
+
+export async function updateCashierScheduleRequest(id, data) {
+  const response = await api.patch(`/users/${id}/work-schedule`, data);
+  return response.data.data;
+}

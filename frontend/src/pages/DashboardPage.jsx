@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeftRight, PackageCheck, ShoppingCart } from "lucid
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
+import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
 import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
 import { getInventoryMovementsRequest } from "../services/inventory.service.js";
@@ -84,7 +85,7 @@ export default function DashboardPage() {
     [products],
   );
   const lowStockProducts = useMemo(
-    () => activeProducts.filter((product) => product.currentStock <= product.minimumStock),
+    () => activeProducts.filter(isLowStockProduct),
     [activeProducts],
   );
   const activeSales = useMemo(
@@ -245,7 +246,7 @@ export default function DashboardPage() {
                         </div>
                         <div className={listRowEndClass}>
                           <strong>{movement.quantity} unidades</strong>
-                          <span className={badgeClass(movement.movementType === "EXIT" ? "critical" : movement.movementType === "ADJUSTMENT" ? "neutral" : "success")}>
+                          <span className={badgeClass(getMovementTone(movement))}>
                             {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
                           </span>
                         </div>

@@ -19,6 +19,17 @@ export function formatSaleFolio(id) {
   return `V-${String(id).padStart(6, "0")}`;
 }
 
+export function formatTableRecordCount({
+  visibleCount,
+  totalCount,
+  filteredCount = totalCount,
+  hasFilters = false,
+}) {
+  return hasFilters
+    ? `Mostrando ${visibleCount} de ${filteredCount} resultados filtrados`
+    : `Mostrando ${visibleCount} de ${totalCount} registros`;
+}
+
 export function compareByNewest(left, right) {
   const parsedLeftTime = new Date(left.date || left.createdAt || 0).getTime();
   const parsedRightTime = new Date(right.date || right.createdAt || 0).getTime();

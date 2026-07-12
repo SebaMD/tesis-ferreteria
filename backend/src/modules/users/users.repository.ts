@@ -12,6 +12,10 @@ const publicUserColumns = {
     correo: usersTable.correo,
     phone: usersTable.phone,
     status: usersTable.status,
+    workShift: usersTable.workShift,
+    shiftStartTime: usersTable.shiftStartTime,
+    shiftEndTime: usersTable.shiftEndTime,
+    shiftNote: usersTable.shiftNote,
     createdAt: usersTable.createdAt,
     updatedAt: usersTable.updatedAt,
 };
@@ -60,6 +64,13 @@ export async function updateUserById(id: number, data: Partial<NewUser>) {
     if (!updatedUser) return null;
 
     return findUserById(updatedUser.id);
+}
+
+export async function updateUserWorkScheduleById(
+    id: number,
+    data: Pick<NewUser, "workShift" | "shiftStartTime" | "shiftEndTime" | "shiftNote">,
+) {
+    return updateUserById(id, data);
 }
 
 export async function deleteUserById(id: number) {

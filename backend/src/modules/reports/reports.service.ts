@@ -11,6 +11,11 @@ type CashierSummary = {
   cashierId: number;
   cashierNames: string;
   cashierSurnames: string;
+  cashierEmail: string;
+  workShift: string | null;
+  shiftStartTime: string | null;
+  shiftEndTime: string | null;
+  shiftNote: string | null;
   cashierName: string;
   salesCount: number;
   total: number;
@@ -50,6 +55,11 @@ function aggregateSales(sales: ReportSale[]) {
     {
       cashierNames: string;
       cashierSurnames: string;
+      cashierEmail: string;
+      workShift: string | null;
+      shiftStartTime: string | null;
+      shiftEndTime: string | null;
+      shiftNote: string | null;
       salesCount: number;
       totalCents: number;
       payments: Map<string, { salesCount: number; totalCents: number }>;
@@ -63,6 +73,11 @@ function aggregateSales(sales: ReportSale[]) {
       cashierTotals.set(sale.cashierId, {
         cashierNames: sale.cashierNames,
         cashierSurnames: sale.cashierSurnames,
+        cashierEmail: sale.cashierEmail,
+        workShift: sale.cashierWorkShift,
+        shiftStartTime: sale.cashierShiftStartTime,
+        shiftEndTime: sale.cashierShiftEndTime,
+        shiftNote: sale.cashierShiftNote,
         salesCount: 0,
         totalCents: 0,
         payments: new Map<string, { salesCount: number; totalCents: number }>(),
@@ -78,6 +93,11 @@ function aggregateSales(sales: ReportSale[]) {
     const cashier = cashierTotals.get(sale.cashierId) ?? {
       cashierNames: sale.cashierNames,
       cashierSurnames: sale.cashierSurnames,
+      cashierEmail: sale.cashierEmail,
+      workShift: sale.cashierWorkShift,
+      shiftStartTime: sale.cashierShiftStartTime,
+      shiftEndTime: sale.cashierShiftEndTime,
+      shiftNote: sale.cashierShiftNote,
       salesCount: 0,
       totalCents: 0,
       payments: new Map<string, { salesCount: number; totalCents: number }>(),
@@ -94,6 +114,11 @@ function aggregateSales(sales: ReportSale[]) {
       cashierId,
       cashierNames: values.cashierNames,
       cashierSurnames: values.cashierSurnames,
+      cashierEmail: values.cashierEmail,
+      workShift: values.workShift,
+      shiftStartTime: values.shiftStartTime,
+      shiftEndTime: values.shiftEndTime,
+      shiftNote: values.shiftNote,
       cashierName: `${values.cashierNames} ${values.cashierSurnames}`.trim(),
       salesCount: values.salesCount,
       total: fromCents(values.totalCents),

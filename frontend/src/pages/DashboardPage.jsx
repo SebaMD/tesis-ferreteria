@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, PackageCheck, ShoppingCart } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, DollarSign, PackageCheck, ShoppingCart } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "../api/httpClient.js";
 import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
@@ -38,6 +38,18 @@ function isRecent(value, days = 7) {
   return date >= new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
+function isToday(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const today = new Date();
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
@@ -47,7 +59,8 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
 
   const canViewSales = ROUTE_PERMISSIONS.sales.includes(user?.role);
-  const canViewInventory = ROUTE_PERMISSIONS.inventory.includes(user?.role);
+  const canViewInventoryHistory = ["ADMIN", "MANAGER"].includes(user?.role);
+  const canViewStockReplenishment = user?.role !== "CASHIER";
 
   useEffect(() => {
     let active = true;
@@ -60,7 +73,7 @@ export default function DashboardPage() {
         const [productData, saleData, movementData] = await Promise.all([
           getProductsRequest(),
           canViewSales ? getSalesRequest() : Promise.resolve([]),
-          canViewInventory ? getInventoryMovementsRequest() : Promise.resolve([]),
+          canViewInventoryHistory ? getInventoryMovementsRequest() : Promise.resolve([]),
         ]);
 
         if (!active) return;
@@ -78,7 +91,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [canViewInventory, canViewSales]);
+  }, [canViewInventoryHistory, canViewSales]);
 
   const activeProducts = useMemo(
     () => products.filter((product) => product.status !== false),
@@ -91,6 +104,13 @@ export default function DashboardPage() {
   const activeSales = useMemo(
     () => sales.filter((sale) => sale.status === "ACTIVE"),
     [sales],
+  );
+  const cashierTodaySalesTotal = useMemo(
+    () =>
+      activeSales
+        .filter((sale) => String(sale.userId) === String(user?.id) && isToday(sale.date || sale.createdAt))
+        .reduce((total, sale) => total + Number(sale.total || 0), 0),
+    [activeSales, user?.id],
   );
   const recentMovements = useMemo(
     () => movements.filter((movement) => isRecent(movement.date || movement.createdAt)),
@@ -118,20 +138,30 @@ export default function DashboardPage() {
       icon: PackageCheck,
       tone: "neutral",
     },
-    {
-      label: "Bajo stock mínimo",
-      value: lowStockProducts.length,
-      icon: AlertTriangle,
-      tone: "warning",
-    },
+    ...(canViewStockReplenishment
+      ? [{
+        label: "Bajo stock mínimo",
+        value: lowStockProducts.length,
+        icon: AlertTriangle,
+        tone: "warning",
+      }]
+      : []),
     ...(canViewSales
       ? [{ label: "Ventas activas", value: activeSales.length, icon: ShoppingCart, tone: "positive" }]
       : []),
-    ...(canViewInventory
+    ...(user?.role === "CASHIER"
+      ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive" }]
+      : []),
+    ...(canViewInventoryHistory
       ? [{ label: "Movimientos recientes", value: recentMovements.length, icon: ArrowLeftRight, tone: "neutral" }]
       : []),
   ];
-  const metricsGridClass = `grid gap-3.5 ${metrics.length >= 4 ? "grid-cols-4" : "grid-cols-3"} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
+  const metricsGridColumnsClass = user?.role === "WAREHOUSE"
+    ? "grid-cols-2"
+    : metrics.length >= 4
+      ? "grid-cols-4"
+      : "grid-cols-3";
+  const metricsGridClass = `grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
 
   return (
     <section className={`${pageClass} gap-4.5`}>
@@ -162,34 +192,36 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
-            <section className={dashboardPanelClass}>
-              <div className={dashboardPanelHeadingClass}>
-                <div>
-                  <h2>Productos a reponer</h2>
-                  <p>Stock igual o inferior al mínimo definido</p>
+            {canViewStockReplenishment && (
+              <section className={dashboardPanelClass}>
+                <div className={dashboardPanelHeadingClass}>
+                  <div>
+                    <h2>Productos a reponer</h2>
+                    <p>Stock igual o inferior al mínimo definido</p>
+                  </div>
+                  <span className={panelCountClass}>{lowStockProducts.length}</span>
                 </div>
-                <span className={panelCountClass}>{lowStockProducts.length}</span>
-              </div>
 
-              <div className="grid">
-                {priorityLowStockProducts.length === 0 ? (
-                  <p className={emptyStateClass}>No hay productos con stock bajo.</p>
-                ) : (
-                  priorityLowStockProducts.map((product) => (
-                    <article className={dashboardListRowClass} key={product.id}>
-                      <div>
-                        <strong>{product.name}</strong>
-                        <span>{product.categoryName}</span>
-                      </div>
-                      <div className={listRowEndClass}>
-                        <strong>{product.currentStock} / {product.minimumStock}</strong>
-                        <span className={badgeClass("warning")}>Reponer</span>
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
-            </section>
+                <div className="grid">
+                  {priorityLowStockProducts.length === 0 ? (
+                    <p className={emptyStateClass}>No hay productos con stock bajo.</p>
+                  ) : (
+                    priorityLowStockProducts.map((product) => (
+                      <article className={dashboardListRowClass} key={product.id}>
+                        <div>
+                          <strong>{product.name}</strong>
+                          <span>{product.categoryName}</span>
+                        </div>
+                        <div className={listRowEndClass}>
+                          <strong>{product.currentStock} / {product.minimumStock}</strong>
+                          <span className={badgeClass("warning")}>Reponer</span>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </section>
+            )}
 
             {canViewSales && (
               <section className={dashboardPanelClass}>
@@ -224,7 +256,7 @@ export default function DashboardPage() {
               </section>
             )}
 
-            {canViewInventory && (
+            {canViewInventoryHistory && (
               <section className={dashboardPanelClass}>
                 <div className={dashboardPanelHeadingClass}>
                   <div>

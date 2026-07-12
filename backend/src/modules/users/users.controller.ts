@@ -10,8 +10,9 @@ import {
   editUserService,
   getUserByIdService,
   getUsersService,
+  updateCashierScheduleService,
 } from "./users.service.js";
-import { validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
+import { validateCashierScheduleBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -110,6 +111,37 @@ export async function editUser(req: Request, res: Response) {
     }
 
     return handleErrorServer(res, 500, "Error interno del servidor", message);
+  }
+}
+
+export async function updateCashierSchedule(req: Request, res: Response) {
+  try {
+    const userId = parseId(req.params.id);
+
+    if (!userId) {
+      return handleErrorClient(res, 400, "El id del usuario debe ser un numero valido");
+    }
+
+    const validation = validateCashierScheduleBody(req.body);
+
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const updatedUser = await updateCashierScheduleService(userId, validation.value);
+    return handleSuccess(res, 200, "Horario de cajero actualizado exitosamente", updatedUser);
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+
+    if (errorMessage === "Usuario no encontrado") {
+      return handleErrorClient(res, 404, errorMessage);
+    }
+
+    if (errorMessage === "El horario solo puede configurarse para usuarios cajeros") {
+      return handleErrorClient(res, 400, errorMessage);
+    }
+
+    return handleErrorServer(res, 500, "Error al actualizar horario de cajero", errorMessage);
   }
 }
 

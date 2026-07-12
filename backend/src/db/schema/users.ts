@@ -14,6 +14,10 @@ export const usersTable = pgTable(
     password: varchar({ length: 255 }).notNull(),
     phone: varchar({ length: 20 }),
     status: varchar({ length: 50 }).notNull().default("ACTIVE"),
+    workShift: varchar("work_shift", { length: 50 }),
+    shiftStartTime: varchar("shift_start_time", { length: 5 }),
+    shiftEndTime: varchar("shift_end_time", { length: 5 }),
+    shiftNote: varchar("shift_note", { length: 255 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   }

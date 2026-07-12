@@ -5,18 +5,27 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 const PHONE_REGEX = /^\+?[\d\s-]{8,20}$/;
+const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const WORK_SHIFTS = ["MORNING", "AFTERNOON", "OTHER"] as const;
 
 type EditableUserFields = Partial<
   Pick<NewUser, "roleId" | "rut" | "names" | "surnames" | "correo" | "password" | "phone" | "status">
 >;
+type WorkShift = (typeof WORK_SHIFTS)[number];
 
 export type EditUserBody = EditableUserFields;
 export type CreateUserBody = Pick<NewUser, "roleId" | "rut" | "names" | "surnames" | "correo" | "password" | "phone" | "status">;
+export type CashierScheduleBody = {
+  workShift: WorkShift;
+  shiftStartTime: string;
+  shiftEndTime: string;
+  shiftNote: string | null;
+};
 
-type ValidationResult =
+type ValidationResult<T> =
   | {
       success: true;
-      value: EditUserBody;
+      value: T;
     }
   | {
       success: false;
@@ -35,7 +44,7 @@ export function normalizeName(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-export function validateEditUserBody(body: unknown): ValidationResult {
+export function validateEditUserBody(body: unknown): ValidationResult<EditUserBody> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { success: false, error: "Debe especificar al menos 1 parametro" };
   }
@@ -136,7 +145,7 @@ export function validateEditUserBody(body: unknown): ValidationResult {
   return { success: true, value };
 }
 
-export function validateCreateUserBody(body: unknown): ValidationResult & { value?: CreateUserBody } {
+export function validateCreateUserBody(body: unknown): ValidationResult<CreateUserBody> {
   const result = validateEditUserBody(body);
 
   if (!result.success) return result;
@@ -167,6 +176,59 @@ export function validateCreateUserBody(body: unknown): ValidationResult & { valu
       password: result.value.password!,
       phone: result.value.phone,
       status: result.value.status ?? "ACTIVE",
+    },
+  };
+}
+
+export function validateCashierScheduleBody(body: unknown): ValidationResult<CashierScheduleBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe especificar los datos del horario" };
+  }
+
+  const input = body as Record<string, unknown>;
+  const allowedFields = ["workShift", "shiftStartTime", "shiftEndTime", "shiftNote"];
+
+  for (const field of Object.keys(input)) {
+    if (!allowedFields.includes(field)) {
+      return { success: false, error: `El campo ${field} no esta permitido` };
+    }
+  }
+
+  if (typeof input.workShift !== "string" || !WORK_SHIFTS.includes(input.workShift as WorkShift)) {
+    return { success: false, error: "El turno debe ser: MORNING, AFTERNOON u OTHER" };
+  }
+
+  if (typeof input.shiftStartTime !== "string" || !TIME_REGEX.test(input.shiftStartTime)) {
+    return { success: false, error: "La hora de inicio debe tener formato HH:MM" };
+  }
+
+  if (typeof input.shiftEndTime !== "string" || !TIME_REGEX.test(input.shiftEndTime)) {
+    return { success: false, error: "La hora de termino debe tener formato HH:MM" };
+  }
+
+  if (input.shiftStartTime >= input.shiftEndTime) {
+    return { success: false, error: "La hora de inicio debe ser menor a la hora de termino" };
+  }
+
+  let shiftNote: string | null = null;
+  if (input.shiftNote !== undefined && input.shiftNote !== null && input.shiftNote !== "") {
+    if (typeof input.shiftNote !== "string") {
+      return { success: false, error: "La observacion debe ser texto" };
+    }
+
+    shiftNote = input.shiftNote.trim();
+    if (shiftNote.length > 255) {
+      return { success: false, error: "La observacion no puede exceder 255 caracteres" };
+    }
+  }
+
+  return {
+    success: true,
+    value: {
+      workShift: input.workShift as WorkShift,
+      shiftStartTime: input.shiftStartTime,
+      shiftEndTime: input.shiftEndTime,
+      shiftNote,
     },
   };
 }

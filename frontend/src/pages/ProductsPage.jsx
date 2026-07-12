@@ -8,7 +8,6 @@ import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "
 import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, CATEGORY_SUGGESTIONS, OTHER_UNIT, UNIT_OPTIONS } from "../helpers/options.js";
-import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
 import useAuth from "../hooks/useAuth.js";
 import usePagination from "../hooks/usePagination.js";
 import { createCategoryRequest, getCategoriesRequest } from "../services/categories.service.js";
@@ -37,6 +36,9 @@ const INVENTORY_DATE_OPTIONS = {
   hour: "2-digit",
   minute: "2-digit",
 };
+const suggestionListClass = "mt-2 grid max-h-36 overflow-auto rounded-[5px] border border-slate-200 bg-white p-1 shadow-[0_8px_18px_rgba(16,21,31,0.08)]";
+const suggestionButtonClass = "flex min-h-8 w-full items-center justify-between rounded-[4px] border-0 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-ink-700 hover:bg-rust-50 hover:text-rust-700";
+const suggestionEmptyClass = "rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500";
 
 function normalizeProductName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
@@ -44,6 +46,24 @@ function normalizeProductName(name) {
 
 function normalizeCategoryName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function normalizeSearchValue(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function getSingleOrExactSuggestion(options, searchValue, getComparableValues) {
+  const normalizedSearchValue = normalizeSearchValue(searchValue);
+
+  if (normalizedSearchValue) {
+    const exactMatch = options.find((option) =>
+      getComparableValues(option).some((value) => normalizeSearchValue(value) === normalizedSearchValue),
+    );
+
+    if (exactMatch) return exactMatch;
+  }
+
+  return options.length === 1 ? options[0] : null;
 }
 
 const emptyForm = {
@@ -77,22 +97,31 @@ export default function ProductsPage() {
   const [activeForm, setActiveForm] = useState(null);
   const [categoryName, setCategoryName] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [unitSelection, setUnitSelection] = useState("unidad");
+  const [unitSearch, setUnitSearch] = useState("");
+  const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
   const [message, setMessage] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [submittingMovement, setSubmittingMovement] = useState(false);
   const [productCategory, setProductCategory] = useState("");
+  const [movementCategorySearch, setMovementCategorySearch] = useState("");
+  const [showMovementCategorySuggestions, setShowMovementCategorySuggestions] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
 
   const canManage = user?.role === "ADMIN";
-  const canViewHistory = ROUTE_PERMISSIONS.inventory.includes(user?.role);
+  const canViewHistory = ["ADMIN", "MANAGER"].includes(user?.role);
   const canCreateMovement = user?.role === "ADMIN";
   const canExportInventory = user?.role === "ADMIN";
+  const canViewAdministrativeStock = !["CASHIER", "WAREHOUSE"].includes(user?.role);
+  const lowStockStatusLabel = canViewAdministrativeStock ? "Reponer" : "Bajo";
+  const inventoryTableColumnCount = 7 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
   const categoryOptions = useMemo(
     () =>
       [...new Map(products.map((product) => [product.categoryId, {
@@ -134,6 +163,10 @@ export default function ProductsPage() {
     () => new Map(products.map((product) => [String(product.id), product])),
     [products],
   );
+  const existingCategoryNames = useMemo(
+    () => new Set(categories.map((category) => normalizeCategoryName(category.name))),
+    [categories],
+  );
   const filteredFormCategories = useMemo(() => {
     const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase("es");
 
@@ -145,6 +178,19 @@ export default function ProductsPage() {
       )
       .sort((left, right) => left.name.localeCompare(right.name, "es"));
   }, [categories, categorySearch]);
+  const availableCategorySuggestions = useMemo(
+    () => CATEGORY_SUGGESTIONS.filter((category) => !existingCategoryNames.has(normalizeCategoryName(category))),
+    [existingCategoryNames],
+  );
+  const normalizedUnitSearch = unitSearch.trim().toLocaleLowerCase("es");
+  const filteredUnitOptions = useMemo(
+    () =>
+      UNIT_OPTIONS.filter((unit) =>
+        !normalizedUnitSearch ||
+        unit.toLocaleLowerCase("es").includes(normalizedUnitSearch),
+      ),
+    [normalizedUnitSearch],
+  );
   const productsPagination = usePagination(filteredProducts, {
     resetKey: `${categoryFilter}|${lowStockOnly}|${normalizedSearch}|${products.length}`,
   });
@@ -181,11 +227,16 @@ export default function ProductsPage() {
       String(product.id).includes(normalizedProductSearch);
     return matchesCategory && matchesSearch;
   }) : [];
-  const existingCategoryNames = useMemo(
-    () => new Set(categories.map((category) => normalizeCategoryName(category.name))),
-    [categories],
+  const normalizedMovementCategorySearch = movementCategorySearch.trim().toLocaleLowerCase("es");
+  const filteredMovementCategories = useMemo(
+    () =>
+      movementProductCategories.filter((category) =>
+        !normalizedMovementCategorySearch ||
+        category.name.toLocaleLowerCase("es").includes(normalizedMovementCategorySearch) ||
+        String(category.id).includes(normalizedMovementCategorySearch),
+      ),
+    [movementProductCategories, normalizedMovementCategorySearch],
   );
-
   const loadData = async () => {
     const [productData, movementData] = await Promise.all([
       getProductsRequest(),
@@ -205,6 +256,18 @@ export default function ProductsPage() {
     loadData().catch((err) => setError(getApiError(err, "No se pudo cargar inventario")));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, canViewHistory]);
+
+  useEffect(() => {
+    if (!canViewHistory && activeView === "history") {
+      setActiveView("inventory");
+    }
+  }, [activeView, canViewHistory]);
+
+  useEffect(() => {
+    if (!canViewAdministrativeStock && lowStockOnly) {
+      setLowStockOnly(false);
+    }
+  }, [canViewAdministrativeStock, lowStockOnly]);
 
   const selectedMovementProduct = products.find((product) => product.id === Number(movementForm.productId));
   const estimatedStock = selectedMovementProduct
@@ -273,7 +336,10 @@ export default function ProductsPage() {
 
       setForm(emptyForm);
       setCategorySearch("");
+      setShowCategorySuggestions(false);
       setUnitSelection("unidad");
+      setUnitSearch("");
+      setShowUnitSuggestions(false);
       setEditingProductId(null);
       setActiveForm(null);
       setMessage(editingProductId ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
@@ -317,7 +383,10 @@ export default function ProductsPage() {
 
       setMovementForm(initialMovementForm());
       setProductCategory("");
+      setMovementCategorySearch("");
+      setShowMovementCategorySuggestions(false);
       setProductSearch("");
+      setShowMovementProductSuggestions(false);
       setActiveForm(null);
       setMessage(movementForm.movementType === "ENTRY" ? "Entrada registrada exitosamente" : "Ajuste registrado exitosamente");
 
@@ -349,6 +418,9 @@ export default function ProductsPage() {
     });
     setUnitSelection(UNIT_OPTIONS.includes(product.unitMeasure) ? product.unitMeasure : OTHER_UNIT);
     setCategorySearch("");
+    setShowCategorySuggestions(false);
+    setUnitSearch(UNIT_OPTIONS.includes(product.unitMeasure) ? product.unitMeasure : "");
+    setShowUnitSuggestions(false);
     setError("");
     setMessage("");
   };
@@ -357,7 +429,10 @@ export default function ProductsPage() {
     setEditingProductId(null);
     setForm(emptyForm);
     setCategorySearch("");
+    setShowCategorySuggestions(false);
     setUnitSelection("unidad");
+    setUnitSearch("");
+    setShowUnitSuggestions(false);
     setActiveForm(null);
   };
 
@@ -366,7 +441,10 @@ export default function ProductsPage() {
     setEditingProductId(null);
     setForm(emptyForm);
     setCategorySearch("");
+    setShowCategorySuggestions(false);
     setUnitSelection("unidad");
+    setUnitSearch("");
+    setShowUnitSuggestions(false);
     setError("");
     setMessage("");
   };
@@ -376,7 +454,10 @@ export default function ProductsPage() {
     setEditingProductId(null);
     setForm(emptyForm);
     setCategorySearch("");
+    setShowCategorySuggestions(false);
     setUnitSelection("unidad");
+    setUnitSearch("");
+    setShowUnitSuggestions(false);
     setError("");
     setMessage("");
   };
@@ -385,7 +466,10 @@ export default function ProductsPage() {
     setActiveForm(movementType);
     setMovementForm(initialMovementForm(movementType));
     setProductCategory("");
+    setMovementCategorySearch("");
+    setShowMovementCategorySuggestions(false);
     setProductSearch("");
+    setShowMovementProductSuggestions(false);
     setError("");
     setMessage("");
     setWarning("");
@@ -400,20 +484,120 @@ export default function ProductsPage() {
     setActiveForm(null);
     setMovementForm(initialMovementForm());
     setProductCategory("");
+    setMovementCategorySearch("");
+    setShowMovementCategorySuggestions(false);
     setProductSearch("");
+    setShowMovementProductSuggestions(false);
   };
 
   const handleUnitSelection = (value) => {
     setUnitSelection(value);
+    setUnitSearch(value === OTHER_UNIT ? "" : value);
+    setShowUnitSuggestions(false);
     setForm((current) => ({
       ...current,
       unitMeasure: value === OTHER_UNIT ? "" : value,
     }));
   };
 
+  const selectProductCategory = (category) => {
+    setForm((current) => ({ ...current, categoryId: String(category.id) }));
+    setCategorySearch(category.name);
+    setShowCategorySuggestions(false);
+  };
+
+  const selectUnitSuggestion = (unit) => {
+    handleUnitSelection(unit);
+  };
+
+  const selectMovementCategory = (category) => {
+    setProductCategory(String(category.id));
+    setMovementCategorySearch(category.name);
+    setShowMovementCategorySuggestions(false);
+    setMovementForm((current) => ({ ...current, productId: "" }));
+  };
+
+  const handleMovementCategorySelect = (categoryId) => {
+    const selectedCategory = movementProductCategories.find((category) => String(category.id) === String(categoryId));
+    setProductCategory(categoryId);
+    setMovementCategorySearch(selectedCategory?.name || "");
+    setShowMovementCategorySuggestions(false);
+    setMovementForm((current) => ({ ...current, productId: "" }));
+  };
+
+  const selectMovementProduct = (product) => {
+    setProductCategory(String(product.categoryId));
+    setMovementCategorySearch(product.categoryName);
+    setShowMovementCategorySuggestions(false);
+    setProductSearch(product.name);
+    setShowMovementProductSuggestions(false);
+    setMovementForm((current) => ({ ...current, productId: String(product.id) }));
+  };
+
+  const handleProductCategorySearchKeyDown = (event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const category = getSingleOrExactSuggestion(
+      filteredFormCategories,
+      categorySearch,
+      (item) => [item.name, item.id, `#${item.id}`],
+    );
+
+    if (category) selectProductCategory(category);
+  };
+
+  const handleUnitSearchKeyDown = (event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
+
+    if (unit) selectUnitSuggestion(unit);
+  };
+
+  const handleMovementCategorySearchKeyDown = (event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const category = getSingleOrExactSuggestion(
+      filteredMovementCategories,
+      movementCategorySearch,
+      (item) => [item.name, item.id, `#${item.id}`],
+    );
+
+    if (category) selectMovementCategory(category);
+  };
+
+  const handleMovementProductSearchKeyDown = (event) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const product = getSingleOrExactSuggestion(
+      filteredMovementProducts,
+      productSearch,
+      (item) => [item.name, item.id, `#${item.id}`],
+    );
+
+    if (product) selectMovementProduct(product);
+  };
+
+  const handleMovementProductSelect = (productId) => {
+    if (!productId) {
+      setMovementForm((current) => ({ ...current, productId: "" }));
+      return;
+    }
+
+    const product = activeProducts.find((item) => String(item.id) === String(productId));
+    if (product) selectMovementProduct(product);
+  };
+
   const updateMovementProductFilter = (field, value) => {
-    if (field === "category") setProductCategory(value);
-    else setProductSearch(value);
+    if (field === "category") handleMovementCategorySelect(value);
+    else {
+      setProductSearch(value);
+      setShowMovementProductSuggestions(Boolean(value.trim()));
+    }
     setMovementForm((current) => ({ ...current, productId: "" }));
   };
 
@@ -571,24 +755,23 @@ export default function ProductsPage() {
             </label>
             <div className="grid gap-2">
               <span className="text-[13px] font-[650] text-ink-700">Sugerencias comunes</span>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORY_SUGGESTIONS.map((category) => {
-                  const exists = existingCategoryNames.has(normalizeCategoryName(category));
-
-                  return (
+              {availableCategorySuggestions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {availableCategorySuggestions.map((category) => (
                     <button
-                      className={`${secondaryButtonClass} mr-0 min-h-8 px-2.75 text-xs ${exists ? "opacity-50" : ""}`}
+                      className={`${secondaryButtonClass} mr-0 min-h-8 px-2.75 text-xs`}
                       type="button"
                       key={category}
                       onClick={() => setCategoryName(category)}
-                      disabled={exists}
-                      title={exists ? "Esta categoría ya existe" : "Usar esta sugerencia"}
+                      title="Usar esta sugerencia"
                     >
                       {category}
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={suggestionEmptyClass}>Ya se están usando todas las sugerencias</p>
+              )}
             </div>
             <div className={formActionsClass}>
               <button className={secondaryButtonClass} type="button" onClick={closeCategoryForm}>Cancelar</button>
@@ -607,11 +790,52 @@ export default function ProductsPage() {
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
             {error && <div className={alertClasses.error}>{error}</div>}
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+              <label className="relative">
+                Buscar categoría
+                <div className="relative">
+                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                  <input
+                    className="pl-9.75"
+                    value={categorySearch}
+                    onChange={(event) => {
+                      setCategorySearch(event.target.value);
+                      setShowCategorySuggestions(Boolean(event.target.value.trim()));
+                    }}
+                    onFocus={() => setShowCategorySuggestions(Boolean(categorySearch.trim()))}
+                    onKeyDown={handleProductCategorySearchKeyDown}
+                    placeholder="Nombre o ID de categoría"
+                  />
+                </div>
+                {showCategorySuggestions && categorySearch.trim() && (
+                  filteredFormCategories.length > 0 ? (
+                    <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                      {filteredFormCategories.slice(0, 6).map((category) => (
+                        <button
+                          className={suggestionButtonClass}
+                          type="button"
+                          key={category.id}
+                          onClick={() => selectProductCategory(category)}
+                        >
+                          <span>{category.name}</span>
+                          <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
+                  )
+                )}
+              </label>
               <label>
                 Categoría
                 <select
                   value={form.categoryId}
-                  onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
+                  onChange={(event) => {
+                    const selectedCategory = categories.find((category) => String(category.id) === event.target.value);
+                    setForm((current) => ({ ...current, categoryId: event.target.value }));
+                    if (selectedCategory) setCategorySearch(selectedCategory.name);
+                    setShowCategorySuggestions(false);
+                  }}
                   required
                 >
                   <option value="">Seleccionar</option>
@@ -624,18 +848,6 @@ export default function ProductsPage() {
                     <option disabled>No se encontraron categorías</option>
                   )}
                 </select>
-              </label>
-              <label>
-                Buscar categoría
-                <div className="relative">
-                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                  <input
-                    className="pl-9.75"
-                    value={categorySearch}
-                    onChange={(event) => setCategorySearch(event.target.value)}
-                    placeholder="Nombre o ID de categoría"
-                  />
-                </div>
               </label>
             </div>
             <label>
@@ -650,6 +862,52 @@ export default function ProductsPage() {
               />
             </label>
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+              <label className="relative">
+                Buscar unidad de medida
+                <div className="relative">
+                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                  <input
+                    className="pl-9.75"
+                    value={unitSearch}
+                    onChange={(event) => {
+                      setUnitSearch(event.target.value);
+                      setShowUnitSuggestions(Boolean(event.target.value.trim()));
+                    }}
+                    onFocus={() => setShowUnitSuggestions(Boolean(unitSearch.trim()))}
+                    onKeyDown={handleUnitSearchKeyDown}
+                    placeholder="Ej: caja, kg, metro"
+                  />
+                </div>
+                {showUnitSuggestions && unitSearch.trim() && (
+                  filteredUnitOptions.length > 0 ? (
+                    <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                      {filteredUnitOptions.slice(0, 6).map((unit) => (
+                        <button
+                          className={suggestionButtonClass}
+                          type="button"
+                          key={unit}
+                          onClick={() => selectUnitSuggestion(unit)}
+                        >
+                          <span>{unit}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron unidades</p>
+                  )
+                )}
+              </label>
+              <label>
+                Unidad de medida
+                <select value={unitSelection} onChange={(event) => handleUnitSelection(event.target.value)} required>
+                  {UNIT_OPTIONS.map((unit) => (
+                    <option key={unit} value={unit}>{unit}</option>
+                  ))}
+                  <option value={OTHER_UNIT}>Otra unidad</option>
+                </select>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Precio
                 <input
@@ -660,13 +918,13 @@ export default function ProductsPage() {
                 />
               </label>
               <label>
-                Unidad de medida
-                <select value={unitSelection} onChange={(event) => handleUnitSelection(event.target.value)} required>
-                  {UNIT_OPTIONS.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                  <option value={OTHER_UNIT}>Otra unidad</option>
-                </select>
+                Stock minimo
+                <input
+                  type="number"
+                  min="0"
+                  value={form.minimumStock}
+                  onChange={(event) => setForm((current) => ({ ...current, minimumStock: event.target.value }))}
+                />
               </label>
             </div>
             {unitSelection === OTHER_UNIT && (
@@ -681,15 +939,6 @@ export default function ProductsPage() {
                 />
               </label>
             )}
-            <label>
-              Stock minimo
-              <input
-                type="number"
-                min="0"
-                value={form.minimumStock}
-                onChange={(event) => setForm((current) => ({ ...current, minimumStock: event.target.value }))}
-              />
-            </label>
             <div className={formActionsClass}>
               <button className={secondaryButtonClass} type="button" onClick={cancelEditing}>Cancelar</button>
               <button type="submit">{editingProductId ? "Actualizar producto" : "Guardar producto"}</button>
@@ -717,7 +966,43 @@ export default function ProductsPage() {
               </div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+          <div className="grid grid-cols-2 items-start gap-3 max-[720px]:grid-cols-1">
+            <label className="relative">
+              Buscar categoría
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={movementCategorySearch}
+                  onChange={(event) => {
+                    setMovementCategorySearch(event.target.value);
+                    setShowMovementCategorySuggestions(Boolean(event.target.value.trim()));
+                  }}
+                  onFocus={() => setShowMovementCategorySuggestions(Boolean(movementCategorySearch.trim()))}
+                  onKeyDown={handleMovementCategorySearchKeyDown}
+                  placeholder="Nombre o ID de categoría"
+                />
+              </div>
+              {showMovementCategorySuggestions && movementCategorySearch.trim() && (
+                filteredMovementCategories.length > 0 ? (
+                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                    {filteredMovementCategories.slice(0, 6).map((category) => (
+                      <button
+                        className={suggestionButtonClass}
+                        type="button"
+                        key={category.id}
+                        onClick={() => selectMovementCategory(category)}
+                      >
+                        <span>{category.name}</span>
+                        <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
+                )
+              )}
+            </label>
             <label>
               Categoría
               <select
@@ -725,40 +1010,70 @@ export default function ProductsPage() {
                 onChange={(event) => updateMovementProductFilter("category", event.target.value)}
               >
                 <option value="">Todas las categorías</option>
-                {movementProductCategories.map((category) => (
+                {filteredMovementCategories.map((category) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+                {filteredMovementCategories.length === 0 && (
+                  <option disabled>No se encontraron categorías</option>
+                )}
+              </select>
+            </label>
+          </div>
+          <div className="grid grid-cols-2 items-start gap-3 max-[720px]:grid-cols-1">
+            <label className="relative">
+              Buscar producto
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={productSearch}
+                  onChange={(event) => updateMovementProductFilter("search", event.target.value)}
+                  onFocus={() => setShowMovementProductSuggestions(Boolean(productSearch.trim()))}
+                  onKeyDown={handleMovementProductSearchKeyDown}
+                  placeholder="Nombre o ID de producto"
+                />
+              </div>
+              {showMovementProductSuggestions && productSearch.trim() && (
+                filteredMovementProducts.length > 0 ? (
+                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                    {filteredMovementProducts.slice(0, 6).map((product) => (
+                      <button
+                        className={suggestionButtonClass}
+                        type="button"
+                        key={product.id}
+                        onClick={() => selectMovementProduct(product)}
+                      >
+                        <span>{product.name}</span>
+                        <span className="font-mono text-[11px] text-slate-500">#{product.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron productos activos</p>
+                )
+              )}
+            </label>
+            <label>
+              Producto
+              <select
+                value={movementForm.productId}
+                onChange={(event) => handleMovementProductSelect(event.target.value)}
+                required
+              >
+                <option value="">
+                  {hasProductFilter ? "Seleccionar producto" : "Elige categoría o busca por nombre"}
+                </option>
+                {hasProductFilter && filteredMovementProducts.length === 0 && (
+                  <option disabled>Sin productos activos para este filtro</option>
+                )}
+                {filteredMovementProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    #{product.id} · {product.name} · {product.categoryName} · stock {product.currentStock} · mínimo {product.minimumStock}
+                  </option>
                 ))}
               </select>
             </label>
-            <label>
-              Buscar producto
-              <input
-                value={productSearch}
-                onChange={(event) => updateMovementProductFilter("search", event.target.value)}
-                placeholder="Nombre o ID"
-              />
-            </label>
           </div>
-          <label>
-            Producto
-            <select
-              value={movementForm.productId}
-              onChange={(event) => setMovementForm((current) => ({ ...current, productId: event.target.value }))}
-              required
-            >
-              <option value="">
-                {hasProductFilter ? "Seleccionar producto" : "Elige categoría o busca por nombre"}
-              </option>
-              {hasProductFilter && filteredMovementProducts.length === 0 && (
-                <option disabled>Sin productos activos para este filtro</option>
-              )}
-              {filteredMovementProducts.map((product) => (
-                <option key={product.id} value={product.id}>
-                  #{product.id} · {product.name} · {product.categoryName} · stock {product.currentStock} · mínimo {product.minimumStock}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             {movementForm.movementType === "ENTRY" ? "Cantidad a ingresar" : "Nuevo stock exacto"}
             <input
@@ -834,14 +1149,16 @@ export default function ProductsPage() {
             })}</p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <button
-              className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
-              type="button"
-              onClick={() => setLowStockOnly((current) => !current)}
-              aria-pressed={lowStockOnly}
-            >
-              {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
-            </button>
+            {canViewAdministrativeStock && (
+              <button
+                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                type="button"
+                onClick={() => setLowStockOnly((current) => !current)}
+                aria-pressed={lowStockOnly}
+              >
+                {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
+              </button>
+            )}
             {canExportInventory && (
               <button
                 className="mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
@@ -864,7 +1181,7 @@ export default function ProductsPage() {
               <th>Precio</th>
               <th>Stock</th>
               <th>Unidad</th>
-              <th>Minimo</th>
+              {canViewAdministrativeStock && <th>Minimo</th>}
               <th>Estado stock</th>
               {canManage && <th>Acciones</th>}
             </tr>
@@ -878,10 +1195,10 @@ export default function ProductsPage() {
                 <td className={numericCellClass}>{formatClp(product.price)}</td>
                 <td className={numericCellClass}>{product.currentStock}</td>
                 <td>{product.unitMeasure}</td>
-                <td className={numericCellClass}>{product.minimumStock}</td>
+                {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
                 <td>
                   {isLowStockProduct(product) ? (
-                    <span className={badgeClass("warning")}>Reponer</span>
+                    <span className={badgeClass("warning")}>{lowStockStatusLabel}</span>
                   ) : (
                     <span className={badgeClass("success")}>Disponible</span>
                   )}
@@ -898,7 +1215,7 @@ export default function ProductsPage() {
             ))}
             {filteredProducts.length === 0 && (
               <tr>
-                <td className={emptyTableCellClass} colSpan={canManage ? 9 : 8}>
+                <td className={emptyTableCellClass} colSpan={inventoryTableColumnCount}>
                   No se encontraron productos con los filtros seleccionados.
                 </td>
               </tr>

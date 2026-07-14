@@ -1,5 +1,6 @@
-import { Plus, RotateCcw, Search, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { Eye, Plus, RotateCcw, Search, ShoppingCart, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -9,7 +10,7 @@ import { PAYMENT_METHODS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
 import usePagination from "../hooks/usePagination.js";
 import { getProductsRequest } from "../services/products.service.js";
-import { cancelSaleRequest, createSaleRequest, getSalesRequest, undoCancelSaleRequest } from "../services/sales.service.js";
+import { cancelSaleRequest, createSaleRequest, getSaleByIdRequest, getSalesRequest, undoCancelSaleRequest } from "../services/sales.service.js";
 import {
   alertClasses,
   badgeClass,
@@ -24,11 +25,24 @@ import {
   tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
+  tableScrollClass,
 } from "../helpers/uiClasses.js";
 
 const SALE_TIME_OPTIONS = {
   hour: "2-digit",
   minute: "2-digit",
+};
+const SALE_DATE_TIME_OPTIONS = {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+const SALE_DATE_OPTIONS = {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
 };
 
 function getSaleDetails(sale) {
@@ -39,6 +53,7 @@ function getSaleDetails(sale) {
 
 export default function SalesPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
@@ -50,6 +65,8 @@ export default function SalesPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState(null);
   const [saleToReactivate, setSaleToReactivate] = useState(null);
+  const [saleDetail, setSaleDetail] = useState(null);
+  const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
   const [search, setSearch] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState("");
@@ -57,10 +74,16 @@ export default function SalesPage() {
 
   const canCreate = user?.role === "CASHIER";
   const canCancel = user?.role === "ADMIN";
+  const viewParam = searchParams.get("view");
 
   useEffect(() => {
-    setActiveView(user?.role === "CASHIER" ? "sales" : "history");
-  }, [user?.role]);
+    if (user?.role === "CASHIER") {
+      setActiveView(viewParam === "history" ? "history" : "sales");
+      return;
+    }
+
+    setActiveView("history");
+  }, [user?.role, viewParam]);
 
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const filteredSales = useMemo(
@@ -319,6 +342,27 @@ export default function SalesPage() {
     }
   };
 
+  const openDetailModal = async (sale) => {
+    setError("");
+    setMessage("");
+    setSaleDetail(sale);
+    setLoadingSaleDetail(true);
+
+    try {
+      setSaleDetail(await getSaleByIdRequest(sale.id));
+    } catch (err) {
+      setError(getApiError(err, "No se pudo cargar el detalle de la venta"));
+      setSaleDetail(null);
+    } finally {
+      setLoadingSaleDetail(false);
+    }
+  };
+
+  const closeDetailModal = () => {
+    if (loadingSaleDetail) return;
+    setSaleDetail(null);
+  };
+
   const openCancelModal = (sale) => {
     if (!canCancel || sale.status !== "ACTIVE") return;
     setSaleToCancel(sale);
@@ -554,6 +598,88 @@ export default function SalesPage() {
         </div>
       </AppModal>
 
+      <AppModal
+        open={Boolean(saleDetail)}
+        title="Detalle de venta"
+        description={saleDetail ? `Información completa de ${formatSaleFolio(saleDetail.id)}` : ""}
+        onClose={closeDetailModal}
+        size="large"
+      >
+        <div className="grid gap-4">
+          {loadingSaleDetail && <div className={alertClasses.warning}>Cargando detalle de la venta...</div>}
+          {saleDetail && (
+            <>
+              <div className="grid grid-cols-3 gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[720px]:grid-cols-1">
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Folio</span>
+                  <strong className="mt-1 block font-mono text-ink-950">{formatSaleFolio(saleDetail.id)}</strong>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Fecha</span>
+                  <strong className="mt-1 block text-ink-950">{formatDate(saleDetail.date || saleDetail.createdAt, SALE_DATE_OPTIONS, "-")}</strong>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Hora</span>
+                  <strong className="mt-1 block text-ink-950">{formatDate(saleDetail.date || saleDetail.createdAt, SALE_TIME_OPTIONS, "-")}</strong>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Cajero</span>
+                  <strong className="mt-1 block text-ink-950">{saleDetail.userNames} {saleDetail.userSurnames}</strong>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Método de pago</span>
+                  <strong className="mt-1 block text-ink-950">{getPaymentMethodLabel(saleDetail.paymentMethod)}</strong>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-slate-500">Total</span>
+                  <strong className="mt-1 block font-mono text-lg text-ink-950">{formatClp(saleDetail.total)}</strong>
+                </div>
+              </div>
+
+              <div className="rounded-[5px] border border-slate-200 bg-white">
+                <div className="border-b border-slate-200 px-3.5 py-3">
+                  <h3 className="m-0 text-sm font-bold text-ink-950">Productos vendidos</h3>
+                </div>
+                <div className={tableScrollClass}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Precio unitario</th>
+                        <th>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getSaleDetails(saleDetail).map((detail) => (
+                        <tr key={`${detail.saleId}-${detail.productId}`}>
+                          <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
+                          <td>{detail.productName || detail.name || `Producto #${detail.productId}`}</td>
+                          <td className={numericCellClass}>{detail.quantity}</td>
+                          <td className={numericCellClass}>{formatClp(detail.unitPrice)}</td>
+                          <td className={numericCellClass}>{formatClp(detail.subtotal)}</td>
+                        </tr>
+                      ))}
+                      {getSaleDetails(saleDetail).length === 0 && (
+                        <tr>
+                          <td className={emptyTableCellClass} colSpan="5">No hay productos asociados a esta venta.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeDetailModal} disabled={loadingSaleDetail}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </AppModal>
+
       {canCreate && activeView === "sales" && (
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(310px,370px)] items-start gap-3 max-[1080px]:grid-cols-1">
           <section className={`${panelClass} gap-3 p-3.5`}>
@@ -747,76 +873,88 @@ export default function SalesPage() {
                 })}</p>
               </div>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Folio</th>
-                  <th>Hora</th>
-                  <th>Usuario</th>
-                  <th>Metodo</th>
-                  <th>Total</th>
-                  <th>Estado</th>
-                  {canCancel && <th className="text-left">Acciones</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {salesPagination.paginatedItems.map((sale) => (
-                  <tr key={sale.id}>
-                    <td>
-                      <div className="grid gap-0.5">
-                        <strong className="font-mono text-xs text-ink-950">{formatSaleFolio(sale.id)}</strong>
-                        <span className="text-[11px] text-slate-500">ID {sale.id}</span>
-                      </div>
-                    </td>
-                    <td className="font-mono text-xs font-semibold text-ink-950">
-                      {formatDate(sale.date || sale.createdAt, SALE_TIME_OPTIONS, "Sin hora")}
-                    </td>
-                    <td>
-                      {sale.userNames} {sale.userSurnames}
-                    </td>
-                    <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
-                    <td className={numericCellClass}>{formatClp(sale.total)}</td>
-                    <td>
-                      <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
-                        {getSaleStatusLabel(sale.status)}
-                      </span>
-                    </td>
-                    {canCancel && (
-                      <td className="text-left">
-                        {sale.status === "ACTIVE" ? (
-                          <button
-                            className={`${dangerButtonClass} ${tableActionButtonClass}`}
-                            type="button"
-                            onClick={() => openCancelModal(sale)}
-                            disabled={submitting}
-                          >
-                            <XCircle size={17} />
-                            Cancelar
-                          </button>
-                        ) : sale.status === "CANCELLED" ? (
-                          <button
-                            className={`${secondaryButtonClass} ${tableActionButtonClass}`}
-                            type="button"
-                            onClick={() => openUndoCancelModal(sale)}
-                            disabled={submitting}
-                          >
-                            <RotateCcw size={17} />
-                            Deshacer
-                          </button>
-                        ) : null}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-                {filteredSales.length === 0 && (
+            <div className={tableScrollClass}>
+              <table>
+                <thead>
                   <tr>
-                    <td className={emptyTableCellClass} colSpan={canCancel ? 7 : 6}>
-                      {sales.length === 0 ? "No hay ventas registradas." : "No se encontraron ventas con la búsqueda ingresada."}
-                    </td>
+                    <th>Folio</th>
+                    <th>Fecha y hora</th>
+                    <th>Usuario</th>
+                    <th>Metodo</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th className="text-left">Acciones</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {salesPagination.paginatedItems.map((sale) => (
+                    <tr key={sale.id}>
+                      <td>
+                        <div className="grid gap-0.5">
+                          <strong className="font-mono text-xs text-ink-950">{formatSaleFolio(sale.id)}</strong>
+                          <span className="text-[11px] text-slate-500">ID {sale.id}</span>
+                        </div>
+                      </td>
+                      <td className="font-mono text-xs font-semibold text-ink-950">
+                        {formatDate(sale.date || sale.createdAt, SALE_DATE_TIME_OPTIONS, "Sin fecha")}
+                      </td>
+                      <td>
+                        {sale.userNames} {sale.userSurnames}
+                      </td>
+                      <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
+                      <td className={numericCellClass}>{formatClp(sale.total)}</td>
+                      <td>
+                        <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
+                          {getSaleStatusLabel(sale.status)}
+                        </span>
+                      </td>
+                      <td className="text-left">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`}
+                            type="button"
+                            onClick={() => openDetailModal(sale)}
+                            disabled={loadingSaleDetail}
+                          >
+                            <Eye size={17} />
+                            Detalle
+                          </button>
+                          {canCancel && sale.status === "ACTIVE" && (
+                            <button
+                              className={`${dangerButtonClass} ${tableActionButtonClass}`}
+                              type="button"
+                              onClick={() => openCancelModal(sale)}
+                              disabled={submitting}
+                            >
+                              <XCircle size={17} />
+                              Cancelar
+                            </button>
+                          )}
+                          {canCancel && sale.status === "CANCELLED" && (
+                            <button
+                              className={`${secondaryButtonClass} ${tableActionButtonClass}`}
+                              type="button"
+                              onClick={() => openUndoCancelModal(sale)}
+                              disabled={submitting}
+                            >
+                              <RotateCcw size={17} />
+                              Deshacer
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredSales.length === 0 && (
+                    <tr>
+                      <td className={emptyTableCellClass} colSpan="7">
+                        {sales.length === 0 ? "No hay ventas registradas." : "No se encontraron ventas con la búsqueda ingresada."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
             <Pagination
               page={salesPagination.page}
               pageSize={salesPagination.pageSize}

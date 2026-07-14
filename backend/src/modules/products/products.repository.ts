@@ -17,16 +17,21 @@ const productColumns = {
     updatedAt: productsTable.updatedAt,
 };
 
-export async function findProducts() {
-    return db.select(productColumns).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
+export async function findProducts(includeInactive = false) {
+    const query = db.select(productColumns).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
+    if (includeInactive) return query;
+    return query.where(eq(productsTable.status, true));
 }
 
-export async function findProductById(id: number) {
+export async function findProductById(id: number, includeInactive = false) {
+    const conditions = [eq(productsTable.id, id)];
+    if (!includeInactive) conditions.push(eq(productsTable.status, true));
+
     const [product] = await db
         .select(productColumns)
         .from(productsTable)
         .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
-        .where(eq(productsTable.id, id))
+        .where(and(...conditions))
         .limit(1);
     return product;
 }
@@ -62,11 +67,18 @@ export async function updateProductById(id: number, data: Partial<NewProduct>) {
         .where(eq(productsTable.id, id))
         .returning({ id: productsTable.id });
     if (!product) return null;
-    return findProductById(product.id);
+    return findProductById(product.id, true);
 }
 
 export async function deleteProductById(id: number) {
-    const [product] = await db.delete(productsTable).where(eq(productsTable.id, id)).returning({ id: productsTable.id });
+    const [product] = await db
+        .update(productsTable)
+        .set({
+            status: false,
+            updatedAt: new Date(),
+        })
+        .where(eq(productsTable.id, id))
+        .returning({ id: productsTable.id });
     return product ?? null;
 }
 

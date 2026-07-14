@@ -5,6 +5,11 @@ export async function getSalesRequest() {
   return response.data.data || [];
 }
 
+export async function getSaleByIdRequest(id) {
+  const response = await api.get(`/sales/${id}`);
+  return response.data.data;
+}
+
 export async function createSaleRequest(data) {
   const response = await api.post("/sales", data);
   return response.data.data;

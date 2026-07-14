@@ -1,5 +1,6 @@
-import { FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -7,16 +8,17 @@ import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
 import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
-import { ADJUSTMENT_REASONS, CATEGORY_SUGGESTIONS, OTHER_UNIT, UNIT_OPTIONS } from "../helpers/options.js";
+import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
 import usePagination from "../hooks/usePagination.js";
-import { createCategoryRequest, getCategoriesRequest } from "../services/categories.service.js";
+import { createCategoryRequest, deleteCategoryRequest, getCategoriesRequest, updateCategoryRequest } from "../services/categories.service.js";
 import { createInventoryMovementRequest, getInventoryMovementsRequest } from "../services/inventory.service.js";
-import { createProductRequest, getProductsRequest, updateProductRequest } from "../services/products.service.js";
+import { createProductRequest, deactivateProductRequest, getProductsRequest, updateProductRequest } from "../services/products.service.js";
 import {
   alertClasses,
   badgeClass,
   codeCellClass,
+  dangerButtonClass,
   dateCellClass,
   emptyTableCellClass,
   formActionsClass,
@@ -27,6 +29,7 @@ import {
   tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
+  tableScrollClass,
 } from "../helpers/uiClasses.js";
 
 const INVENTORY_DATE_OPTIONS = {
@@ -88,6 +91,7 @@ function initialMovementForm(movementType = "ENTRY") {
 
 export default function ProductsPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [movements, setMovements] = useState([]);
@@ -96,32 +100,38 @@ export default function ProductsPage() {
   const [editingProductId, setEditingProductId] = useState(null);
   const [activeForm, setActiveForm] = useState(null);
   const [categoryName, setCategoryName] = useState("");
+  const [categoryDescription, setCategoryDescription] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [categoryListSearch, setCategoryListSearch] = useState("");
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
   const [categorySearch, setCategorySearch] = useState("");
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [unitSelection, setUnitSelection] = useState("unidad");
-  const [unitSearch, setUnitSearch] = useState("");
+  const [showInactiveProducts, setShowInactiveProducts] = useState(false);
+  const [unitSearch, setUnitSearch] = useState("unidad");
   const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
   const [message, setMessage] = useState("");
   const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
   const [submittingMovement, setSubmittingMovement] = useState(false);
-  const [productCategory, setProductCategory] = useState("");
-  const [movementCategorySearch, setMovementCategorySearch] = useState("");
-  const [showMovementCategorySuggestions, setShowMovementCategorySuggestions] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
+  const [productStatusTarget, setProductStatusTarget] = useState(null);
 
   const canManage = user?.role === "ADMIN";
   const canViewHistory = ["ADMIN", "MANAGER"].includes(user?.role);
   const canCreateMovement = user?.role === "ADMIN";
-  const canExportInventory = user?.role === "ADMIN";
-  const canViewAdministrativeStock = !["CASHIER", "WAREHOUSE"].includes(user?.role);
+  const canExportInventory = ["ADMIN", "MANAGER"].includes(user?.role);
+  const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
+  const canViewLowStockFilter = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(user?.role);
+  const canViewAdministrativeStock = user?.role !== "CASHIER";
   const lowStockStatusLabel = canViewAdministrativeStock ? "Reponer" : "Bajo";
   const inventoryTableColumnCount = 7 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
+  const viewParam = searchParams.get("view");
+  const filterParam = searchParams.get("filter");
   const categoryOptions = useMemo(
     () =>
       [...new Map(products.map((product) => [product.categoryId, {
@@ -134,17 +144,16 @@ export default function ProductsPage() {
     () => products.filter((product) => product.status !== false),
     [products],
   );
-  const movementProductCategories = useMemo(
-    () =>
-      [...new Map(activeProducts.map((product) => [product.categoryId, {
-        id: product.categoryId,
-        name: product.categoryName,
-      }])).values()].sort((left, right) => left.name.localeCompare(right.name, "es")),
-    [activeProducts],
+  const visibleStatusProducts = useMemo(
+    () => {
+      if (!canViewInactiveProducts) return activeProducts;
+      return products.filter((product) => (showInactiveProducts ? product.status === false : product.status !== false));
+    },
+    [activeProducts, canViewInactiveProducts, products, showInactiveProducts],
   );
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const filteredProducts = useMemo(
-    () => products.filter((product) => {
+    () => visibleStatusProducts.filter((product) => {
       const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
       const matchesLowStock = !lowStockOnly || isLowStockProduct(product);
       if (!matchesCategory) return false;
@@ -157,15 +166,19 @@ export default function ProductsPage() {
         product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
       );
     }).sort(compareByNewest),
-    [categoryFilter, lowStockOnly, normalizedSearch, products],
+    [categoryFilter, lowStockOnly, normalizedSearch, visibleStatusProducts],
   );
   const productById = useMemo(
     () => new Map(products.map((product) => [String(product.id), product])),
     [products],
   );
-  const existingCategoryNames = useMemo(
-    () => new Set(categories.map((category) => normalizeCategoryName(category.name))),
-    [categories],
+  const categoryProductCounts = useMemo(
+    () => products.reduce((counts, product) => {
+      const key = String(product.categoryId);
+      counts.set(key, (counts.get(key) || 0) + 1);
+      return counts;
+    }, new Map()),
+    [products],
   );
   const filteredFormCategories = useMemo(() => {
     const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase("es");
@@ -178,9 +191,19 @@ export default function ProductsPage() {
       )
       .sort((left, right) => left.name.localeCompare(right.name, "es"));
   }, [categories, categorySearch]);
-  const availableCategorySuggestions = useMemo(
-    () => CATEGORY_SUGGESTIONS.filter((category) => !existingCategoryNames.has(normalizeCategoryName(category))),
-    [existingCategoryNames],
+  const normalizedCategoryListSearch = categoryListSearch.trim().toLocaleLowerCase("es");
+  const filteredExistingCategories = useMemo(
+    () =>
+      [...categories]
+        .filter((category) => {
+          if (!normalizedCategoryListSearch) return true;
+          return (
+            category.name.toLocaleLowerCase("es").includes(normalizedCategoryListSearch) ||
+            String(category.description || "").toLocaleLowerCase("es").includes(normalizedCategoryListSearch)
+          );
+        })
+        .sort((left, right) => left.name.localeCompare(right.name, "es")),
+    [categories, normalizedCategoryListSearch],
   );
   const normalizedUnitSearch = unitSearch.trim().toLocaleLowerCase("es");
   const filteredUnitOptions = useMemo(
@@ -192,9 +215,9 @@ export default function ProductsPage() {
     [normalizedUnitSearch],
   );
   const productsPagination = usePagination(filteredProducts, {
-    resetKey: `${categoryFilter}|${lowStockOnly}|${normalizedSearch}|${products.length}`,
+    resetKey: `${categoryFilter}|${lowStockOnly}|${showInactiveProducts}|${normalizedSearch}|${visibleStatusProducts.length}`,
   });
-  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly);
+  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || showInactiveProducts);
   const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
   const filteredMovements = useMemo(
     () => sortedMovements.filter((movement) => {
@@ -218,25 +241,15 @@ export default function ProductsPage() {
   });
   const hasMovementFilters = Boolean(categoryFilter || normalizedSearch);
   const normalizedProductSearch = productSearch.trim().toLocaleLowerCase("es");
-  const hasProductFilter = Boolean(productCategory || normalizedProductSearch);
+  const hasProductFilter = Boolean(normalizedProductSearch);
   const filteredMovementProducts = hasProductFilter ? activeProducts.filter((product) => {
-    const matchesCategory = !productCategory || String(product.categoryId) === productCategory;
     const matchesSearch =
       !normalizedProductSearch ||
       product.name.toLocaleLowerCase("es").includes(normalizedProductSearch) ||
+      product.categoryName.toLocaleLowerCase("es").includes(normalizedProductSearch) ||
       String(product.id).includes(normalizedProductSearch);
-    return matchesCategory && matchesSearch;
+    return matchesSearch;
   }) : [];
-  const normalizedMovementCategorySearch = movementCategorySearch.trim().toLocaleLowerCase("es");
-  const filteredMovementCategories = useMemo(
-    () =>
-      movementProductCategories.filter((category) =>
-        !normalizedMovementCategorySearch ||
-        category.name.toLocaleLowerCase("es").includes(normalizedMovementCategorySearch) ||
-        String(category.id).includes(normalizedMovementCategorySearch),
-      ),
-    [movementProductCategories, normalizedMovementCategorySearch],
-  );
   const loadData = async () => {
     const [productData, movementData] = await Promise.all([
       getProductsRequest(),
@@ -264,10 +277,41 @@ export default function ProductsPage() {
   }, [activeView, canViewHistory]);
 
   useEffect(() => {
-    if (!canViewAdministrativeStock && lowStockOnly) {
+    if (!canViewLowStockFilter && lowStockOnly) {
       setLowStockOnly(false);
     }
-  }, [canViewAdministrativeStock, lowStockOnly]);
+  }, [canViewLowStockFilter, lowStockOnly]);
+
+  useEffect(() => {
+    if (viewParam === "history" && canViewHistory) {
+      setActiveView("history");
+    } else if (viewParam === "inventory") {
+      setActiveView("inventory");
+    }
+
+    if (filterParam === "low-stock" && canViewLowStockFilter) {
+      setActiveView("inventory");
+      setShowInactiveProducts(false);
+      setLowStockOnly(true);
+    } else if (filterParam === "inactive" && canViewInactiveProducts) {
+      setActiveView("inventory");
+      setLowStockOnly(false);
+      setShowInactiveProducts(true);
+    } else if (!filterParam) {
+      setLowStockOnly(false);
+      setShowInactiveProducts(false);
+    }
+  }, [canViewHistory, canViewInactiveProducts, canViewLowStockFilter, filterParam, viewParam]);
+
+  useEffect(() => {
+    if (!canViewInactiveProducts && showInactiveProducts) {
+      setShowInactiveProducts(false);
+    }
+
+    if (showInactiveProducts && lowStockOnly) {
+      setLowStockOnly(false);
+    }
+  }, [canViewInactiveProducts, lowStockOnly, showInactiveProducts]);
 
   const selectedMovementProduct = products.find((product) => product.id === Number(movementForm.productId));
   const estimatedStock = selectedMovementProduct
@@ -286,20 +330,33 @@ export default function ProductsPage() {
     setMessage("");
 
     const normalizedCategoryName = normalizeCategoryName(categoryName);
+    const duplicate = categories.some(
+      (category) =>
+        category.id !== editingCategoryId &&
+        normalizeCategoryName(category.name) === normalizedCategoryName,
+    );
 
-    if (existingCategoryNames.has(normalizedCategoryName)) {
+    if (duplicate) {
       setError("Ya existe una categoría con ese nombre");
       return;
     }
 
     try {
-      const category = await createCategoryRequest({ name: categoryName, description: "", status: true });
+      const payload = {
+        name: categoryName,
+        description: categoryDescription.trim() || null,
+        status: true,
+      };
+      const category = editingCategoryId
+        ? await updateCategoryRequest(editingCategoryId, payload)
+        : await createCategoryRequest(payload);
       setCategoryName("");
-      setActiveForm(null);
-      setMessage(`Categoria creada: ${category.name}`);
+      setCategoryDescription("");
+      setEditingCategoryId(null);
+      setMessage(editingCategoryId ? `Categoria actualizada: ${category.name}` : `Categoria creada: ${category.name}`);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo crear la categoria"));
+      setError(getApiError(err, editingCategoryId ? "No se pudo actualizar la categoria" : "No se pudo crear la categoria"));
     }
   };
 
@@ -307,6 +364,18 @@ export default function ProductsPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
+
+    if (!form.categoryId) {
+      setError("Selecciona una categoría desde el buscador");
+      return;
+    }
+
+    if (!finalUnitMeasure) {
+      setError("Ingresa o selecciona una unidad de medida");
+      return;
+    }
 
     const duplicate = products.some(
       (product) =>
@@ -325,6 +394,7 @@ export default function ProductsPage() {
         ...form,
         categoryId: Number(form.categoryId),
         price: Number(form.price),
+        unitMeasure: finalUnitMeasure,
         minimumStock: Number(form.minimumStock),
       };
 
@@ -337,8 +407,7 @@ export default function ProductsPage() {
       setForm(emptyForm);
       setCategorySearch("");
       setShowCategorySuggestions(false);
-      setUnitSelection("unidad");
-      setUnitSearch("");
+      setUnitSearch("unidad");
       setShowUnitSuggestions(false);
       setEditingProductId(null);
       setActiveForm(null);
@@ -354,6 +423,11 @@ export default function ProductsPage() {
     setError("");
     setMessage("");
     setWarning("");
+
+    if (!movementForm.productId) {
+      setError("Selecciona un producto desde el buscador");
+      return;
+    }
 
     if (movementForm.movementType === "ADJUSTMENT" && !movementForm.adjustmentReason) {
       setError("Selecciona el motivo del ajuste administrativo");
@@ -382,9 +456,6 @@ export default function ProductsPage() {
       });
 
       setMovementForm(initialMovementForm());
-      setProductCategory("");
-      setMovementCategorySearch("");
-      setShowMovementCategorySuggestions(false);
       setProductSearch("");
       setShowMovementProductSuggestions(false);
       setActiveForm(null);
@@ -416,10 +487,9 @@ export default function ProductsPage() {
       minimumStock: product.minimumStock,
       status: product.status,
     });
-    setUnitSelection(UNIT_OPTIONS.includes(product.unitMeasure) ? product.unitMeasure : OTHER_UNIT);
-    setCategorySearch("");
+    setCategorySearch(product.categoryName || "");
     setShowCategorySuggestions(false);
-    setUnitSearch(UNIT_OPTIONS.includes(product.unitMeasure) ? product.unitMeasure : "");
+    setUnitSearch(product.unitMeasure || "");
     setShowUnitSuggestions(false);
     setError("");
     setMessage("");
@@ -430,20 +500,55 @@ export default function ProductsPage() {
     setForm(emptyForm);
     setCategorySearch("");
     setShowCategorySuggestions(false);
-    setUnitSelection("unidad");
-    setUnitSearch("");
+    setUnitSearch("unidad");
     setShowUnitSuggestions(false);
     setActiveForm(null);
+  };
+
+  const openProductStatusModal = (product) => {
+    setProductStatusTarget(product);
+    setError("");
+    setMessage("");
+  };
+
+  const closeProductStatusModal = () => {
+    setProductStatusTarget(null);
+  };
+
+  const handleToggleProductStatus = async () => {
+    if (!productStatusTarget) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      if (productStatusTarget.status === false) {
+        await updateProductRequest(productStatusTarget.id, { status: true });
+        setMessage("Producto activado exitosamente");
+      } else {
+        await deactivateProductRequest(productStatusTarget.id);
+        setMessage("Producto desactivado exitosamente");
+      }
+
+      setProductStatusTarget(null);
+      await loadData();
+    } catch (err) {
+      setError(getApiError(err, "No se pudo actualizar el estado del producto"));
+    }
   };
 
   const openCategoryForm = () => {
     setActiveForm("category");
     setEditingProductId(null);
+    setEditingCategoryId(null);
+    setCategoryName("");
+    setCategoryDescription("");
+    setCategoryListSearch("");
+    setCategoryDeleteTarget(null);
     setForm(emptyForm);
     setCategorySearch("");
     setShowCategorySuggestions(false);
-    setUnitSelection("unidad");
-    setUnitSearch("");
+    setUnitSearch("unidad");
     setShowUnitSuggestions(false);
     setError("");
     setMessage("");
@@ -455,8 +560,7 @@ export default function ProductsPage() {
     setForm(emptyForm);
     setCategorySearch("");
     setShowCategorySuggestions(false);
-    setUnitSelection("unidad");
-    setUnitSearch("");
+    setUnitSearch("unidad");
     setShowUnitSuggestions(false);
     setError("");
     setMessage("");
@@ -465,9 +569,6 @@ export default function ProductsPage() {
   const openMovementForm = (movementType) => {
     setActiveForm(movementType);
     setMovementForm(initialMovementForm(movementType));
-    setProductCategory("");
-    setMovementCategorySearch("");
-    setShowMovementCategorySuggestions(false);
     setProductSearch("");
     setShowMovementProductSuggestions(false);
     setError("");
@@ -478,25 +579,78 @@ export default function ProductsPage() {
   const closeCategoryForm = () => {
     setActiveForm(null);
     setCategoryName("");
+    setCategoryDescription("");
+    setEditingCategoryId(null);
+    setCategoryListSearch("");
+    setCategoryDeleteTarget(null);
+  };
+
+  const startEditingCategory = (category) => {
+    setEditingCategoryId(category.id);
+    setCategoryName(category.name);
+    setCategoryDescription(category.description || "");
+    setError("");
+    setMessage("");
+  };
+
+  const cancelCategoryEditing = () => {
+    setEditingCategoryId(null);
+    setCategoryName("");
+    setCategoryDescription("");
+    setError("");
+  };
+
+  const requestDeleteCategory = (category) => {
+    setError("");
+    setMessage("");
+
+    const productCount = categoryProductCounts.get(String(category.id)) || 0;
+    if (productCount > 0) {
+      setError("No se puede eliminar esta categoría porque tiene productos asociados. Modifique o reasigne los productos antes de eliminarla.");
+      return;
+    }
+
+    setCategoryDeleteTarget(category);
+  };
+
+  const closeCategoryDeleteModal = () => {
+    setCategoryDeleteTarget(null);
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!categoryDeleteTarget) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      await deleteCategoryRequest(categoryDeleteTarget.id);
+      if (editingCategoryId === categoryDeleteTarget.id) cancelCategoryEditing();
+      setMessage(`Categoria eliminada: ${categoryDeleteTarget.name}`);
+      setCategoryDeleteTarget(null);
+      await loadData();
+    } catch (err) {
+      setCategoryDeleteTarget(null);
+      setError(getApiError(err, "No se pudo eliminar la categoria"));
+    }
   };
 
   const closeMovementForm = () => {
     setActiveForm(null);
     setMovementForm(initialMovementForm());
-    setProductCategory("");
-    setMovementCategorySearch("");
-    setShowMovementCategorySuggestions(false);
     setProductSearch("");
     setShowMovementProductSuggestions(false);
   };
 
-  const handleUnitSelection = (value) => {
-    setUnitSelection(value);
-    setUnitSearch(value === OTHER_UNIT ? "" : value);
+  const useUnitMeasure = (value) => {
+    const unitMeasure = value.trim().replace(/\s+/g, " ");
+    if (!unitMeasure) return;
+
+    setUnitSearch(unitMeasure);
     setShowUnitSuggestions(false);
     setForm((current) => ({
       ...current,
-      unitMeasure: value === OTHER_UNIT ? "" : value,
+      unitMeasure,
     }));
   };
 
@@ -507,28 +661,10 @@ export default function ProductsPage() {
   };
 
   const selectUnitSuggestion = (unit) => {
-    handleUnitSelection(unit);
-  };
-
-  const selectMovementCategory = (category) => {
-    setProductCategory(String(category.id));
-    setMovementCategorySearch(category.name);
-    setShowMovementCategorySuggestions(false);
-    setMovementForm((current) => ({ ...current, productId: "" }));
-  };
-
-  const handleMovementCategorySelect = (categoryId) => {
-    const selectedCategory = movementProductCategories.find((category) => String(category.id) === String(categoryId));
-    setProductCategory(categoryId);
-    setMovementCategorySearch(selectedCategory?.name || "");
-    setShowMovementCategorySuggestions(false);
-    setMovementForm((current) => ({ ...current, productId: "" }));
+    useUnitMeasure(unit);
   };
 
   const selectMovementProduct = (product) => {
-    setProductCategory(String(product.categoryId));
-    setMovementCategorySearch(product.categoryName);
-    setShowMovementCategorySuggestions(false);
     setProductSearch(product.name);
     setShowMovementProductSuggestions(false);
     setMovementForm((current) => ({ ...current, productId: String(product.id) }));
@@ -554,19 +690,7 @@ export default function ProductsPage() {
     const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
 
     if (unit) selectUnitSuggestion(unit);
-  };
-
-  const handleMovementCategorySearchKeyDown = (event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    const category = getSingleOrExactSuggestion(
-      filteredMovementCategories,
-      movementCategorySearch,
-      (item) => [item.name, item.id, `#${item.id}`],
-    );
-
-    if (category) selectMovementCategory(category);
+    else if (unitSearch.trim()) useUnitMeasure(unitSearch);
   };
 
   const handleMovementProductSearchKeyDown = (event) => {
@@ -576,34 +700,27 @@ export default function ProductsPage() {
     const product = getSingleOrExactSuggestion(
       filteredMovementProducts,
       productSearch,
-      (item) => [item.name, item.id, `#${item.id}`],
+      (item) => [item.name, item.id, `#${item.id}`, item.categoryName],
     );
 
     if (product) selectMovementProduct(product);
   };
 
-  const handleMovementProductSelect = (productId) => {
-    if (!productId) {
-      setMovementForm((current) => ({ ...current, productId: "" }));
-      return;
-    }
-
-    const product = activeProducts.find((item) => String(item.id) === String(productId));
-    if (product) selectMovementProduct(product);
-  };
-
-  const updateMovementProductFilter = (field, value) => {
-    if (field === "category") handleMovementCategorySelect(value);
-    else {
-      setProductSearch(value);
-      setShowMovementProductSuggestions(Boolean(value.trim()));
-    }
+  const updateMovementProductSearch = (value) => {
+    setProductSearch(value);
+    setShowMovementProductSuggestions(Boolean(value.trim()));
     setMovementForm((current) => ({ ...current, productId: "" }));
   };
 
   const handleExportProducts = () => {
+    const filename = showInactiveProducts
+      ? "productos-desactivados.xlsx"
+      : lowStockOnly
+        ? "productos-a-reponer.xlsx"
+        : "inventario-productos.xlsx";
+
     downloadExcel({
-      filename: lowStockOnly ? "productos-a-reponer.xlsx" : "inventario-productos.xlsx",
+      filename,
       sheetName: "Productos",
       columns: [
         { key: "id", header: "ID" },
@@ -708,7 +825,7 @@ export default function ProductsPage() {
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.25 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
-            {canManage && (
+            {canViewInactiveProducts && (
               <>
             <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
               <FolderPlus size={17} />
@@ -738,14 +855,14 @@ export default function ProductsPage() {
 
       {message && <div className={alertClasses.success}>{message}</div>}
       {warning && <div className={alertClasses.warning}>{warning}</div>}
-      {error && !activeForm && <div className={alertClasses.error}>{error}</div>}
+      {error && !activeForm && !productStatusTarget && <div className={alertClasses.error}>{error}</div>}
 
       <AppModal
         open={canManage && activeForm === "category"}
-        title="Nueva categoría"
+        title={editingCategoryId ? "Editar categoría" : "Nueva categoría"}
         description="Organiza los productos dentro del catálogo."
         onClose={closeCategoryForm}
-        size="small"
+        size="medium"
       >
           <form className="grid gap-3.75" onSubmit={handleCreateCategory}>
             {error && <div className={alertClasses.error}>{error}</div>}
@@ -753,31 +870,104 @@ export default function ProductsPage() {
               Nombre
               <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required />
             </label>
-            <div className="grid gap-2">
-              <span className="text-[13px] font-[650] text-ink-700">Sugerencias comunes</span>
-              {availableCategorySuggestions.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {availableCategorySuggestions.map((category) => (
-                    <button
-                      className={`${secondaryButtonClass} mr-0 min-h-8 px-2.75 text-xs`}
-                      type="button"
-                      key={category}
-                      onClick={() => setCategoryName(category)}
-                      title="Usar esta sugerencia"
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className={suggestionEmptyClass}>Ya se están usando todas las sugerencias</p>
-              )}
+            <label>
+              Descripción
+              <input
+                value={categoryDescription}
+                onChange={(event) => setCategoryDescription(event.target.value)}
+                placeholder="Descripción opcional"
+              />
+            </label>
+            <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3">
+              <div className="flex items-center justify-between gap-3 max-[620px]:items-start max-[620px]:flex-col">
+                <span className="text-[13px] font-[650] text-ink-700">Categorías existentes</span>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {filteredExistingCategories.length} de {categories.length}
+                </span>
+              </div>
+              <label className="relative">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={categoryListSearch}
+                  onChange={(event) => setCategoryListSearch(event.target.value)}
+                  placeholder="Buscar por nombre o descripción"
+                />
+              </label>
+              <div className="grid max-h-56 gap-2 overflow-auto pr-1">
+                {categories.length === 0 ? (
+                  <p className="m-0 text-xs text-slate-500">Todavía no hay categorías registradas.</p>
+                ) : filteredExistingCategories.length === 0 ? (
+                  <p className={suggestionEmptyClass}>No se encontraron categorías con esa búsqueda.</p>
+                ) : (
+                  filteredExistingCategories
+                    .map((category) => {
+                      const productCount = categoryProductCounts.get(String(category.id)) || 0;
+
+                      return (
+                        <article className="flex items-center justify-between gap-3 rounded-[5px] border border-slate-200 bg-white px-3 py-2 max-[620px]:items-start max-[620px]:flex-col" key={category.id}>
+                          <div className="grid min-w-0 gap-0.5">
+                            <strong className="truncate text-[13px] text-ink-950">{category.name}</strong>
+                            <span className="text-[11px] text-slate-500">
+                              {category.description || "Sin descripción"} · {productCount} productos asociados
+                            </span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              className={`${secondaryButtonClass} mr-0 min-h-8 px-2.5 text-xs`}
+                              type="button"
+                              onClick={() => startEditingCategory(category)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className={`${dangerButtonClass} min-h-8 px-2.5 text-xs`}
+                              type="button"
+                              onClick={() => requestDeleteCategory(category)}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })
+                )}
+              </div>
             </div>
-            <div className={formActionsClass}>
-              <button className={secondaryButtonClass} type="button" onClick={closeCategoryForm}>Cancelar</button>
-              <button type="submit">Guardar categoría</button>
+            <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+              {editingCategoryId ? (
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={cancelCategoryEditing}>
+                  Cancelar edición
+                </button>
+              ) : (
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeCategoryForm}>
+                  Cancelar
+                </button>
+              )}
+              <button className="mr-0" type="submit">
+                {editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
+              </button>
             </div>
           </form>
+      </AppModal>
+
+      <AppModal
+        open={canManage && Boolean(categoryDeleteTarget)}
+        title="Eliminar categoría"
+        description={categoryDeleteTarget ? `¿Estás seguro de eliminar la categoría "${categoryDeleteTarget.name}"? Esta acción no se puede deshacer.` : ""}
+        onClose={closeCategoryDeleteModal}
+        size="small"
+      >
+        <div className="grid gap-4">
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeCategoryDeleteModal}>
+              No, volver
+            </button>
+            <button className={dangerButtonClass} type="button" onClick={confirmDeleteCategory}>
+              Sí, eliminar
+            </button>
+          </div>
+        </div>
       </AppModal>
 
       <AppModal
@@ -789,67 +979,44 @@ export default function ProductsPage() {
       >
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
             {error && <div className={alertClasses.error}>{error}</div>}
-            <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-              <label className="relative">
-                Buscar categoría
-                <div className="relative">
-                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                  <input
-                    className="pl-9.75"
-                    value={categorySearch}
-                    onChange={(event) => {
-                      setCategorySearch(event.target.value);
-                      setShowCategorySuggestions(Boolean(event.target.value.trim()));
-                    }}
-                    onFocus={() => setShowCategorySuggestions(Boolean(categorySearch.trim()))}
-                    onKeyDown={handleProductCategorySearchKeyDown}
-                    placeholder="Nombre o ID de categoría"
-                  />
-                </div>
-                {showCategorySuggestions && categorySearch.trim() && (
-                  filteredFormCategories.length > 0 ? (
-                    <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                      {filteredFormCategories.slice(0, 6).map((category) => (
-                        <button
-                          className={suggestionButtonClass}
-                          type="button"
-                          key={category.id}
-                          onClick={() => selectProductCategory(category)}
-                        >
-                          <span>{category.name}</span>
-                          <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
-                  )
-                )}
-              </label>
-              <label>
-                Categoría
-                <select
-                  value={form.categoryId}
+            <label className="relative">
+              Buscar categoría
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={categorySearch}
                   onChange={(event) => {
-                    const selectedCategory = categories.find((category) => String(category.id) === event.target.value);
-                    setForm((current) => ({ ...current, categoryId: event.target.value }));
-                    if (selectedCategory) setCategorySearch(selectedCategory.name);
-                    setShowCategorySuggestions(false);
+                    setCategorySearch(event.target.value);
+                    setForm((current) => ({ ...current, categoryId: "" }));
+                    setShowCategorySuggestions(Boolean(event.target.value.trim()));
                   }}
+                  onFocus={() => setShowCategorySuggestions(Boolean(categorySearch.trim()))}
+                  onKeyDown={handleProductCategorySearchKeyDown}
+                  placeholder="Nombre o ID de categoría"
                   required
-                >
-                  <option value="">Seleccionar</option>
-                  {filteredFormCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                  {filteredFormCategories.length === 0 && (
-                    <option disabled>No se encontraron categorías</option>
-                  )}
-                </select>
-              </label>
-            </div>
+                />
+              </div>
+              {showCategorySuggestions && categorySearch.trim() && (
+                filteredFormCategories.length > 0 ? (
+                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                    {filteredFormCategories.slice(0, 6).map((category) => (
+                      <button
+                        className={suggestionButtonClass}
+                        type="button"
+                        key={category.id}
+                        onClick={() => selectProductCategory(category)}
+                      >
+                        <span>{category.name}</span>
+                        <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
+                )
+              )}
+            </label>
             <label>
               Nombre
               <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
@@ -861,52 +1028,43 @@ export default function ProductsPage() {
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
               />
             </label>
-            <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-              <label className="relative">
-                Buscar unidad de medida
-                <div className="relative">
-                  <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                  <input
-                    className="pl-9.75"
-                    value={unitSearch}
-                    onChange={(event) => {
-                      setUnitSearch(event.target.value);
-                      setShowUnitSuggestions(Boolean(event.target.value.trim()));
-                    }}
-                    onFocus={() => setShowUnitSuggestions(Boolean(unitSearch.trim()))}
-                    onKeyDown={handleUnitSearchKeyDown}
-                    placeholder="Ej: caja, kg, metro"
-                  />
-                </div>
-                {showUnitSuggestions && unitSearch.trim() && (
-                  filteredUnitOptions.length > 0 ? (
-                    <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                      {filteredUnitOptions.slice(0, 6).map((unit) => (
-                        <button
-                          className={suggestionButtonClass}
-                          type="button"
-                          key={unit}
-                          onClick={() => selectUnitSuggestion(unit)}
-                        >
-                          <span>{unit}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron unidades</p>
-                  )
-                )}
-              </label>
-              <label>
-                Unidad de medida
-                <select value={unitSelection} onChange={(event) => handleUnitSelection(event.target.value)} required>
-                  {UNIT_OPTIONS.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
-                  <option value={OTHER_UNIT}>Otra unidad</option>
-                </select>
-              </label>
-            </div>
+            <label className="relative">
+              Buscar unidad de medida
+              <div className="relative">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={unitSearch}
+                  onChange={(event) => {
+                    setUnitSearch(event.target.value);
+                    setForm((current) => ({ ...current, unitMeasure: event.target.value }));
+                    setShowUnitSuggestions(Boolean(event.target.value.trim()));
+                  }}
+                  onFocus={() => setShowUnitSuggestions(Boolean(unitSearch.trim()))}
+                  onKeyDown={handleUnitSearchKeyDown}
+                  placeholder="Ej: caja, kg, metro"
+                  required
+                />
+              </div>
+              {showUnitSuggestions && unitSearch.trim() && (
+                filteredUnitOptions.length > 0 ? (
+                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                    {filteredUnitOptions.slice(0, 6).map((unit) => (
+                      <button
+                        className={suggestionButtonClass}
+                        type="button"
+                        key={unit}
+                        onClick={() => selectUnitSuggestion(unit)}
+                      >
+                        <span>{unit}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron unidades (presione Enter para agregar)</p>
+                )
+              )}
+            </label>
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Precio
@@ -927,23 +1085,47 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            {unitSelection === OTHER_UNIT && (
-              <label>
-                Unidad personalizada
-                <input
-                  value={form.unitMeasure}
-                  onChange={(event) => setForm((current) => ({ ...current, unitMeasure: event.target.value }))}
-                  placeholder="Ejemplo: balde"
-                  maxLength="50"
-                  required
-                />
-              </label>
-            )}
             <div className={formActionsClass}>
               <button className={secondaryButtonClass} type="button" onClick={cancelEditing}>Cancelar</button>
               <button type="submit">{editingProductId ? "Actualizar producto" : "Guardar producto"}</button>
             </div>
           </form>
+      </AppModal>
+
+      <AppModal
+        open={canManage && Boolean(productStatusTarget)}
+        title={productStatusTarget?.status === false ? "Activar producto" : "Desactivar producto"}
+        description={productStatusTarget?.status === false
+          ? "¿Estás seguro de activar este producto? El producto volverá a estar disponible para su uso en el sistema."
+          : "¿Estás seguro de desactivar este producto? No podrá ser utilizado en nuevas ventas, pero se mantendrá su historial."}
+        onClose={closeProductStatusModal}
+        size="small"
+      >
+        <div className="grid gap-4">
+          {error && <div className={alertClasses.error}>{error}</div>}
+          {productStatusTarget && (
+            <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
+              <span className="text-xs font-semibold text-slate-500">Producto seleccionado</span>
+              <strong className="mt-1 block text-ink-950">{productStatusTarget.name}</strong>
+            </div>
+          )}
+          <div className={formActionsClass}>
+            <button className={secondaryButtonClass} type="button" onClick={closeProductStatusModal}>
+              No, volver
+            </button>
+            {productStatusTarget?.status === false ? (
+              <button type="button" onClick={handleToggleProductStatus}>
+                <CheckCircle size={17} />
+                Sí, activar
+              </button>
+            ) : (
+              <button className={dangerButtonClass} type="button" onClick={handleToggleProductStatus}>
+                <XCircle size={17} />
+                Sí, desactivar
+              </button>
+            )}
+          </div>
+        </div>
       </AppModal>
 
       <AppModal
@@ -966,114 +1148,40 @@ export default function ProductsPage() {
               </div>
             </div>
           )}
-          <div className="grid grid-cols-2 items-start gap-3 max-[720px]:grid-cols-1">
-            <label className="relative">
-              Buscar categoría
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={movementCategorySearch}
-                  onChange={(event) => {
-                    setMovementCategorySearch(event.target.value);
-                    setShowMovementCategorySuggestions(Boolean(event.target.value.trim()));
-                  }}
-                  onFocus={() => setShowMovementCategorySuggestions(Boolean(movementCategorySearch.trim()))}
-                  onKeyDown={handleMovementCategorySearchKeyDown}
-                  placeholder="Nombre o ID de categoría"
-                />
-              </div>
-              {showMovementCategorySuggestions && movementCategorySearch.trim() && (
-                filteredMovementCategories.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredMovementCategories.slice(0, 6).map((category) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={category.id}
-                        onClick={() => selectMovementCategory(category)}
-                      >
-                        <span>{category.name}</span>
-                        <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
-                )
-              )}
-            </label>
-            <label>
-              Categoría
-              <select
-                value={productCategory}
-                onChange={(event) => updateMovementProductFilter("category", event.target.value)}
-              >
-                <option value="">Todas las categorías</option>
-                {filteredMovementCategories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-                {filteredMovementCategories.length === 0 && (
-                  <option disabled>No se encontraron categorías</option>
-                )}
-              </select>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 items-start gap-3 max-[720px]:grid-cols-1">
-            <label className="relative">
-              Buscar producto
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={productSearch}
-                  onChange={(event) => updateMovementProductFilter("search", event.target.value)}
-                  onFocus={() => setShowMovementProductSuggestions(Boolean(productSearch.trim()))}
-                  onKeyDown={handleMovementProductSearchKeyDown}
-                  placeholder="Nombre o ID de producto"
-                />
-              </div>
-              {showMovementProductSuggestions && productSearch.trim() && (
-                filteredMovementProducts.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredMovementProducts.slice(0, 6).map((product) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={product.id}
-                        onClick={() => selectMovementProduct(product)}
-                      >
-                        <span>{product.name}</span>
-                        <span className="font-mono text-[11px] text-slate-500">#{product.id}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron productos activos</p>
-                )
-              )}
-            </label>
-            <label>
-              Producto
-              <select
-                value={movementForm.productId}
-                onChange={(event) => handleMovementProductSelect(event.target.value)}
+          <label className="relative">
+            Buscar producto
+            <div className="relative">
+              <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+              <input
+                className="pl-9.75"
+                value={productSearch}
+                onChange={(event) => updateMovementProductSearch(event.target.value)}
+                onFocus={() => setShowMovementProductSuggestions(Boolean(productSearch.trim()))}
+                onKeyDown={handleMovementProductSearchKeyDown}
+                placeholder="Buscar por producto, ID o categoría"
                 required
-              >
-                <option value="">
-                  {hasProductFilter ? "Seleccionar producto" : "Elige categoría o busca por nombre"}
-                </option>
-                {hasProductFilter && filteredMovementProducts.length === 0 && (
-                  <option disabled>Sin productos activos para este filtro</option>
-                )}
-                {filteredMovementProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    #{product.id} · {product.name} · {product.categoryName} · stock {product.currentStock} · mínimo {product.minimumStock}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+              />
+            </div>
+            {showMovementProductSuggestions && productSearch.trim() && (
+              filteredMovementProducts.length > 0 ? (
+                <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
+                  {filteredMovementProducts.slice(0, 6).map((product) => (
+                    <button
+                      className={suggestionButtonClass}
+                      type="button"
+                      key={product.id}
+                      onClick={() => selectMovementProduct(product)}
+                    >
+                      <span>{product.name} - {product.categoryName}</span>
+                      <span className="font-mono text-[11px] text-slate-500">#{product.id}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron productos activos</p>
+              )
+            )}
+          </label>
           <label>
             {movementForm.movementType === "ENTRY" ? "Cantidad a ingresar" : "Nuevo stock exacto"}
             <input
@@ -1143,17 +1251,32 @@ export default function ProductsPage() {
             <h2>Inventario de productos</h2>
             <p>{formatTableRecordCount({
               visibleCount: productsPagination.paginatedItems.length,
-              totalCount: products.length,
+              totalCount: visibleStatusProducts.length,
               filteredCount: filteredProducts.length,
               hasFilters: hasListFilters,
             })}</p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {canViewAdministrativeStock && (
+            {canViewInactiveProducts && (
               <button
-                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                type="button"
+                onClick={() => {
+                  setShowInactiveProducts((current) => !current);
+                  setLowStockOnly(false);
+                }}
+                disabled={lowStockOnly}
+                aria-pressed={showInactiveProducts}
+              >
+                {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button
+                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                 type="button"
                 onClick={() => setLowStockOnly((current) => !current)}
+                disabled={showInactiveProducts}
                 aria-pressed={lowStockOnly}
               >
                 {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
@@ -1172,7 +1295,8 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
-        <table>
+        <div className={tableScrollClass}>
+          <table>
           <thead>
             <tr>
               <th>ID</th>
@@ -1197,18 +1321,33 @@ export default function ProductsPage() {
                 <td>{product.unitMeasure}</td>
                 {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
                 <td>
-                  {isLowStockProduct(product) ? (
+                  {product.status === false ? (
+                    <span className={badgeClass("neutral")}>Desactivado</span>
+                  ) : isLowStockProduct(product) ? (
                     <span className={badgeClass("warning")}>{lowStockStatusLabel}</span>
                   ) : (
                     <span className={badgeClass("success")}>Disponible</span>
                   )}
                 </td>
                 {canManage && (
-                  <td>
-                    <button className={`${secondaryButtonClass} ${tableActionButtonClass}`} type="button" onClick={() => startEditing(product)}>
-                      <Pencil size={17} />
-                      Editar
-                    </button>
+                  <td className="w-[1%] whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5">
+                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => startEditing(product)}>
+                        <Pencil size={17} />
+                        Editar
+                      </button>
+                      {product.status === false ? (
+                        <button className={`${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
+                          <CheckCircle size={17} />
+                          Activar
+                        </button>
+                      ) : (
+                        <button className={`${dangerButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
+                          <XCircle size={17} />
+                          Desactivar
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
@@ -1221,7 +1360,8 @@ export default function ProductsPage() {
               </tr>
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -1256,7 +1396,8 @@ export default function ProductsPage() {
               </button>
             )}
           </div>
-          <table>
+          <div className={tableScrollClass}>
+            <table>
             <thead>
               <tr>
                 <th>Fecha</th>
@@ -1296,7 +1437,8 @@ export default function ProductsPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
           <Pagination
             page={movementsPagination.page}
             pageSize={movementsPagination.pageSize}

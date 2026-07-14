@@ -24,6 +24,7 @@ import {
   secondaryButtonClass,
   tableHeadingClass,
   tablePanelClass,
+  tableScrollClass,
 } from "../helpers/uiClasses.js";
 
 const REPORT_DATE_OPTIONS = {
@@ -184,7 +185,7 @@ export default function ReportsPage() {
       sheetName: "Ventas",
       columns: [
         { key: "folio", header: "Folio de venta" },
-        { key: "fecha", header: "Fecha" },
+        { key: "fecha", header: "Fecha y hora" },
         { key: "cajero", header: "Cajero" },
         { key: "metodoPago", header: "Método de pago" },
         { key: "estado", header: "Estado" },
@@ -404,38 +405,40 @@ export default function ReportsPage() {
             </button>
           </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Fecha</th>
-              <th>Cajero</th>
-              <th>Método</th>
-              <th>Total</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reportSales.length ? salesPagination.paginatedItems.map((sale) => (
-              <tr key={sale.id}>
-                <td>#{sale.id}</td>
-                <td>{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</td>
-                <td>{sale.cashierNames} {sale.cashierSurnames}</td>
-                <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
-                <td className={numericCellClass}>{formatClp(sale.total)}</td>
-                <td>
-                  <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
-                    {getSaleStatusLabel(sale.status)}
-                  </span>
-                </td>
-              </tr>
-            )) : (
+        <div className={tableScrollClass}>
+          <table>
+            <thead>
               <tr>
-                <td className={emptyTableCellClass} colSpan="6">No hay ventas para los filtros seleccionados.</td>
+                <th>ID</th>
+                <th>Fecha y hora</th>
+                <th>Cajero</th>
+                <th>Método</th>
+                <th>Total</th>
+                <th>Estado</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {reportSales.length ? salesPagination.paginatedItems.map((sale) => (
+                <tr key={sale.id}>
+                  <td>#{sale.id}</td>
+                  <td>{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</td>
+                  <td>{sale.cashierNames} {sale.cashierSurnames}</td>
+                  <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
+                  <td className={numericCellClass}>{formatClp(sale.total)}</td>
+                  <td>
+                    <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
+                      {getSaleStatusLabel(sale.status)}
+                    </span>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td className={emptyTableCellClass} colSpan="6">No hay ventas para los filtros seleccionados.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <Pagination
           page={salesPagination.page}
           pageSize={salesPagination.pageSize}

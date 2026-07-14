@@ -18,6 +18,7 @@ import {
   tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
+  tableScrollClass,
 } from "../helpers/uiClasses.js";
 import usePagination from "../hooks/usePagination.js";
 import {
@@ -537,62 +538,64 @@ export default function UsersPage() {
             })}</p>
           </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Usuario</th>
-              <th>RUT</th>
-              <th>Correo</th>
-              <th>Teléfono</th>
-              <th>Rol</th>
-              <th>Horario</th>
-              <th>Estado</th>
-              <th>Creado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usersPagination.paginatedItems.map((user) => (
-              <tr key={user.id}>
-                <td className={codeCellClass}>#{user.id}</td>
-                <td>{user.names} {user.surnames}</td>
-                <td>{user.rut}</td>
-                <td>{user.correo}</td>
-                <td>{user.phone || "-"}</td>
-                <td>{ROLE_NAMES[user.roleName] || user.roleName}</td>
-                <td>{user.roleName === "CASHIER" ? formatWorkSchedule(user) : "-"}</td>
-                <td>
-                  <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
-                    {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
-                  </span>
-                </td>
-                <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
-                <td>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => startEditing(user)}>
-                      <Pencil size={17} />
-                      Editar
-                    </button>
-                    {user.roleName === "CASHIER" && (
-                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => openScheduleForm(user)}>
-                        <Clock3 size={16} />
-                        {user.workShift ? "Modificar horario" : "Configurar horario"}
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredUsers.length === 0 && (
+        <div className={tableScrollClass}>
+          <table>
+            <thead>
               <tr>
-                <td className={emptyTableCellClass} colSpan="10">
-                  {users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con la búsqueda ingresada."}
-                </td>
+                <th>ID</th>
+                <th>Usuario</th>
+                <th>RUT</th>
+                <th>Correo</th>
+                <th>Teléfono</th>
+                <th>Rol</th>
+                <th>Horario</th>
+                <th>Estado</th>
+                <th>Creado</th>
+                <th>Acciones</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {usersPagination.paginatedItems.map((user) => (
+                <tr key={user.id}>
+                  <td className={codeCellClass}>#{user.id}</td>
+                  <td>{user.names} {user.surnames}</td>
+                  <td>{user.rut}</td>
+                  <td>{user.correo}</td>
+                  <td>{user.phone || "-"}</td>
+                  <td>{ROLE_NAMES[user.roleName] || user.roleName}</td>
+                  <td>{user.roleName === "CASHIER" ? formatWorkSchedule(user) : "-"}</td>
+                  <td>
+                    <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
+                      {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
+                    </span>
+                  </td>
+                  <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
+                  <td>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => startEditing(user)}>
+                        <Pencil size={17} />
+                        Editar
+                      </button>
+                      {user.roleName === "CASHIER" && (
+                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => openScheduleForm(user)}>
+                          <Clock3 size={16} />
+                          {user.workShift ? "Modificar horario" : "Configurar horario"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td className={emptyTableCellClass} colSpan="10">
+                    {users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con la búsqueda ingresada."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <Pagination
           page={usersPagination.page}
           pageSize={usersPagination.pageSize}

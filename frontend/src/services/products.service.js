@@ -14,3 +14,8 @@ export async function updateProductRequest(id, data) {
   const response = await api.patch(`/products/${id}`, data);
   return response.data.data;
 }
+
+export async function deactivateProductRequest(id) {
+  const response = await api.delete(`/products/${id}`);
+  return response.data.data;
+}

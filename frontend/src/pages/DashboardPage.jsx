@@ -1,5 +1,6 @@
-import { AlertTriangle, ArrowLeftRight, DollarSign, PackageCheck, ShoppingCart } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, DollarSign, PackageCheck, PackageX, ShoppingCart } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
 import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
 import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
@@ -31,6 +32,7 @@ const DASHBOARD_DATE_OPTIONS = {
   hour: "2-digit",
   minute: "2-digit",
 };
+const quickLinkClass = "cursor-pointer transition hover:-translate-y-0.5 hover:border-rust-300 hover:shadow-[0_8px_18px_rgba(16,21,31,0.08)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500";
 
 function isRecent(value, days = 7) {
   const date = new Date(value);
@@ -52,6 +54,7 @@ function isToday(value) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [movements, setMovements] = useState([]);
@@ -61,6 +64,28 @@ export default function DashboardPage() {
   const canViewSales = ROUTE_PERMISSIONS.sales.includes(user?.role);
   const canViewInventoryHistory = ["ADMIN", "MANAGER"].includes(user?.role);
   const canViewStockReplenishment = user?.role !== "CASHIER";
+  const canUseLowStockFilter = user?.role !== "CASHIER";
+  const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
+
+  const goTo = (path) => {
+    if (path) navigate(path);
+  };
+
+  const quickLinkProps = (path) => {
+    if (!path) return {};
+
+    return {
+      role: "button",
+      tabIndex: 0,
+      onClick: () => goTo(path),
+      onKeyDown: (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          goTo(path);
+        }
+      },
+    };
+  };
 
   useEffect(() => {
     let active = true;
@@ -101,6 +126,10 @@ export default function DashboardPage() {
     () => activeProducts.filter(isLowStockProduct),
     [activeProducts],
   );
+  const inactiveProducts = useMemo(
+    () => products.filter((product) => product.status === false),
+    [products],
+  );
   const activeSales = useMemo(
     () => sales.filter((sale) => sale.status === "ACTIVE"),
     [sales],
@@ -137,6 +166,7 @@ export default function DashboardPage() {
       value: activeProducts.length,
       icon: PackageCheck,
       tone: "neutral",
+      path: ROUTE_PERMISSIONS.products.includes(user?.role) ? "/products" : null,
     },
     ...(canViewStockReplenishment
       ? [{
@@ -144,21 +174,33 @@ export default function DashboardPage() {
         value: lowStockProducts.length,
         icon: AlertTriangle,
         tone: "warning",
+        path: ROUTE_PERMISSIONS.products.includes(user?.role) ? `/products${canUseLowStockFilter ? "?filter=low-stock" : ""}` : null,
+      }]
+      : []),
+    ...(canViewInactiveProducts
+      ? [{
+        label: "Productos desactivados",
+        value: inactiveProducts.length,
+        icon: PackageX,
+        tone: "neutral",
+        path: ROUTE_PERMISSIONS.products.includes(user?.role) ? "/products?filter=inactive" : null,
       }]
       : []),
     ...(canViewSales
-      ? [{ label: "Ventas activas", value: activeSales.length, icon: ShoppingCart, tone: "positive" }]
+      ? [{ label: "Ventas activas", value: activeSales.length, icon: ShoppingCart, tone: "positive", path: "/sales?view=history" }]
       : []),
     ...(user?.role === "CASHIER"
-      ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive" }]
+      ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive", path: "/sales?view=history" }]
       : []),
     ...(canViewInventoryHistory
-      ? [{ label: "Movimientos recientes", value: recentMovements.length, icon: ArrowLeftRight, tone: "neutral" }]
+      ? [{ label: "Movimientos recientes", value: recentMovements.length, icon: ArrowLeftRight, tone: "neutral", path: "/products?view=history" }]
       : []),
   ];
   const metricsGridColumnsClass = user?.role === "WAREHOUSE"
     ? "grid-cols-2"
-    : metrics.length >= 4
+    : metrics.length >= 5
+      ? "grid-cols-5"
+      : metrics.length >= 4
       ? "grid-cols-4"
       : "grid-cols-3";
   const metricsGridClass = `grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
@@ -167,7 +209,7 @@ export default function DashboardPage() {
     <section className={`${pageClass} gap-4.5`}>
       <div className={pageHeaderClass}>
         <div>
-          <h1>Hola, {user?.names}</h1>
+          <h1>{user?.role === "ADMIN" ? "Panel de administración" : `Hola, ${user?.names}`}</h1>
           <p>Este es el resumen general del sistema para tu jornada.</p>
         </div>
       </div>
@@ -182,7 +224,11 @@ export default function DashboardPage() {
             {metrics.map((metric) => {
               const Icon = metric.icon;
               return (
-                <article className={metricCardClass} key={metric.label}>
+                <article
+                  className={`${metricCardClass} ${metric.path ? quickLinkClass : ""}`}
+                  key={metric.label}
+                  {...quickLinkProps(metric.path)}
+                >
                   <span className={metricIconClasses[metric.tone]}><Icon size={20} /></span>
                   <strong>{metric.value}</strong>
                   <span>{metric.label}</span>
@@ -193,7 +239,10 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
             {canViewStockReplenishment && (
-              <section className={dashboardPanelClass}>
+              <section
+                className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
+                {...quickLinkProps(ROUTE_PERMISSIONS.products.includes(user?.role) ? `/products${canUseLowStockFilter ? "?filter=low-stock" : ""}` : null)}
+              >
                 <div className={dashboardPanelHeadingClass}>
                   <div>
                     <h2>Productos a reponer</h2>
@@ -224,7 +273,10 @@ export default function DashboardPage() {
             )}
 
             {canViewSales && (
-              <section className={dashboardPanelClass}>
+              <section
+                className={`${dashboardPanelClass} ${canViewSales ? quickLinkClass : ""}`}
+                {...quickLinkProps(canViewSales ? "/sales?view=history" : null)}
+              >
                 <div className={dashboardPanelHeadingClass}>
                   <div>
                     <h2>Últimas ventas</h2>
@@ -257,7 +309,10 @@ export default function DashboardPage() {
             )}
 
             {canViewInventoryHistory && (
-              <section className={dashboardPanelClass}>
+              <section
+                className={`${dashboardPanelClass} ${canViewInventoryHistory ? quickLinkClass : ""}`}
+                {...quickLinkProps(canViewInventoryHistory ? "/products?view=history" : null)}
+              >
                 <div className={dashboardPanelHeadingClass}>
                   <div>
                     <h2>Movimientos recientes</h2>

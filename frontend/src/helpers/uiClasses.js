@@ -4,7 +4,9 @@ export const pageHeaderClass = "flex flex-wrap items-start justify-between gap-4
 
 export const panelClass = "grid content-start gap-[15px] rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.04)]";
 
-export const tablePanelClass = "overflow-auto rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,21,31,0.04)] [&_table]:min-w-[720px] [&_thead_tr]:h-9 [&_tbody_tr]:h-11 [&_td]:px-3.5 [&_td]:py-1.5 [&_td]:text-[13px] [&_th]:px-3.5 [&_th]:py-2 [&_th]:text-xs";
+export const tablePanelClass = "overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,21,31,0.04)] [&_table]:min-w-[720px] [&_thead_tr]:h-9 [&_tbody_tr]:h-11 [&_td]:px-3.5 [&_td]:py-1.5 [&_td]:text-[13px] [&_th]:px-3.5 [&_th]:py-2 [&_th]:text-xs";
+
+export const tableScrollClass = "w-full overflow-x-auto";
 
 export const tableHeadingClass = "flex min-h-[58px] items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
 

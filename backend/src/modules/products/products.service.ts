@@ -18,12 +18,12 @@ export class ProductError extends Error {
   }
 }
 
-export async function getProductsService() {
-  return findProducts();
+export async function getProductsService(includeInactive = false) {
+  return findProducts(includeInactive);
 }
 
-export async function getProductByIdService(id: number) {
-  const product = await findProductById(id);
+export async function getProductByIdService(id: number, includeInactive = false) {
+  const product = await findProductById(id, includeInactive);
   if (!product) throw new Error("Producto no encontrado");
   return product;
 }
@@ -38,7 +38,7 @@ export async function createProductService(data: ProductBody) {
 }
 
 export async function editProductService(id: number, data: EditProductBody) {
-  const currentProduct = await findProductById(id);
+  const currentProduct = await findProductById(id, true);
   if (!currentProduct) throw new ProductError("Producto no encontrado", 404);
 
   const categoryId = data.categoryId ?? currentProduct.categoryId;

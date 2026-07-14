@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import {
+  CategoryError,
   createCategoryService,
   deleteCategoryService,
   editCategoryService,
@@ -49,6 +50,7 @@ export async function createCategoryController(req: Request, res: Response) {
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
     return handleSuccess(res, 201, "Categoria creada exitosamente", await createCategoryService(validation.value));
   } catch (error) {
+    if (error instanceof CategoryError) return handleErrorClient(res, error.statusCode, error.message);
     if (isUniqueError(error)) return handleErrorClient(res, 409, "Ya existe una categoria con estos datos");
     return handleErrorServer(res, 500, "Error al crear categoria", getErrorMessage(error));
   }
@@ -62,6 +64,7 @@ export async function editCategory(req: Request, res: Response) {
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
     return handleSuccess(res, 200, "Categoria actualizada exitosamente", await editCategoryService(id, validation.value));
   } catch (error) {
+    if (error instanceof CategoryError) return handleErrorClient(res, error.statusCode, error.message);
     const message = getErrorMessage(error);
     if (message === "Categoria no encontrada") return handleErrorClient(res, 404, message);
     if (isUniqueError(error)) return handleErrorClient(res, 409, "Ya existe una categoria con estos datos");
@@ -76,6 +79,7 @@ export async function deleteCategory(req: Request, res: Response) {
     if (!(await deleteCategoryService(id))) return handleErrorClient(res, 404, "Categoria no encontrada");
     return handleSuccess(res, 200, "Categoria eliminada exitosamente");
   } catch (error) {
+    if (error instanceof CategoryError) return handleErrorClient(res, error.statusCode, error.message);
     return handleErrorServer(res, 500, "Error al eliminar categoria", getErrorMessage(error));
   }
 }

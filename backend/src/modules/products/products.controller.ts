@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import {
   createProductService,
@@ -37,19 +38,21 @@ function databaseErrorCode(error: unknown): string | null {
   return null;
 }
 
-export async function getProducts(_req: Request, res: Response) {
+export async function getProducts(req: AuthenticatedRequest, res: Response) {
   try {
-    return handleSuccess(res, 200, "Productos obtenidos exitosamente", await getProductsService());
+    const includeInactive = req.user?.role === "ADMIN" || req.user?.role === "MANAGER";
+    return handleSuccess(res, 200, "Productos obtenidos exitosamente", await getProductsService(includeInactive));
   } catch (error) {
     return handleErrorServer(res, 500, "Error al obtener productos", msg(error));
   }
 }
 
-export async function getProductById(req: Request, res: Response) {
+export async function getProductById(req: AuthenticatedRequest, res: Response) {
   try {
     const id = parseId(req.params.id);
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    return handleSuccess(res, 200, "Producto encontrado", await getProductByIdService(id));
+    const includeInactive = req.user?.role === "ADMIN" || req.user?.role === "MANAGER";
+    return handleSuccess(res, 200, "Producto encontrado", await getProductByIdService(id, includeInactive));
   } catch (error) {
     const message = msg(error);
     if (message === "Producto no encontrado") return handleErrorClient(res, 404, message);
@@ -96,8 +99,8 @@ export async function deleteProduct(req: Request, res: Response) {
     const id = parseId(req.params.id);
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
     if (!(await deleteProductService(id))) return handleErrorClient(res, 404, "Producto no encontrado");
-    return handleSuccess(res, 200, "Producto eliminado exitosamente");
+    return handleSuccess(res, 200, "Producto desactivado exitosamente");
   } catch (error) {
-    return handleErrorServer(res, 500, "Error al eliminar producto", msg(error));
+    return handleErrorServer(res, 500, "Error al desactivar producto", msg(error));
   }
 }

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Seba.2005}
       POSTGRES_DB: ${POSTGRES_DB:-ferreteria}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     networks:
       - backend_network
     volumes:
@@ -31,7 +31,7 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: db
-      DB_PORT: ${DB_PORT:-5432}
+      DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-Seba.2005}
       DATABASE: ${DATABASE:-ferreteria}
@@ -41,6 +41,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "3000:3000"
     networks:
@@ -52,6 +54,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: build
+    container_name: ferreteria-migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${DB_USERNAME:-postgres}:${DB_PASSWORD:-Seba.2005}@db:5432/${DATABASE:-ferreteria}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npm", "run", "db:migrate"]
+    networks:
+      - backend_network
 
   frontend:
     build:

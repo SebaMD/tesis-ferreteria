@@ -221,14 +221,14 @@ export default function ReportsPage() {
           </div>
           <div className="flex w-fit max-w-full shrink-0 gap-2 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "single" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "single" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => handleDateModeChange("single")}
             >
               Un día
             </button>
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "range" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "range" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => handleDateModeChange("range")}
             >
@@ -319,7 +319,7 @@ export default function ReportsPage() {
             <span className={panelCountClass}>{displayedCashierSummary.length}</span>
           </div>
           {(report?.byCashier?.length || 0) > 0 && (
-            <label className="relative mx-[18px] mt-3 block">
+            <label className="relative mx-4.5 mt-3 block">
               <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={16} />
               <input
                 className="min-h-9 pl-9.5 text-xs"

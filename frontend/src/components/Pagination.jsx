@@ -20,7 +20,7 @@ export default function Pagination({ page, pageSize, totalItems, totalPages, onP
   const visiblePages = getVisiblePages(page, totalPages);
 
   return (
-    <nav className="flex min-h-[49px] flex-wrap items-center justify-center gap-1.5 border-t border-slate-200 px-4 py-2" aria-label="Paginación">
+    <nav className="flex min-h-12.25 flex-wrap items-center justify-center gap-1.5 border-t border-slate-200 px-4 py-2" aria-label="Paginación">
       <button
         className="min-h-8 border-slate-300 bg-white px-2.75 text-xs text-ink-700 hover:border-rust-500 hover:bg-rust-50 hover:text-rust-600"
         type="button"

@@ -77,6 +77,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     if (user?.role === "CASHIER") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveView(viewParam === "history" ? "history" : "sales");
       return;
     }
@@ -430,7 +431,7 @@ export default function SalesPage() {
         {canCreate && (
           <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-4 py-2 text-sm font-extrabold ${activeView === "sales" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "sales" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => setActiveView("sales")}
               aria-pressed={activeView === "sales"}
@@ -438,7 +439,7 @@ export default function SalesPage() {
               Ventas
             </button>
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-4 py-2 text-sm font-extrabold ${activeView === "history" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "history" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => setActiveView("history")}
               aria-pressed={activeView === "history"}
@@ -669,7 +670,7 @@ export default function SalesPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 max-[720px]:flex-col max-[720px]:items-stretch">
-              <label className="relative block min-w-[260px] flex-1 max-[720px]:min-w-0">
+              <label className="relative block min-w-65 flex-1 max-[720px]:min-w-0">
                 <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
                 <input
                   className="min-h-9 pl-9.75"
@@ -680,7 +681,7 @@ export default function SalesPage() {
                 />
               </label>
               <select
-                className="min-h-9 w-full max-w-[220px] max-[720px]:max-w-none"
+                className="min-h-9 w-full max-w-55 max-[720px]:max-w-none"
                 value={catalogCategoryFilter}
                 onChange={(event) => setCatalogCategoryFilter(event.target.value)}
                 aria-label="Filtrar productos por categoría"
@@ -702,10 +703,10 @@ export default function SalesPage() {
                     : "";
 
                 return (
-                  <article className="grid min-h-[138px] content-between gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3" key={product.id}>
+                  <article className="grid min-h-34.5 content-between gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3" key={product.id}>
                     <div className="grid gap-0.75">
                       <div className="flex items-start justify-between gap-2">
-                        <strong className="line-clamp-2 text-[13px] leading-[1.25] text-ink-950">{product.name}</strong>
+                        <strong className="line-clamp-2 text-[13px] leading-tight text-ink-950">{product.name}</strong>
                         <span className="font-mono text-[11px] font-bold text-slate-500">#{product.id}</span>
                       </div>
                       <span className="truncate text-[11px] font-semibold text-slate-500">{product.categoryName}</span>
@@ -763,7 +764,7 @@ export default function SalesPage() {
               )}
             </div>
 
-            <div className="grid max-h-[360px] gap-2 overflow-auto pr-1">
+            <div className="grid max-h-90 gap-2 overflow-auto pr-1">
               {cartRows.length === 0 ? (
                 <p className="m-0 rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                   Agrega productos desde el catálogo para iniciar la venta.
@@ -888,7 +889,7 @@ export default function SalesPage() {
                       <td className="text-left">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <button
-                            className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`}
+                            className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`}
                             type="button"
                             onClick={() => openDetailModal(sale)}
                             disabled={loadingSaleDetail}

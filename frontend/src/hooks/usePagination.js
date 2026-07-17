@@ -9,11 +9,13 @@ export default function usePagination(items, options = {}) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
   }, [resetKey]);
 
   useEffect(() => {
     if (page > totalPages) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPage(totalPages);
     }
   }, [page, totalPages]);

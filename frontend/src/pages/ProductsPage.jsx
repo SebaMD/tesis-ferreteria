@@ -1,12 +1,13 @@
 import { CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
-import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
+import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
@@ -15,7 +16,6 @@ import { createCategoryRequest, deleteCategoryRequest, getCategoriesRequest, upd
 import { createInventoryMovementRequest, getInventoryMovementsRequest } from "../services/inventory.service.js";
 import { createProductRequest, deactivateProductRequest, getProductsRequest, updateProductRequest } from "../services/products.service.js";
 import {
-  alertClasses,
   badgeClass,
   codeCellClass,
   dangerButtonClass,
@@ -109,12 +109,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [outOfStockOnly, setOutOfStockOnly] = useState(false);
   const [showInactiveProducts, setShowInactiveProducts] = useState(false);
   const [unitSearch, setUnitSearch] = useState("unidad");
   const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
-  const [message, setMessage] = useState("");
-  const [warning, setWarning] = useState("");
-  const [error, setError] = useState("");
   const [submittingMovement, setSubmittingMovement] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
@@ -128,7 +126,6 @@ export default function ProductsPage() {
   const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
   const canViewLowStockFilter = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(user?.role);
   const canViewAdministrativeStock = user?.role !== "CASHIER";
-  const lowStockStatusLabel = canViewAdministrativeStock ? "Reponer" : "Bajo";
   const inventoryTableColumnCount = 7 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
   const viewParam = searchParams.get("view");
   const filterParam = searchParams.get("filter");
@@ -156,8 +153,10 @@ export default function ProductsPage() {
     () => visibleStatusProducts.filter((product) => {
       const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
       const matchesLowStock = !lowStockOnly || isLowStockProduct(product);
+      const matchesOutOfStock = !outOfStockOnly || isOutOfStockProduct(product);
       if (!matchesCategory) return false;
       if (!matchesLowStock) return false;
+      if (!matchesOutOfStock) return false;
       if (!normalizedSearch) return true;
 
       return (
@@ -166,7 +165,7 @@ export default function ProductsPage() {
         product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
       );
     }).sort(compareByNewest),
-    [categoryFilter, lowStockOnly, normalizedSearch, visibleStatusProducts],
+    [categoryFilter, lowStockOnly, normalizedSearch, outOfStockOnly, visibleStatusProducts],
   );
   const productById = useMemo(
     () => new Map(products.map((product) => [String(product.id), product])),
@@ -215,9 +214,9 @@ export default function ProductsPage() {
     [normalizedUnitSearch],
   );
   const productsPagination = usePagination(filteredProducts, {
-    resetKey: `${categoryFilter}|${lowStockOnly}|${showInactiveProducts}|${normalizedSearch}|${visibleStatusProducts.length}`,
+    resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}|${visibleStatusProducts.length}`,
   });
-  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || showInactiveProducts);
+  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || outOfStockOnly || showInactiveProducts);
   const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
   const filteredMovements = useMemo(
     () => sortedMovements.filter((movement) => {
@@ -266,7 +265,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData().catch((err) => setError(getApiError(err, "No se pudo cargar inventario")));
+    loadData().catch((err) => toast.error(getApiError(err, "No se pudo cargar inventario")));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, canViewHistory]);
 
@@ -277,10 +276,11 @@ export default function ProductsPage() {
   }, [activeView, canViewHistory]);
 
   useEffect(() => {
-    if (!canViewLowStockFilter && lowStockOnly) {
+    if (!canViewLowStockFilter && (lowStockOnly || outOfStockOnly)) {
       setLowStockOnly(false);
+      setOutOfStockOnly(false);
     }
-  }, [canViewLowStockFilter, lowStockOnly]);
+  }, [canViewLowStockFilter, lowStockOnly, outOfStockOnly]);
 
   useEffect(() => {
     if (viewParam === "history" && canViewHistory) {
@@ -292,13 +292,21 @@ export default function ProductsPage() {
     if (filterParam === "low-stock" && canViewLowStockFilter) {
       setActiveView("inventory");
       setShowInactiveProducts(false);
+      setOutOfStockOnly(false);
       setLowStockOnly(true);
+    } else if (filterParam === "out-of-stock" && canViewLowStockFilter) {
+      setActiveView("inventory");
+      setShowInactiveProducts(false);
+      setLowStockOnly(false);
+      setOutOfStockOnly(true);
     } else if (filterParam === "inactive" && canViewInactiveProducts) {
       setActiveView("inventory");
       setLowStockOnly(false);
+      setOutOfStockOnly(false);
       setShowInactiveProducts(true);
     } else if (!filterParam) {
       setLowStockOnly(false);
+      setOutOfStockOnly(false);
       setShowInactiveProducts(false);
     }
   }, [canViewHistory, canViewInactiveProducts, canViewLowStockFilter, filterParam, viewParam]);
@@ -308,10 +316,11 @@ export default function ProductsPage() {
       setShowInactiveProducts(false);
     }
 
-    if (showInactiveProducts && lowStockOnly) {
+    if (showInactiveProducts && (lowStockOnly || outOfStockOnly)) {
       setLowStockOnly(false);
+      setOutOfStockOnly(false);
     }
-  }, [canViewInactiveProducts, lowStockOnly, showInactiveProducts]);
+  }, [canViewInactiveProducts, lowStockOnly, outOfStockOnly, showInactiveProducts]);
 
   const selectedMovementProduct = products.find((product) => product.id === Number(movementForm.productId));
   const estimatedStock = selectedMovementProduct
@@ -326,8 +335,6 @@ export default function ProductsPage() {
 
   const handleCreateCategory = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
 
     const normalizedCategoryName = normalizeCategoryName(categoryName);
     const duplicate = categories.some(
@@ -337,7 +344,7 @@ export default function ProductsPage() {
     );
 
     if (duplicate) {
-      setError("Ya existe una categoría con ese nombre");
+      toast.error("Ya existe una categoría con ese nombre");
       return;
     }
 
@@ -353,27 +360,25 @@ export default function ProductsPage() {
       setCategoryName("");
       setCategoryDescription("");
       setEditingCategoryId(null);
-      setMessage(editingCategoryId ? `Categoria actualizada: ${category.name}` : `Categoria creada: ${category.name}`);
+      toast.success(editingCategoryId ? `Categoria actualizada: ${category.name}` : `Categoria creada: ${category.name}`);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, editingCategoryId ? "No se pudo actualizar la categoria" : "No se pudo crear la categoria"));
+      toast.error(getApiError(err, editingCategoryId ? "No se pudo actualizar la categoria" : "No se pudo crear la categoria"));
     }
   };
 
   const handleCreateProduct = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
 
     if (!form.categoryId) {
-      setError("Selecciona una categoría desde el buscador");
+      toast.warning("Selecciona una categoría desde el buscador");
       return;
     }
 
     if (!finalUnitMeasure) {
-      setError("Ingresa o selecciona una unidad de medida");
+      toast.warning("Ingresa o selecciona una unidad de medida");
       return;
     }
 
@@ -385,7 +390,7 @@ export default function ProductsPage() {
     );
 
     if (duplicate) {
-      setError("Ya existe un producto con ese nombre en la categoria seleccionada");
+      toast.error("Ya existe un producto con ese nombre en la categoria seleccionada");
       return;
     }
 
@@ -411,26 +416,23 @@ export default function ProductsPage() {
       setShowUnitSuggestions(false);
       setEditingProductId(null);
       setActiveForm(null);
-      setMessage(editingProductId ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
+      toast.success(editingProductId ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo crear el producto"));
+      toast.error(getApiError(err, "No se pudo crear el producto"));
     }
   };
 
   const handleCreateMovement = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
-    setWarning("");
 
     if (!movementForm.productId) {
-      setError("Selecciona un producto desde el buscador");
+      toast.warning("Selecciona un producto desde el buscador");
       return;
     }
 
     if (movementForm.movementType === "ADJUSTMENT" && !movementForm.adjustmentReason) {
-      setError("Selecciona el motivo del ajuste administrativo");
+      toast.warning("Selecciona el motivo del ajuste administrativo");
       return;
     }
 
@@ -439,7 +441,7 @@ export default function ProductsPage() {
       movementForm.adjustmentReason === "Otro" &&
       !movementForm.reason.trim()
     ) {
-      setError("Describe el motivo del ajuste administrativo");
+      toast.warning("Describe el motivo del ajuste administrativo");
       return;
     }
 
@@ -459,17 +461,15 @@ export default function ProductsPage() {
       setProductSearch("");
       setShowMovementProductSuggestions(false);
       setActiveForm(null);
-      setMessage(movementForm.movementType === "ENTRY" ? "Entrada registrada exitosamente" : "Ajuste registrado exitosamente");
+      toast.success(movementForm.movementType === "ENTRY" ? "Entrada registrada exitosamente" : "Ajuste registrado exitosamente");
 
       if (movement.stock?.lowStock) {
-        setWarning(
-          `${movement.stock.productName} quedó con stock bajo: ${movement.stock.currentStock} unidades. Mínimo: ${movement.stock.minimumStock}.`,
-        );
+        toast.warning(`${movement.stock.productName} quedó con stock bajo: ${movement.stock.currentStock} unidades. Mínimo: ${movement.stock.minimumStock}.`);
       }
 
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo registrar el movimiento"));
+      toast.error(getApiError(err, "No se pudo registrar el movimiento"));
     } finally {
       setSubmittingMovement(false);
     }
@@ -491,8 +491,6 @@ export default function ProductsPage() {
     setShowCategorySuggestions(false);
     setUnitSearch(product.unitMeasure || "");
     setShowUnitSuggestions(false);
-    setError("");
-    setMessage("");
   };
 
   const cancelEditing = () => {
@@ -507,8 +505,6 @@ export default function ProductsPage() {
 
   const openProductStatusModal = (product) => {
     setProductStatusTarget(product);
-    setError("");
-    setMessage("");
   };
 
   const closeProductStatusModal = () => {
@@ -518,22 +514,19 @@ export default function ProductsPage() {
   const handleToggleProductStatus = async () => {
     if (!productStatusTarget) return;
 
-    setError("");
-    setMessage("");
-
     try {
       if (productStatusTarget.status === false) {
         await updateProductRequest(productStatusTarget.id, { status: true });
-        setMessage("Producto activado exitosamente");
+        toast.success("Producto activado exitosamente");
       } else {
         await deactivateProductRequest(productStatusTarget.id);
-        setMessage("Producto desactivado exitosamente");
+        toast.success("Producto desactivado exitosamente");
       }
 
       setProductStatusTarget(null);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo actualizar el estado del producto"));
+      toast.error(getApiError(err, "No se pudo actualizar el estado del producto"));
     }
   };
 
@@ -550,8 +543,6 @@ export default function ProductsPage() {
     setShowCategorySuggestions(false);
     setUnitSearch("unidad");
     setShowUnitSuggestions(false);
-    setError("");
-    setMessage("");
   };
 
   const openProductForm = () => {
@@ -562,8 +553,6 @@ export default function ProductsPage() {
     setShowCategorySuggestions(false);
     setUnitSearch("unidad");
     setShowUnitSuggestions(false);
-    setError("");
-    setMessage("");
   };
 
   const openMovementForm = (movementType) => {
@@ -571,9 +560,6 @@ export default function ProductsPage() {
     setMovementForm(initialMovementForm(movementType));
     setProductSearch("");
     setShowMovementProductSuggestions(false);
-    setError("");
-    setMessage("");
-    setWarning("");
   };
 
   const closeCategoryForm = () => {
@@ -589,24 +575,18 @@ export default function ProductsPage() {
     setEditingCategoryId(category.id);
     setCategoryName(category.name);
     setCategoryDescription(category.description || "");
-    setError("");
-    setMessage("");
   };
 
   const cancelCategoryEditing = () => {
     setEditingCategoryId(null);
     setCategoryName("");
     setCategoryDescription("");
-    setError("");
   };
 
   const requestDeleteCategory = (category) => {
-    setError("");
-    setMessage("");
-
     const productCount = categoryProductCounts.get(String(category.id)) || 0;
     if (productCount > 0) {
-      setError("No se puede eliminar esta categoría porque tiene productos asociados. Modifique o reasigne los productos antes de eliminarla.");
+      toast.error("No se puede eliminar esta categoría porque tiene productos asociados. Modifique o reasigne los productos antes de eliminarla.");
       return;
     }
 
@@ -620,18 +600,15 @@ export default function ProductsPage() {
   const confirmDeleteCategory = async () => {
     if (!categoryDeleteTarget) return;
 
-    setError("");
-    setMessage("");
-
     try {
       await deleteCategoryRequest(categoryDeleteTarget.id);
       if (editingCategoryId === categoryDeleteTarget.id) cancelCategoryEditing();
-      setMessage(`Categoria eliminada: ${categoryDeleteTarget.name}`);
+      toast.success(`Categoria eliminada: ${categoryDeleteTarget.name}`);
       setCategoryDeleteTarget(null);
       await loadData();
     } catch (err) {
       setCategoryDeleteTarget(null);
-      setError(getApiError(err, "No se pudo eliminar la categoria"));
+      toast.error(getApiError(err, "No se pudo eliminar la categoria"));
     }
   };
 
@@ -715,9 +692,11 @@ export default function ProductsPage() {
   const handleExportProducts = () => {
     const filename = showInactiveProducts
       ? "productos-desactivados.xlsx"
-      : lowStockOnly
-        ? "productos-a-reponer.xlsx"
-        : "inventario-productos.xlsx";
+      : outOfStockOnly
+        ? "productos-sin-stock.xlsx"
+        : lowStockOnly
+          ? "productos-a-reponer.xlsx"
+          : "inventario-productos.xlsx";
 
     downloadExcel({
       filename,
@@ -740,9 +719,10 @@ export default function ProductsPage() {
         stockActual: Number(product.currentStock || 0),
         unidad: product.unitMeasure,
         stockMinimo: Number(product.minimumStock || 0),
-        estado: isLowStockProduct(product) ? "Reponer" : "Disponible",
+        estado: getStockStatus(product, user?.role).label,
       })),
     });
+    toast.success("Inventario exportado exitosamente");
   };
 
   const handleExportMovements = () => {
@@ -768,6 +748,7 @@ export default function ProductsPage() {
         motivo: movement.reason || "Sin motivo",
       })),
     });
+    toast.success("Historial de inventario exportado exitosamente");
   };
 
   return (
@@ -829,7 +810,7 @@ export default function ProductsPage() {
               <>
             <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
               <FolderPlus size={17} />
-              Nueva categoría
+              Gestionar categorías
             </button>
             <button type="button" onClick={openProductForm}>
               <Plus size={17} />
@@ -853,10 +834,6 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {message && <div className={alertClasses.success}>{message}</div>}
-      {warning && <div className={alertClasses.warning}>{warning}</div>}
-      {error && !activeForm && !productStatusTarget && <div className={alertClasses.error}>{error}</div>}
-
       <AppModal
         open={canManage && activeForm === "category"}
         title={editingCategoryId ? "Editar categoría" : "Nueva categoría"}
@@ -865,7 +842,6 @@ export default function ProductsPage() {
         size="medium"
       >
           <form className="grid gap-3.75" onSubmit={handleCreateCategory}>
-            {error && <div className={alertClasses.error}>{error}</div>}
             <label>
               Nombre
               <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required />
@@ -978,7 +954,6 @@ export default function ProductsPage() {
         size="large"
       >
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
-            {error && <div className={alertClasses.error}>{error}</div>}
             <label className="relative">
               Buscar categoría
               <div className="relative">
@@ -1102,7 +1077,6 @@ export default function ProductsPage() {
         size="small"
       >
         <div className="grid gap-4">
-          {error && <div className={alertClasses.error}>{error}</div>}
           {productStatusTarget && (
             <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
               <span className="text-xs font-semibold text-slate-500">Producto seleccionado</span>
@@ -1138,7 +1112,6 @@ export default function ProductsPage() {
         size="large"
       >
         <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
-          {error && <div className={alertClasses.error}>{error}</div>}
           {movementForm.movementType === "ADJUSTMENT" && (
             <div className="flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
               <Info className="shrink-0 text-rust-600" size={19} />
@@ -1259,13 +1232,14 @@ export default function ProductsPage() {
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {canViewInactiveProducts && (
               <button
-                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                 type="button"
                 onClick={() => {
                   setShowInactiveProducts((current) => !current);
                   setLowStockOnly(false);
+                  setOutOfStockOnly(false);
                 }}
-                disabled={lowStockOnly}
+                disabled={lowStockOnly || outOfStockOnly}
                 aria-pressed={showInactiveProducts}
               >
                 {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
@@ -1273,13 +1247,30 @@ export default function ProductsPage() {
             )}
             {canViewLowStockFilter && (
               <button
-                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                 type="button"
-                onClick={() => setLowStockOnly((current) => !current)}
-                disabled={showInactiveProducts}
+                onClick={() => {
+                  setLowStockOnly((current) => !current);
+                  setOutOfStockOnly(false);
+                }}
+                disabled={showInactiveProducts || outOfStockOnly}
                 aria-pressed={lowStockOnly}
               >
                 {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button
+                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts || lowStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : outOfStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
+                type="button"
+                onClick={() => {
+                  setOutOfStockOnly((current) => !current);
+                  setLowStockOnly(false);
+                }}
+                disabled={showInactiveProducts || lowStockOnly}
+                aria-pressed={outOfStockOnly}
+              >
+                {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
               </button>
             )}
             {canExportInventory && (
@@ -1311,47 +1302,49 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {productsPagination.paginatedItems.map((product) => (
-              <tr key={product.id}>
-                <td className={codeCellClass}>#{product.id}</td>
-                <td>{product.name}</td>
-                <td>{product.categoryName}</td>
-                <td className={numericCellClass}>{formatClp(product.price)}</td>
-                <td className={numericCellClass}>{product.currentStock}</td>
-                <td>{product.unitMeasure}</td>
-                {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
-                <td>
-                  {product.status === false ? (
-                    <span className={badgeClass("neutral")}>Desactivado</span>
-                  ) : isLowStockProduct(product) ? (
-                    <span className={badgeClass("warning")}>{lowStockStatusLabel}</span>
-                  ) : (
-                    <span className={badgeClass("success")}>Disponible</span>
-                  )}
-                </td>
-                {canManage && (
-                  <td className="w-[1%] whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => startEditing(product)}>
-                        <Pencil size={17} />
-                        Editar
-                      </button>
-                      {product.status === false ? (
-                        <button className={`${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                          <CheckCircle size={17} />
-                          Activar
-                        </button>
-                      ) : (
-                        <button className={`${dangerButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                          <XCircle size={17} />
-                          Desactivar
-                        </button>
-                      )}
-                    </div>
+            {productsPagination.paginatedItems.map((product) => {
+              const stockStatus = getStockStatus(product, user?.role);
+
+              return (
+                <tr key={product.id}>
+                  <td className={codeCellClass}>#{product.id}</td>
+                  <td>{product.name}</td>
+                  <td>{product.categoryName}</td>
+                  <td className={numericCellClass}>{formatClp(product.price)}</td>
+                  <td className={numericCellClass}>{product.currentStock}</td>
+                  <td>{product.unitMeasure}</td>
+                  {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
+                  <td>
+                    {product.status === false ? (
+                      <span className={badgeClass("neutral")}>Desactivado</span>
+                    ) : (
+                      <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
+                    )}
                   </td>
-                )}
-              </tr>
-            ))}
+                  {canManage && (
+                    <td className="w-[1%] whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => startEditing(product)}>
+                          <Pencil size={17} />
+                          Editar
+                        </button>
+                        {product.status === false ? (
+                          <button className={`${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
+                            <CheckCircle size={17} />
+                            Activar
+                          </button>
+                        ) : (
+                          <button className={`${dangerButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
+                            <XCircle size={17} />
+                            Desactivar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {filteredProducts.length === 0 && (
               <tr>
                 <td className={emptyTableCellClass} colSpan={inventoryTableColumnCount}>

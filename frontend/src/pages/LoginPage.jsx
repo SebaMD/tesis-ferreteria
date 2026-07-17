@@ -1,12 +1,12 @@
 import { LockKeyhole, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
 import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
 import useAuth from "../hooks/useAuth.js";
-import { alertClasses } from "../helpers/uiClasses.js";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -14,11 +14,12 @@ export default function LoginPage() {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (sessionNotice) clearSessionNotice();
+    if (!sessionNotice) return;
+    toast.warning(sessionNotice);
+    clearSessionNotice();
   }, [sessionNotice]);
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
@@ -32,14 +33,13 @@ export default function LoginPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     clearExpiredSessionMessage();
-    setError("");
     setLoading(true);
 
     try {
       await login({ correo, password });
       navigate("/dashboard");
     } catch (err) {
-      setError(getApiError(err, "No se pudo iniciar sesion"));
+      toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
       setLoading(false);
     }
@@ -78,9 +78,6 @@ export default function LoginPage() {
             <h2 className="m-0 text-2xl font-bold text-ink-950">Iniciar sesión</h2>
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta institucional para continuar.</p>
           </div>
-
-          {sessionNotice && <div className={alertClasses.warning}>{sessionNotice}</div>}
-          {error && <div className={alertClasses.error}>{error}</div>}
 
           <label>
             Correo electrónico

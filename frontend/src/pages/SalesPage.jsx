@@ -1,10 +1,12 @@
 import { Eye, Plus, RotateCcw, Search, ShoppingCart, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
+import { getAvailableStockStatus } from "../helpers/inventory.js";
 import { getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
@@ -12,7 +14,6 @@ import usePagination from "../hooks/usePagination.js";
 import { getProductsRequest } from "../services/products.service.js";
 import { cancelSaleRequest, createSaleRequest, getSaleByIdRequest, getSalesRequest, undoCancelSaleRequest } from "../services/sales.service.js";
 import {
-  alertClasses,
   badgeClass,
   dangerButtonClass,
   emptyTableCellClass,
@@ -59,8 +60,6 @@ export default function SalesPage() {
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
   const [cashReceived, setCashReceived] = useState("");
   const [cartItems, setCartItems] = useState([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [saleToCancel, setSaleToCancel] = useState(null);
@@ -125,7 +124,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData().catch((err) => setError(getApiError(err, "No se pudieron cargar ventas")));
+    loadData().catch((err) => toast.error(getApiError(err, "No se pudieron cargar ventas")));
   }, []);
 
   const productById = useMemo(
@@ -144,11 +143,17 @@ export default function SalesPage() {
       }])).values()].sort((left, right) => left.name.localeCompare(right.name, "es")),
     [activeProducts],
   );
+  const cartQuantityByProduct = useMemo(
+    () => new Map(cartItems.map((item) => [String(item.productId), Number(item.quantity || 0)])),
+    [cartItems],
+  );
   const normalizedCatalogSearch = catalogSearch.trim().toLocaleLowerCase("es");
   const filteredCatalogProducts = useMemo(
     () =>
       activeProducts
         .filter((product) => {
+          const quantityInCart = cartQuantityByProduct.get(String(product.id)) || 0;
+          const availableStock = Number(product.currentStock || 0) - quantityInCart;
           const matchesCategory = !catalogCategoryFilter || String(product.categoryId) === catalogCategoryFilter;
           const matchesSearch =
             !normalizedCatalogSearch ||
@@ -156,14 +161,14 @@ export default function SalesPage() {
             product.name.toLocaleLowerCase("es").includes(normalizedCatalogSearch) ||
             product.categoryName.toLocaleLowerCase("es").includes(normalizedCatalogSearch);
 
-          return matchesCategory && matchesSearch;
+          return availableStock > 0 && matchesCategory && matchesSearch;
         })
         .sort((left, right) => {
           const categoryOrder = left.categoryName.localeCompare(right.categoryName, "es");
           if (categoryOrder !== 0) return categoryOrder;
           return left.name.localeCompare(right.name, "es");
         }),
-    [activeProducts, catalogCategoryFilter, normalizedCatalogSearch],
+    [activeProducts, cartQuantityByProduct, catalogCategoryFilter, normalizedCatalogSearch],
   );
   const catalogPagination = usePagination(filteredCatalogProducts, {
     pageSize: 9,
@@ -209,16 +214,13 @@ export default function SalesPage() {
     const currentQuantity = getCartQuantity(product.id);
     const availableStock = Number(product.currentStock || 0);
 
-    setError("");
-    setMessage("");
-
     if (availableStock < 1) {
-      setError("Este producto no tiene stock disponible para venta");
+      toast.error("Este producto no tiene stock disponible para venta");
       return;
     }
 
     if (currentQuantity >= availableStock) {
-      setError("No puedes agregar más unidades que el stock disponible");
+      toast.error("No puedes agregar más unidades que el stock disponible");
       return;
     }
 
@@ -244,9 +246,7 @@ export default function SalesPage() {
     const nextQuantity = availableStock > 0 ? Math.min(requestedQuantity, availableStock) : 1;
 
     if (requestedQuantity > availableStock) {
-      setError("La cantidad no puede superar el stock disponible");
-    } else {
-      setError("");
+      toast.warning("La cantidad no puede superar el stock disponible");
     }
 
     setCartItems((current) =>
@@ -266,20 +266,16 @@ export default function SalesPage() {
     setCartItems([]);
     setPaymentMethod("efectivo");
     setCashReceived("");
-    setError("");
   };
 
   const openPaymentModal = () => {
-    setError("");
-    setMessage("");
-
     if (cartRows.length === 0) {
-      setError("Agrega al menos un producto al carrito");
+      toast.warning("Agrega al menos un producto al carrito");
       return;
     }
 
     if (cartHasInvalidStock) {
-      setError("Revisa las cantidades del carrito antes de finalizar la venta");
+      toast.warning("Revisa las cantidades del carrito antes de finalizar la venta");
       return;
     }
 
@@ -291,33 +287,30 @@ export default function SalesPage() {
   const closePaymentModal = () => {
     if (submitting) return;
     setCashReceived("");
-    setError("");
     setPaymentModalOpen(false);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
 
     if (cartRows.length === 0) {
-      setError("Agrega al menos un producto al carrito");
+      toast.warning("Agrega al menos un producto al carrito");
       return;
     }
 
     if (cartHasInvalidStock) {
-      setError("No se puede finalizar la venta porque una cantidad supera el stock disponible");
+      toast.error("No se puede finalizar la venta porque una cantidad supera el stock disponible");
       return;
     }
 
     if (isCashPayment) {
       if (cashReceived === "") {
-        setError("Ingresa el monto recibido para calcular el vuelto");
+        toast.warning("Ingresa el monto recibido para calcular el vuelto");
         return;
       }
 
       if (receivedAmount < cartTotal) {
-        setError("El monto recibido es menor al total de la venta");
+        toast.error("El monto recibido es menor al total de la venta");
         return;
       }
     }
@@ -332,26 +325,24 @@ export default function SalesPage() {
         })),
       });
       clearCart();
-      setMessage("Venta registrada exitosamente");
+      toast.success("Venta registrada exitosamente");
       setPaymentModalOpen(false);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo registrar la venta"));
+      toast.error(getApiError(err, "No se pudo registrar la venta"));
     } finally {
       setSubmitting(false);
     }
   };
 
   const openDetailModal = async (sale) => {
-    setError("");
-    setMessage("");
     setSaleDetail(sale);
     setLoadingSaleDetail(true);
 
     try {
       setSaleDetail(await getSaleByIdRequest(sale.id));
     } catch (err) {
-      setError(getApiError(err, "No se pudo cargar el detalle de la venta"));
+      toast.error(getApiError(err, "No se pudo cargar el detalle de la venta"));
       setSaleDetail(null);
     } finally {
       setLoadingSaleDetail(false);
@@ -367,8 +358,6 @@ export default function SalesPage() {
     if (!canCancel || sale.status !== "ACTIVE") return;
     setSaleToCancel(sale);
     setSaleToReactivate(null);
-    setError("");
-    setMessage("");
   };
 
   const closeCancelModal = () => {
@@ -380,22 +369,19 @@ export default function SalesPage() {
     if (!saleToCancel) return;
 
     if (saleToCancel.status !== "ACTIVE") {
-      setError("No se puede cancelar una venta que ya fue cancelada");
+      toast.error("No se puede cancelar una venta que ya fue cancelada");
       setSaleToCancel(null);
       return;
     }
 
-    setError("");
-    setMessage("");
-
     try {
       setSubmitting(true);
       await cancelSaleRequest(saleToCancel.id);
-      setMessage(`Venta ${formatSaleFolio(saleToCancel.id)} cancelada y stock restaurado`);
+      toast.success(`Venta ${formatSaleFolio(saleToCancel.id)} cancelada y stock restaurado`);
       setSaleToCancel(null);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo cancelar la venta"));
+      toast.error(getApiError(err, "No se pudo cancelar la venta"));
     } finally {
       setSubmitting(false);
     }
@@ -405,8 +391,6 @@ export default function SalesPage() {
     if (!canCancel || sale.status !== "CANCELLED") return;
     setSaleToReactivate(sale);
     setSaleToCancel(null);
-    setError("");
-    setMessage("");
   };
 
   const closeUndoCancelModal = () => {
@@ -418,22 +402,19 @@ export default function SalesPage() {
     if (!saleToReactivate) return;
 
     if (saleToReactivate.status !== "CANCELLED") {
-      setError("Solo se puede deshacer la cancelación de una venta cancelada");
+      toast.error("Solo se puede deshacer la cancelación de una venta cancelada");
       setSaleToReactivate(null);
       return;
     }
 
-    setError("");
-    setMessage("");
-
     try {
       setSubmitting(true);
       await undoCancelSaleRequest(saleToReactivate.id);
-      setMessage(`Cancelación de la venta ${formatSaleFolio(saleToReactivate.id)} deshecha y stock descontado nuevamente`);
+      toast.success(`Cancelación de la venta ${formatSaleFolio(saleToReactivate.id)} deshecha y stock descontado nuevamente`);
       setSaleToReactivate(null);
       await loadData();
     } catch (err) {
-      setError(getApiError(err, "No se pudo deshacer la cancelación de la venta"));
+      toast.error(getApiError(err, "No se pudo deshacer la cancelación de la venta"));
     } finally {
       setSubmitting(false);
     }
@@ -468,9 +449,6 @@ export default function SalesPage() {
         )}
       </div>
 
-      {message && <div className={alertClasses.success}>{message}</div>}
-      {error && !paymentModalOpen && !saleToCancel && !saleToReactivate && <div className={alertClasses.error}>{error}</div>}
-
       <AppModal
         open={canCreate && paymentModalOpen}
         title="Finalizar venta"
@@ -479,7 +457,6 @@ export default function SalesPage() {
         size="medium"
       >
         <form className="grid gap-3.75" onSubmit={handleSubmit}>
-          {error && <div className={alertClasses.error}>{error}</div>}
           <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
             <span className="text-xs font-semibold text-slate-500">Total a pagar</span>
             <strong className="mt-1 block font-mono text-2xl text-ink-950">{formatClp(cartTotal)}</strong>
@@ -546,7 +523,6 @@ export default function SalesPage() {
         size="small"
       >
         <div className="grid gap-4">
-          {error && <div className={alertClasses.error}>{error}</div>}
           {saleToCancel && (
             <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
               <span className="text-xs font-semibold text-slate-500">Venta seleccionada</span>
@@ -576,7 +552,6 @@ export default function SalesPage() {
         size="small"
       >
         <div className="grid gap-4">
-          {error && <div className={alertClasses.error}>{error}</div>}
           {saleToReactivate && (
             <div className="rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
               <span className="text-xs font-semibold text-slate-500">Venta seleccionada</span>
@@ -606,7 +581,7 @@ export default function SalesPage() {
         size="large"
       >
         <div className="grid gap-4">
-          {loadingSaleDetail && <div className={alertClasses.warning}>Cargando detalle de la venta...</div>}
+          {loadingSaleDetail && <p className="m-0 rounded-[5px] border border-slate-200 bg-[#fafbfc] px-3.5 py-3 text-sm font-semibold text-slate-600">Cargando detalle de la venta...</p>}
           {saleDetail && (
             <>
               <div className="grid grid-cols-3 gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[720px]:grid-cols-1">
@@ -720,8 +695,11 @@ export default function SalesPage() {
             <div className="grid grid-cols-3 gap-2.5 max-[980px]:grid-cols-2 max-[620px]:grid-cols-1">
               {catalogPagination.paginatedItems.map((product) => {
                 const cartQuantity = getCartQuantity(product.id);
-                const availableStock = Number(product.currentStock || 0);
-                const remainingStock = Math.max(availableStock - cartQuantity, 0);
+                const availableStock = Number(product.currentStock || 0) - cartQuantity;
+                const addButtonStatus = getAvailableStockStatus(product, availableStock);
+                const addButtonClass = addButtonStatus.tone === "warning"
+                    ? "border-rust-600 bg-rust-500 text-white hover:border-rust-700 hover:bg-rust-600"
+                    : "";
 
                 return (
                   <article className="grid min-h-[138px] content-between gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3" key={product.id}>
@@ -739,14 +717,13 @@ export default function SalesPage() {
                       </div>
                       <div className="rounded bg-white px-2 py-1.5">
                         <span className="block text-slate-500">Stock</span>
-                        <strong className="font-mono text-ink-950">{remainingStock} {product.unitMeasure}</strong>
+                        <strong className="font-mono text-ink-950">{availableStock} {product.unitMeasure}</strong>
                       </div>
                     </div>
                     <button
-                      className="min-h-8 text-xs"
+                      className={`min-h-8 text-xs ${addButtonClass}`}
                       type="button"
                       onClick={() => addProductToCart(product)}
-                      disabled={remainingStock < 1}
                     >
                       <Plus size={17} />
                       Agregar
@@ -855,7 +832,7 @@ export default function SalesPage() {
                 className="pl-9.75"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por folio, producto, cajero, método o total"
+                placeholder="Buscar por folio, cajero, método de pago o total"
                 aria-label="Buscar ventas"
               />
             </label>

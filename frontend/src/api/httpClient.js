@@ -45,7 +45,10 @@ api.interceptors.response.use(
 );
 
 export function getApiError(error, fallback = "Error al conectar con el servidor") {
-  return error?.response?.data?.message || error?.response?.data?.details || fallback;
+  const details = error?.response?.data?.details;
+  if (typeof details === "string" && details.trim()) return details;
+
+  return error?.response?.data?.message || fallback;
 }
 
 export default api;

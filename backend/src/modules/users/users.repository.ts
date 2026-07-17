@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { rolesTable, usersTable, type NewUser } from "../../db/schema/index.js";
 
@@ -25,6 +25,19 @@ export async function findUsers() {
         .select(publicUserColumns)
         .from(usersTable)
         .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id));
+}
+
+export async function findRoleById(id: number) {
+    const [role] = await db
+        .select({
+        id: rolesTable.id,
+        name: rolesTable.name,
+        })
+        .from(rolesTable)
+        .where(eq(rolesTable.id, id))
+        .limit(1);
+
+    return role;
 }
 
 export async function findUserById(id: number) {
@@ -71,6 +84,18 @@ export async function updateUserWorkScheduleById(
     data: Pick<NewUser, "workShift" | "shiftStartTime" | "shiftEndTime" | "shiftNote">,
 ) {
     return updateUserById(id, data);
+}
+
+export async function countActiveAdminUsers() {
+    const admins = await db
+        .select({
+        id: usersTable.id,
+        })
+        .from(usersTable)
+        .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
+        .where(and(eq(rolesTable.name, "ADMIN"), eq(usersTable.status, "ACTIVE")));
+
+    return admins.length;
 }
 
 export async function deleteUserById(id: number) {

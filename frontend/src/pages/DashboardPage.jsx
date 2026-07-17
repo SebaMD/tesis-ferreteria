@@ -1,9 +1,10 @@
 import { AlertTriangle, ArrowLeftRight, DollarSign, PackageCheck, PackageX, ShoppingCart } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
-import { getMovementTone, isLowStockProduct } from "../helpers/inventory.js";
+import { getMovementTone, getStockStatus, isLowStockProduct } from "../helpers/inventory.js";
 import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
 import { getInventoryMovementsRequest } from "../services/inventory.service.js";
@@ -11,7 +12,6 @@ import { getProductsRequest } from "../services/products.service.js";
 import { getSalesRequest } from "../services/sales.service.js";
 import useAuth from "../hooks/useAuth.js";
 import {
-  alertClasses,
   badgeClass,
   dashboardListRowClass,
   dashboardPanelClass,
@@ -59,7 +59,6 @@ export default function DashboardPage() {
   const [sales, setSales] = useState([]);
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const canViewSales = ROUTE_PERMISSIONS.sales.includes(user?.role);
   const canViewInventoryHistory = ["ADMIN", "MANAGER"].includes(user?.role);
@@ -93,7 +92,6 @@ export default function DashboardPage() {
     const loadDashboard = async () => {
       try {
         setLoading(true);
-        setError("");
 
         const [productData, saleData, movementData] = await Promise.all([
           getProductsRequest(),
@@ -106,7 +104,7 @@ export default function DashboardPage() {
         setSales(saleData);
         setMovements(movementData);
       } catch (err) {
-        if (active) setError(getApiError(err, "No se pudo cargar el resumen del sistema"));
+        if (active) toast.error(getApiError(err, "No se pudo cargar el resumen del sistema"));
       } finally {
         if (active) setLoading(false);
       }
@@ -214,8 +212,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {error && <div className={alertClasses.error}>{error}</div>}
-
       {loading ? (
         <div className={`${panelClass} text-center text-[13px] text-slate-500`}>Cargando información del sistema...</div>
       ) : (
@@ -255,18 +251,22 @@ export default function DashboardPage() {
                   {priorityLowStockProducts.length === 0 ? (
                     <p className={emptyStateClass}>No hay productos con stock bajo.</p>
                   ) : (
-                    priorityLowStockProducts.map((product) => (
-                      <article className={dashboardListRowClass} key={product.id}>
-                        <div>
-                          <strong>{product.name}</strong>
-                          <span>{product.categoryName}</span>
-                        </div>
-                        <div className={listRowEndClass}>
-                          <strong>{product.currentStock} / {product.minimumStock}</strong>
-                          <span className={badgeClass("warning")}>Reponer</span>
-                        </div>
-                      </article>
-                    ))
+                    priorityLowStockProducts.map((product) => {
+                      const stockStatus = getStockStatus(product, user?.role);
+
+                      return (
+                        <article className={dashboardListRowClass} key={product.id}>
+                          <div>
+                            <strong>{product.name}</strong>
+                            <span>{product.categoryName}</span>
+                          </div>
+                          <div className={listRowEndClass}>
+                            <strong>{product.currentStock} / {product.minimumStock}</strong>
+                            <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
+                          </div>
+                        </article>
+                      );
+                    })
                   )}
                 </div>
               </section>

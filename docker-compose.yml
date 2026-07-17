@@ -32,16 +32,16 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_USERNAME: ${DB_USERNAME:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-Seba.2005}
-      DATABASE: ${DATABASE:-ferreteria}
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-Seba.2005}
+      DATABASE: ${POSTGRES_DB:-ferreteria}
       PORT: ${PORT:-3000}
       JWT_SECRET: ${JWT_SECRET:-super_secret}
       COOKIE_KEY: ${COOKIE_KEY:-cookie_key}
     depends_on:
       db:
         condition: service_healthy
-      migrate:
+      seed:
         condition: service_completed_successfully
     ports:
       - "3000:3000"
@@ -63,11 +63,31 @@ services:
     container_name: ferreteria-migrate
     restart: "no"
     environment:
-      DATABASE_URL: postgresql://${DB_USERNAME:-postgres}:${DB_PASSWORD:-Seba.2005}@db:5432/${DATABASE:-ferreteria}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Seba.2005}@db:5432/${POSTGRES_DB:-ferreteria}
     depends_on:
       db:
         condition: service_healthy
     command: ["npm", "run", "db:migrate"]
+    networks:
+      - backend_network
+
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: build
+    container_name: ferreteria-seed
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-Seba.2005}@db:5432/${POSTGRES_DB:-ferreteria}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - if [ "$${SEED_DEMO_DATA}" = "true" ]; then npm run db:seed; else echo "Seed de demostracion deshabilitado"; fi
     networks:
       - backend_network
 

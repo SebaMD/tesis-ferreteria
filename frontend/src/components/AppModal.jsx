@@ -74,7 +74,7 @@ export default function AppModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[900] grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 backdrop-blur-[4px] max-[720px]:p-2.5"
+      className="fixed inset-0 z-900 grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 backdrop-blur-xs max-[720px]:p-2.5"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -87,7 +87,7 @@ export default function AppModal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
       >
-        <header className="flex shrink-0 items-start justify-between gap-[18px] border-b border-slate-200 px-5 py-[18px] max-[720px]:px-4">
+        <header className="flex shrink-0 items-start justify-between gap-4.5 border-b border-slate-200 px-5 py-4.5 max-[720px]:px-4">
           <div>
             <h2 className="m-0 text-[17px] font-bold text-ink-950" id={titleId}>{title}</h2>
             {description && <p className="mt-1 mb-0 text-xs leading-[1.45] text-slate-500" id={descriptionId}>{description}</p>}

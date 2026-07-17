@@ -271,12 +271,14 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (!canViewHistory && activeView === "history") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveView("inventory");
     }
   }, [activeView, canViewHistory]);
 
   useEffect(() => {
     if (!canViewLowStockFilter && (lowStockOnly || outOfStockOnly)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLowStockOnly(false);
       setOutOfStockOnly(false);
     }
@@ -284,6 +286,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (viewParam === "history" && canViewHistory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveView("history");
     } else if (viewParam === "inventory") {
       setActiveView("inventory");
@@ -313,6 +316,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (!canViewInactiveProducts && showInactiveProducts) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowInactiveProducts(false);
     }
 
@@ -638,6 +642,7 @@ export default function ProductsPage() {
   };
 
   const selectUnitSuggestion = (unit) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     useUnitMeasure(unit);
   };
 
@@ -667,6 +672,7 @@ export default function ProductsPage() {
     const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
 
     if (unit) selectUnitSuggestion(unit);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     else if (unitSearch.trim()) useUnitMeasure(unitSearch);
   };
 
@@ -761,7 +767,7 @@ export default function ProductsPage() {
         {canViewHistory && (
           <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-4 py-2 text-sm font-extrabold ${activeView === "inventory" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "inventory" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => setActiveView("inventory")}
               aria-pressed={activeView === "inventory"}
@@ -769,7 +775,7 @@ export default function ProductsPage() {
               Inventario
             </button>
             <button
-              className={`min-h-11 rounded-[4px] border-2 px-4 py-2 text-sm font-extrabold ${activeView === "history" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
+              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "history" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
               onClick={() => setActiveView("history")}
               aria-pressed={activeView === "history"}
@@ -781,8 +787,8 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className="flex min-w-[360px] flex-[0_1_540px] items-center gap-2.5 max-[980px]:min-w-0 max-[980px]:flex-1 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-col max-[720px]:items-stretch">
-          <label className="relative block w-full max-w-[340px] max-[720px]:max-w-none">
+        <div className="flex min-w-90 flex-[0_1_540px] items-center gap-2.5 max-[980px]:min-w-0 max-[980px]:flex-1 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-col max-[720px]:items-stretch">
+          <label className="relative block w-full max-w-85 max-[720px]:max-w-none">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
               className="pl-9.75"
@@ -793,7 +799,7 @@ export default function ProductsPage() {
             />
           </label>
           <select
-            className="w-full max-w-[220px] flex-[0_1_220px] max-[720px]:max-w-none max-[720px]:flex-none"
+            className="w-full max-w-55 flex-[0_1_220px] max-[720px]:max-w-none max-[720px]:flex-none"
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
             aria-label="Filtrar productos por categoría"

@@ -50,7 +50,7 @@
   }
 
   button {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-[15px] font-[650] text-white transition-colors;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3.75 font-[650] text-white transition-colors;
   }
 
   button:not(:disabled) {
@@ -75,7 +75,7 @@
 
   input,
   select {
-    @apply min-h-[41px] w-full rounded-[5px] border border-slate-300 bg-white px-[11px] text-ink-950;
+    @apply min-h-10.25 w-full rounded-[5px] border border-slate-300 bg-white px-2.75 text-ink-950;
   }
 
   input::placeholder {
@@ -83,7 +83,7 @@
   }
 
   label {
-    @apply grid gap-[7px] text-[13px] font-[650] text-ink-700;
+    @apply grid gap-1.75 text-[13px] font-[650] text-ink-700;
   }
 
   table {

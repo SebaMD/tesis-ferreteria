@@ -751,19 +751,19 @@ export default function UsersPage() {
           </div>
         </div>
         <div className={tableScrollClass}>
-          <table>
+          <table className="min-w-315">
             <thead>
               <tr>
                 <th>ID</th>
                 <th>Usuario</th>
-                <th>RUT</th>
+                <th className="min-w-28 whitespace-nowrap">RUT</th>
                 <th>Correo</th>
                 <th>Teléfono</th>
                 <th>Rol</th>
                 <th>Horario</th>
                 <th>Estado</th>
                 <th>Creado</th>
-                <th>Acciones</th>
+                <th className="min-w-44 whitespace-nowrap text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -771,9 +771,9 @@ export default function UsersPage() {
                 <tr key={user.id}>
                   <td className={codeCellClass}>#{user.id}</td>
                   <td>{user.names} {user.surnames}</td>
-                  <td>{user.rut}</td>
+                  <td className="min-w-28 whitespace-nowrap font-mono text-xs tabular-nums">{user.rut}</td>
                   <td>{user.correo}</td>
-                  <td>{user.phone || "-"}</td>
+                  <td className="whitespace-nowrap">{user.phone || "-"}</td>
                   <td>{ROLE_NAMES[user.roleName] || user.roleName}</td>
                   <td>{user.roleName === "CASHIER" ? formatWorkSchedule(user) : "-"}</td>
                   <td>
@@ -782,14 +782,14 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
-                  <td>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => startEditing(user)}>
+                  <td className="min-w-44 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`} type="button" onClick={() => startEditing(user)}>
                         <Pencil size={17} />
                         Editar
                       </button>
                       {user.roleName === "CASHIER" && (
-                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} !mr-0`} type="button" onClick={() => openScheduleForm(user)}>
+                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`} type="button" onClick={() => openScheduleForm(user)}>
                           <Clock3 size={16} />
                           {user.workShift ? "Modificar horario" : "Configurar horario"}
                         </button>

@@ -36,10 +36,10 @@ export default function BrandLogo({ className = "" }) {
       </button>
 
       {open && createPortal(
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-[rgba(10,14,21,0.68)] p-6 backdrop-blur-[10px]" role="dialog" aria-modal="true" aria-label="Logo Comercializadora FYF" onMouseDown={() => setOpen(false)}>
+        <div className="fixed inset-0 z-1000 grid place-items-center bg-[rgba(10,14,21,0.68)] p-6 backdrop-blur-[10px]" role="dialog" aria-modal="true" aria-label="Logo Comercializadora FYF" onMouseDown={() => setOpen(false)}>
           <div className="relative w-[min(72vmin,680px)] max-w-full max-h-[88vh]" onMouseDown={(event) => event.stopPropagation()}>
             <img className="block w-full max-h-[88vh] object-contain" src={fyfLogo} alt="Logo ampliado de Comercializadora FYF" />
-            <button className="absolute top-2 right-2 size-[42px] min-h-[42px] rounded-full border-white/45 bg-[rgba(16,21,31,0.82)] p-0 text-white hover:bg-ink-950" type="button" onClick={() => setOpen(false)} aria-label="Cerrar logo ampliado" title="Cerrar">
+            <button className="absolute top-2 right-2 size-10.5 min-h-10.5 rounded-full border-white/45 bg-[rgba(16,21,31,0.82)] p-0 text-white hover:bg-ink-950" type="button" onClick={() => setOpen(false)} aria-label="Cerrar logo ampliado" title="Cerrar">
               <X size={22} />
             </button>
           </div>

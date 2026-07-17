@@ -1,5 +1,6 @@
-import { Clock3, Pencil, Search, UserPlus } from "lucide-react";
+import { Clock3, Eye, EyeOff, Pencil, Search, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -7,9 +8,9 @@ import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
 import {
-  alertClasses,
   badgeClass,
   codeCellClass,
+  dangerButtonClass,
   emptyTableCellClass,
   formActionsClass,
   pageClass,
@@ -21,8 +22,10 @@ import {
   tableScrollClass,
 } from "../helpers/uiClasses.js";
 import usePagination from "../hooks/usePagination.js";
+import useAuth from "../hooks/useAuth.js";
 import {
   createUserRequest,
+  deleteUserRequest,
   getUsersRequest,
   updateCashierScheduleRequest,
   updateUserRequest,
@@ -66,6 +69,105 @@ const WORK_SHIFT_TIME_CONFIG = {
   AFTERNOON: { start: "14:00", end: "20:00", defaultStart: "14:00", defaultEnd: "20:00" },
   OTHER: { start: "08:00", end: "20:00", defaultStart: "08:00", defaultEnd: "20:00" },
 };
+const NAME_REGEX = /^[\p{L} ]+$/u;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
+const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
+const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
+const VALID_STATUSES = ["ACTIVE", "INACTIVE"];
+
+function normalizeText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeRut(value) {
+  return String(value || "").trim().replace(/\./g, "").toUpperCase();
+}
+
+function normalizePhone(value) {
+  const phone = String(value || "").trim();
+  if (!phone) return null;
+
+  const compactPhone = phone.replace(/[\s().-]/g, "");
+  if (!PHONE_REGEX.test(compactPhone)) return null;
+  if (compactPhone.startsWith("+56")) return compactPhone;
+  if (compactPhone.startsWith("56")) return `+${compactPhone}`;
+  return `+56${compactPhone}`;
+}
+
+function validateUserForm(form, { isEditing, isAdminStatusLocked }) {
+  const names = normalizeText(form.names);
+  const surnames = normalizeText(form.surnames);
+  const rut = normalizeRut(form.rut);
+  const correo = normalizeEmail(form.correo);
+  const password = String(form.password || "");
+
+  if (!names) return { success: false, message: "El nombre es obligatorio." };
+  if (names.length < 3 || names.length > 120 || !NAME_REGEX.test(names)) {
+    return { success: false, message: "El nombre debe tener entre 3 y 120 caracteres y solo letras o espacios." };
+  }
+
+  if (!surnames) return { success: false, message: "El apellido es obligatorio." };
+  if (surnames.length < 3 || surnames.length > 120 || !NAME_REGEX.test(surnames)) {
+    return { success: false, message: "El apellido debe tener entre 3 y 120 caracteres y solo letras o espacios." };
+  }
+
+  if (!rut) return { success: false, message: "El RUT es obligatorio." };
+  if (!RUT_REGEX.test(rut)) {
+    return { success: false, message: "El RUT debe ir sin puntos y con guion. Ejemplo: 12345678-9." };
+  }
+
+  if (!correo) return { success: false, message: "El correo electrónico es obligatorio." };
+  if (correo.length > 255 || !EMAIL_REGEX.test(correo)) {
+    return { success: false, message: "El correo electrónico no tiene un formato válido." };
+  }
+
+  if (!form.roleName || !ROLE_ORDER.includes(form.roleName)) {
+    return { success: false, message: "Debe seleccionar un rol." };
+  }
+
+  if (!VALID_STATUSES.includes(form.status)) {
+    return { success: false, message: "Debe seleccionar un estado válido." };
+  }
+
+  if (isAdminStatusLocked && form.status !== "ACTIVE") {
+    return { success: false, message: "No se puede cambiar el estado de un usuario administrador." };
+  }
+
+  if (!isEditing && !password) {
+    return { success: false, message: "La contraseña es obligatoria." };
+  }
+
+  if (password && !PASSWORD_REGEX.test(password)) {
+    return {
+      success: false,
+      message: "La contraseña debe tener 8 a 128 caracteres, una mayúscula, un número y un carácter especial.",
+    };
+  }
+
+  const phone = normalizePhone(form.phone);
+  if (String(form.phone || "").trim() && !phone) {
+    return { success: false, message: "El teléfono debe ser un móvil chileno válido. Ejemplo: +56912345678." };
+  }
+
+  return {
+    success: true,
+    value: {
+      rut,
+      names,
+      surnames,
+      correo,
+      phone,
+      roleName: form.roleName,
+      status: form.status,
+      password,
+    },
+  };
+}
 
 function timeToMinutes(time) {
   const [hours, minutes] = String(time || "").split(":").map(Number);
@@ -131,16 +233,17 @@ function getRoleOptions(users) {
 }
 
 export default function UsersPage() {
+  const { user: authUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
   const [activeForm, setActiveForm] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [scheduleUser, setScheduleUser] = useState(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState(null);
   const [search, setSearch] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const roleOptions = useMemo(() => getRoleOptions(users), [users]);
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
@@ -174,6 +277,10 @@ export default function UsersPage() {
   });
   const hasUserFilters = Boolean(normalizedSearch);
   const isEditing = Boolean(editingUserId);
+  const editingUser = users.find((user) => user.id === editingUserId);
+  const isEditingOwnUser = isEditing && Number(editingUser?.id) === Number(authUser?.id);
+  const isEditingOwnAdmin = isEditingOwnUser && editingUser?.roleName === "ADMIN";
+  const activeAdminCount = users.filter((user) => user.roleName === "ADMIN" && user.status === "ACTIVE").length;
   const shiftTimeOptions = getShiftTimeOptions(scheduleForm.workShift);
   const shiftStartOptions = shiftTimeOptions.slice(0, -1);
   const shiftEndOptions = shiftTimeOptions.filter(
@@ -187,16 +294,15 @@ export default function UsersPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadUsers().catch((err) => setError(getApiError(err, "No se pudieron cargar usuarios")));
+    loadUsers().catch((err) => toast.error(getApiError(err, "No se pudieron cargar usuarios")));
   }, []);
 
   const openCreateForm = () => {
     setForm(emptyForm);
     setEditingUserId(null);
     setScheduleUser(null);
+    setShowPassword(false);
     setActiveForm(true);
-    setError("");
-    setMessage("");
   };
 
   const startEditing = (user) => {
@@ -212,9 +318,8 @@ export default function UsersPage() {
     });
     setEditingUserId(user.id);
     setScheduleUser(null);
+    setShowPassword(false);
     setActiveForm(true);
-    setError("");
-    setMessage("");
   };
 
   const openScheduleForm = (user) => {
@@ -228,14 +333,13 @@ export default function UsersPage() {
       shiftNote: user.shiftNote || "",
     });
     setActiveForm(false);
-    setError("");
-    setMessage("");
   };
 
   const closeForm = () => {
     if (submitting) return;
     setForm(emptyForm);
     setEditingUserId(null);
+    setShowPassword(false);
     setActiveForm(false);
   };
 
@@ -245,30 +349,64 @@ export default function UsersPage() {
     setScheduleForm(emptyScheduleForm);
   };
 
+  const openDeleteUserModal = () => {
+    if (!editingUser) return;
+
+    if (Number(editingUser.id) === Number(authUser?.id)) {
+      toast.error("No puedes eliminar tu propio usuario.");
+      return;
+    }
+
+    if (editingUser.roleName === "ADMIN" && editingUser.status === "ACTIVE" && activeAdminCount <= 1) {
+      toast.error("No se puede eliminar este administrador porque el sistema quedaría sin administradores activos.");
+      return;
+    }
+
+    setDeleteUserTarget(editingUser);
+  };
+
+  const closeDeleteUserModal = () => {
+    if (submitting) return;
+    setDeleteUserTarget(null);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
 
-    const selectedRole = roleOptions.find((role) => role.name === form.roleName);
+    const formValidation = validateUserForm(form, { isEditing, isAdminStatusLocked: isEditingOwnAdmin });
+    if (!formValidation.success) {
+      toast.error(formValidation.message);
+      return;
+    }
 
-    if (!selectedRole?.id) {
-      setError("No se pudo determinar el rol seleccionado");
+    const formValue = formValidation.value;
+    const selectedRole = isEditingOwnAdmin
+      ? null
+      : roleOptions.find((role) => role.name === form.roleName);
+
+    if (!isEditingOwnAdmin && !selectedRole?.id) {
+      toast.error("Debe seleccionar un rol.");
       return;
     }
 
     const payload = {
-      roleId: Number(selectedRole.id),
-      rut: form.rut,
-      names: form.names,
-      surnames: form.surnames,
-      correo: form.correo,
-      phone: form.phone.trim() || null,
-      status: form.status,
+      rut: formValue.rut,
+      names: formValue.names,
+      surnames: formValue.surnames,
+      correo: formValue.correo,
+      phone: formValue.phone,
     };
 
-    if (!isEditing || form.password.trim()) {
-      payload.password = form.password;
+    if (!isEditingOwnAdmin) {
+      payload.roleId = Number(selectedRole.id);
+    }
+
+    if (!isEditingOwnAdmin) {
+      payload.status = !isEditing && formValue.roleName === "ADMIN" ? "ACTIVE" : formValue.status;
+    }
+
+    if (!isEditing || formValue.password) {
+      payload.password = formValue.password;
     }
 
     try {
@@ -278,11 +416,11 @@ export default function UsersPage() {
       } else {
         await createUserRequest(payload);
       }
-      setMessage(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
+      toast.success(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
       closeForm();
       await loadUsers();
     } catch (err) {
-      setError(getApiError(err, "No se pudo guardar el usuario"));
+      toast.error(getApiError(err, "No se pudo guardar el usuario"));
     } finally {
       setSubmitting(false);
     }
@@ -315,8 +453,6 @@ export default function UsersPage() {
 
   const handleScheduleSubmit = async (event) => {
     event.preventDefault();
-    setError("");
-    setMessage("");
 
     if (!scheduleUser) return;
 
@@ -324,12 +460,12 @@ export default function UsersPage() {
       !isTimeAllowedForShift(scheduleForm.workShift, scheduleForm.shiftStartTime) ||
       !isTimeAllowedForShift(scheduleForm.workShift, scheduleForm.shiftEndTime)
     ) {
-      setError("Selecciona horas validas para el turno elegido");
+      toast.error("Selecciona horas validas para el turno elegido");
       return;
     }
 
     if (scheduleForm.shiftStartTime >= scheduleForm.shiftEndTime) {
-      setError("La hora de inicio debe ser menor a la hora de termino");
+      toast.error("La hora de inicio debe ser menor a la hora de termino");
       return;
     }
 
@@ -341,11 +477,30 @@ export default function UsersPage() {
         shiftEndTime: scheduleForm.shiftEndTime,
         shiftNote: scheduleForm.shiftNote.trim() || null,
       });
-      setMessage("Horario de cajero actualizado exitosamente");
+      toast.success("Horario de cajero actualizado exitosamente");
       closeScheduleForm();
       await loadUsers();
     } catch (err) {
-      setError(getApiError(err, "No se pudo actualizar el horario del cajero"));
+      toast.error(getApiError(err, "No se pudo actualizar el horario del cajero"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+
+    try {
+      setSubmitting(true);
+      await deleteUserRequest(deleteUserTarget.id);
+      toast.success("Usuario eliminado exitosamente");
+      setDeleteUserTarget(null);
+      setForm(emptyForm);
+      setEditingUserId(null);
+      setActiveForm(false);
+      await loadUsers();
+    } catch (err) {
+      toast.error(getApiError(err, "No se pudo eliminar el usuario"));
     } finally {
       setSubmitting(false);
     }
@@ -377,9 +532,6 @@ export default function UsersPage() {
         </button>
       </div>
 
-      {message && <div className={alertClasses.success}>{message}</div>}
-      {error && !activeForm && !scheduleUser && <div className={alertClasses.error}>{error}</div>}
-
       <AppModal
         open={activeForm}
         title={isEditing ? "Editar usuario" : "Nuevo usuario"}
@@ -388,7 +540,6 @@ export default function UsersPage() {
         size="large"
       >
         <form className="grid gap-3.75" onSubmit={handleSubmit}>
-          {error && <div className={alertClasses.error}>{error}</div>}
           <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
             <label>
               Nombres
@@ -421,14 +572,27 @@ export default function UsersPage() {
           </div>
           <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
             <label>
-              Contraseña {isEditing && <span className="text-[11px] text-slate-500">opcional</span>}
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder={isEditing ? "Dejar vacío para mantener" : "Ej: Usuario123."}
-                required={!isEditing}
-              />
+              Contraseña
+              <span className="relative block">
+                <input
+                  className="pr-11"
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                  placeholder={isEditing ? "Dejar vacío para mantener" : "Ej: Usuario123."}
+                  required={!isEditing}
+                />
+                <button
+                  className="absolute top-1/2 right-1.5 h-8 min-h-0 w-8 -translate-y-1/2 border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </span>
             </label>
             <label>
               Teléfono
@@ -439,28 +603,77 @@ export default function UsersPage() {
               />
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
-            <label>
-              Rol
-              <select value={form.roleName} onChange={(event) => setForm((current) => ({ ...current, roleName: event.target.value }))}>
-                {roleOptions.map((role) => (
-                  <option key={role.name} value={role.name}>{role.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Estado
-              <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-              </select>
-            </label>
-          </div>
+          {!isEditingOwnAdmin && (
+            <div className={`grid gap-3 max-[720px]:grid-cols-1 ${isEditing ? "grid-cols-2" : "grid-cols-1"}`}>
+              <label>
+                Rol
+                <select
+                  value={form.roleName}
+                  onChange={(event) => {
+                    const roleName = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      roleName,
+                      status: roleName === "ADMIN" ? "ACTIVE" : current.status,
+                    }));
+                  }}
+                >
+                  {roleOptions.map((role) => (
+                    <option key={role.name} value={role.name}>{role.label}</option>
+                  ))}
+                </select>
+              </label>
+              {isEditing && (
+                <label>
+                  Estado
+                  <select
+                    value={form.status}
+                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                  >
+                    <option value="ACTIVE">Activo</option>
+                    <option value="INACTIVE">Inactivo</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
           <div className={formActionsClass}>
             <button className={secondaryButtonClass} type="button" onClick={closeForm} disabled={submitting}>Cancelar</button>
+            {isEditing && !isEditingOwnUser && (
+              <button className={dangerButtonClass} type="button" onClick={openDeleteUserModal} disabled={submitting}>
+                <Trash2 size={17} />
+                Eliminar usuario
+              </button>
+            )}
             <button type="submit" disabled={submitting}>{isEditing ? "Actualizar usuario" : "Guardar usuario"}</button>
           </div>
         </form>
+      </AppModal>
+
+      <AppModal
+        open={Boolean(deleteUserTarget)}
+        title="Eliminar usuario"
+        description="Esta acción eliminará permanentemente al usuario seleccionado y no se puede deshacer."
+        onClose={closeDeleteUserModal}
+        footer={(
+          <>
+            <button className={secondaryButtonClass} type="button" onClick={closeDeleteUserModal} disabled={submitting}>
+              No, volver
+            </button>
+            <button className={dangerButtonClass} type="button" onClick={handleDeleteUser} disabled={submitting}>
+              Sí, eliminar
+            </button>
+          </>
+        )}
+      >
+        <div className="grid gap-3 text-sm text-slate-600">
+          <p className="m-0 font-semibold text-ink-950">¿Estás seguro de eliminar este usuario?</p>
+          {deleteUserTarget && (
+            <p className="m-0">
+              Usuario: <strong>{deleteUserTarget.names} {deleteUserTarget.surnames}</strong>
+            </p>
+          )}
+        </div>
       </AppModal>
 
       <AppModal
@@ -470,7 +683,6 @@ export default function UsersPage() {
         onClose={closeScheduleForm}
       >
         <form className="grid gap-3.75" onSubmit={handleScheduleSubmit}>
-          {error && <div className={alertClasses.error}>{error}</div>}
           <label>
             Turno
             <select

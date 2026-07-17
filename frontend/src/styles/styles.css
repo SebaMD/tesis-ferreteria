@@ -112,3 +112,22 @@
     background: #fafbfc;
   }
 }
+
+[data-sonner-toast].app-toast-success {
+  color: #ffffff !important;
+  background: var(--color-ink-900) !important;
+  border-color: var(--color-ink-700) !important;
+}
+
+[data-sonner-toast].app-toast-info,
+[data-sonner-toast].app-toast-warning {
+  color: #ffffff !important;
+  background: var(--color-rust-600) !important;
+  border-color: var(--color-rust-500) !important;
+}
+
+[data-sonner-toast].app-toast-error {
+  color: #ffffff !important;
+  background: var(--color-critical-600) !important;
+  border-color: #dc2626 !important;
+}

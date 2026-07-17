@@ -1,5 +1,6 @@
 import { BarChart3, CalendarDays, DollarSign, FileSpreadsheet, Filter, RotateCcw, Search, ShoppingCart, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
@@ -8,7 +9,6 @@ import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from ".
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
 import {
-  alertClasses,
   badgeClass,
   dashboardListRowClass,
   dashboardPanelClass,
@@ -66,19 +66,17 @@ export default function ReportsPage() {
   const [report, setReport] = useState(null);
   const [cashierSummarySearch, setCashierSummarySearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const today = dateInputValue(new Date());
 
   const loadReport = async (nextFilters) => {
     setLoading(true);
-    setError("");
 
     try {
       const reportData = await getSalesReportRequest(nextFilters);
       setReport(reportData);
       setAppliedFilters(nextFilters);
     } catch (requestError) {
-      setError(getApiError(requestError, "No se pudo cargar el reporte de ventas"));
+      toast.error(getApiError(requestError, "No se pudo cargar el reporte de ventas"));
     } finally {
       setLoading(false);
     }
@@ -200,6 +198,7 @@ export default function ReportsPage() {
         total: Number(sale.total || 0),
       })),
     });
+    toast.success("Reporte de ventas exportado exitosamente");
   };
 
   return (
@@ -282,8 +281,6 @@ export default function ReportsPage() {
           </div>
         </div>
       </form>
-
-      {error && <div className={alertClasses.error}>{error}</div>}
 
       <div className="grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
         <article className={reportMetricCardClass}>

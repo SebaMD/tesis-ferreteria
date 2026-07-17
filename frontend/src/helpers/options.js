@@ -1,5 +1,3 @@
-export const OTHER_UNIT = "__OTHER_UNIT__";
-
 export const UNIT_OPTIONS = [
   "unidad",
   "kg",
@@ -23,19 +21,6 @@ export const UNIT_OPTIONS = [
   "docena",
   "set",
   "galón",
-];
-
-export const CATEGORY_SUGGESTIONS = [
-  "Herramientas manuales",
-  "Tornillería y fijaciones",
-  "Electricidad",
-  "Plomería",
-  "Pinturas y solventes",
-  "Seguridad industrial",
-  "Materiales de construcción",
-  "Jardinería",
-  "Adhesivos y sellantes",
-  "Ferretería general",
 ];
 
 export const ADJUSTMENT_REASONS = [

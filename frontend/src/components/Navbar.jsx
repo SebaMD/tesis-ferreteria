@@ -5,7 +5,7 @@ import { ROLE_NAMES } from "../helpers/roles.js";
 
 const pageNames = {
   "/dashboard": "Inicio",
-  "/products": "Productos",
+  "/products": "Inventario",
   "/sales": "Ventas",
   "/inventory": "Inventario",
   "/reports": "Reportes",

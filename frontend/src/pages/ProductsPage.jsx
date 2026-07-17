@@ -43,11 +43,7 @@ const suggestionListClass = "mt-2 grid max-h-36 overflow-auto rounded-[5px] bord
 const suggestionButtonClass = "flex min-h-8 w-full items-center justify-between rounded-[4px] border-0 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-ink-700 hover:bg-rust-50 hover:text-rust-700";
 const suggestionEmptyClass = "rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500";
 
-function normalizeProductName(name) {
-  return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
-}
-
-function normalizeCategoryName(name) {
+function normalizeEntityName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 
@@ -340,11 +336,11 @@ export default function ProductsPage() {
   const handleCreateCategory = async (event) => {
     event.preventDefault();
 
-    const normalizedCategoryName = normalizeCategoryName(categoryName);
+    const normalizedCategoryName = normalizeEntityName(categoryName);
     const duplicate = categories.some(
       (category) =>
         category.id !== editingCategoryId &&
-        normalizeCategoryName(category.name) === normalizedCategoryName,
+        normalizeEntityName(category.name) === normalizedCategoryName,
     );
 
     if (duplicate) {
@@ -390,7 +386,7 @@ export default function ProductsPage() {
       (product) =>
         product.id !== editingProductId &&
         product.categoryId === Number(form.categoryId) &&
-        normalizeProductName(product.name) === normalizeProductName(form.name),
+        normalizeEntityName(product.name) === normalizeEntityName(form.name),
     );
 
     if (duplicate) {
@@ -623,7 +619,7 @@ export default function ProductsPage() {
     setShowMovementProductSuggestions(false);
   };
 
-  const useUnitMeasure = (value) => {
+  const applyUnitMeasure = (value) => {
     const unitMeasure = value.trim().replace(/\s+/g, " ");
     if (!unitMeasure) return;
 
@@ -642,8 +638,7 @@ export default function ProductsPage() {
   };
 
   const selectUnitSuggestion = (unit) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useUnitMeasure(unit);
+    applyUnitMeasure(unit);
   };
 
   const selectMovementProduct = (product) => {
@@ -672,8 +667,7 @@ export default function ProductsPage() {
     const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
 
     if (unit) selectUnitSuggestion(unit);
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    else if (unitSearch.trim()) useUnitMeasure(unitSearch);
+    else if (unitSearch.trim()) applyUnitMeasure(unitSearch);
   };
 
   const handleMovementProductSearchKeyDown = (event) => {

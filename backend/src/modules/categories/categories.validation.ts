@@ -1,6 +1,6 @@
 import type { NewCategory } from "../../db/schema/index.js";
 
-export type CategoryBody = Pick<NewCategory, "name" | "description" | "status">;
+export type CategoryBody = Pick<NewCategory, "name" | "description">;
 export type EditCategoryBody = Partial<CategoryBody>;
 
 type ValidationResult<T> =
@@ -18,7 +18,7 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditCat
 
   const input = body as Record<string, unknown>;
   const value: EditCategoryBody = {};
-  const allowedFields = ["name", "description", "status"];
+  const allowedFields = ["name", "description"];
 
   for (const field of Object.keys(input)) {
     if (!allowedFields.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -39,11 +39,6 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditCat
       if (typeof input.description !== "string") return { success: false, error: "La descripcion debe ser texto" };
       value.description = normalizeText(input.description);
     }
-  }
-
-  if (input.status !== undefined) {
-    if (typeof input.status !== "boolean") return { success: false, error: "El estado debe ser booleano" };
-    value.status = input.status;
   }
 
   if (!partial && !value.name) return { success: false, error: "El nombre es obligatorio" };

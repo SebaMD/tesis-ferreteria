@@ -16,12 +16,6 @@ export const tableActionButtonClass = "min-h-8 px-2.75 text-xs";
 
 export const dangerButtonClass = "border-critical-600 bg-critical-600 hover:border-[#991b1b] hover:bg-[#991b1b]";
 
-export const alertClasses = {
-  success: "rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3.5 py-3 text-[13px] font-semibold text-[#166534]",
-  error: "rounded-[5px] border border-[#fecaca] bg-critical-50 px-3.5 py-3 text-[13px] font-semibold text-[#991b1b]",
-  warning: "rounded-[5px] border border-[#fed7aa] bg-rust-50 px-3.5 py-3 text-[13px] font-semibold text-[#92400e]",
-};
-
 const badgeBase = "status-badge relative inline-flex min-h-[27px] items-center rounded-[2px] py-0 pr-[9px] pl-[13px] font-mono text-[11px] font-bold uppercase before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-current";
 
 const badgeTones = {

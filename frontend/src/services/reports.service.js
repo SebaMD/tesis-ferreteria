@@ -6,17 +6,7 @@ function cleanParams(filters) {
   );
 }
 
-export async function getDailySalesReportRequest(date) {
-  const response = await api.get("/reports/sales/daily", { params: { date } });
-  return response.data.data;
-}
-
 export async function getSalesReportRequest(filters) {
   const response = await api.get("/reports/sales", { params: cleanParams(filters) });
-  return response.data.data;
-}
-
-export async function getSalesByCashierReportRequest(filters) {
-  const response = await api.get("/reports/sales/by-cashier", { params: cleanParams(filters) });
   return response.data.data;
 }

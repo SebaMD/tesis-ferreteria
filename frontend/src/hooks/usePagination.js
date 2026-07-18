@@ -30,7 +30,6 @@ export default function usePagination(items, options = {}) {
     pageSize,
     paginatedItems,
     setPage,
-    showPagination: totalItems > pageSize,
     totalItems,
     totalPages,
   };

@@ -6,7 +6,6 @@ import Sidebar from "./components/Sidebar.jsx";
 import useAuth from "./hooks/useAuth.js";
 import { ROUTE_PERMISSIONS } from "./helpers/roles.js";
 import DashboardPage from "./pages/DashboardPage.jsx";
-import InventoryPage from "./pages/InventoryPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProductsPage from "./pages/ProductsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
@@ -70,7 +69,7 @@ export default function App() {
         path="/inventory"
         element={
           <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.inventory}>
-            <InventoryPage />
+            <ProductsPage />
           </ProtectedPage>
         }
       />

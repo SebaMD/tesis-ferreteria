@@ -352,7 +352,6 @@ export default function ProductsPage() {
       const payload = {
         name: categoryName,
         description: categoryDescription.trim() || null,
-        status: true,
       };
       const category = editingCategoryId
         ? await updateCategoryRequest(editingCategoryId, payload)

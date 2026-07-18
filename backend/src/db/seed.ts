@@ -337,7 +337,6 @@ async function seedCatalog(
     .values(catalog.map((category) => ({
       name: category.name,
       description: category.description,
-      status: true,
     })))
     .onConflictDoNothing({ target: categoriesTable.name });
 

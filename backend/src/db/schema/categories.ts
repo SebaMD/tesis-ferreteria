@@ -1,5 +1,4 @@
 import {
-    boolean,
     integer,
     pgTable,
     text,
@@ -12,7 +11,6 @@ export const categoriesTable = pgTable(
         id: integer().primaryKey().generatedAlwaysAsIdentity(),
         name: varchar({ length: 100 }).notNull().unique(),
         description: text(),
-        status: boolean().notNull().default(true),
         createdAt: timestamp("created_at").notNull().defaultNow(),
         updatedAt: timestamp("updated_at").notNull().defaultNow(),
     }

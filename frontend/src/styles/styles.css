@@ -131,3 +131,220 @@
   background: var(--color-critical-600) !important;
   border-color: #dc2626 !important;
 }
+
+.app-loading-overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 65px 0 0 256px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  cursor: progress;
+  background: rgba(245, 246, 247, 0.48);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+
+.app-loading-overlay--screen {
+  z-index: 1000;
+  inset: 0;
+}
+
+.app-loading-overlay--contained {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  min-height: 180px;
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.app-loading-indicator {
+  display: grid;
+  min-width: 176px;
+  justify-items: center;
+  gap: 12px;
+  padding: 0;
+  color: var(--color-ink-950);
+  transform: translateY(-8vh);
+}
+
+.app-loading-overlay--contained .app-loading-indicator {
+  transform: none;
+}
+
+.app-loading-road {
+  position: relative;
+  width: 184px;
+  height: 76px;
+  overflow: hidden;
+}
+
+.app-loading-road::before {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 174px;
+  height: 2px;
+  content: "";
+  background: var(--color-ink-700);
+}
+
+.app-loading-road::after {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  width: 174px;
+  height: 2px;
+  content: "";
+  background-image: linear-gradient(
+    90deg,
+    var(--color-rust-500) 0 16px,
+    transparent 16px 28px
+  );
+  background-repeat: repeat-x;
+  background-size: 28px 2px;
+  animation: app-loading-road-move 0.65s linear infinite;
+}
+
+.app-loading-truck {
+  position: absolute;
+  z-index: 1;
+  bottom: 6px;
+  left: 2px;
+  width: 112px;
+  height: 56px;
+  overflow: visible;
+  filter: drop-shadow(0 3px 2px rgba(16, 21, 31, 0.18));
+  animation: app-loading-truck-drive 1.5s ease-in-out infinite alternate;
+}
+
+.app-loading-truck-bed,
+.app-loading-truck-chassis {
+  fill: var(--color-ink-900);
+}
+
+.app-loading-truck-rail {
+  fill: none;
+  stroke: var(--color-rust-500);
+  stroke-width: 2;
+}
+
+.app-loading-truck-cab,
+.app-loading-truck-bumper {
+  fill: var(--color-rust-600);
+}
+
+.app-loading-truck-window {
+  fill: var(--color-slate-100);
+}
+
+.app-loading-wheel {
+  fill: var(--color-ink-950);
+  stroke: var(--color-slate-100);
+  stroke-width: 2;
+}
+
+.app-loading-wheel-hub {
+  fill: var(--color-rust-500);
+}
+
+.app-loading-text {
+  display: flex;
+  min-width: 108px;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--color-ink-950);
+}
+
+.app-loading-dots {
+  display: inline-flex;
+  width: 22px;
+}
+
+.app-loading-dots span {
+  opacity: 0.2;
+  animation: app-loading-dot 1.2s ease-in-out infinite;
+}
+
+.app-loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.app-loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes app-loading-truck-drive {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+
+  45% {
+    transform: translate3d(32px, -2px, 0) rotate(1deg);
+  }
+
+  100% {
+    transform: translate3d(68px, 0, 0) rotate(-1deg);
+  }
+}
+
+@keyframes app-loading-road-move {
+  to {
+    background-position: -28px 0;
+  }
+}
+
+@keyframes app-loading-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (max-width: 980px) {
+  .app-loading-overlay {
+    left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-loading-overlay {
+    padding: 16px;
+  }
+
+  .app-loading-indicator {
+    min-width: 160px;
+    transform: translateY(-6vh);
+  }
+
+  .app-loading-overlay--contained .app-loading-indicator {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-road::after,
+  .app-loading-truck,
+  .app-loading-dots span {
+    animation: none;
+  }
+
+  .app-loading-truck {
+    left: 36px;
+  }
+
+  .app-loading-dots span {
+    opacity: 1;
+  }
+}

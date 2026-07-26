@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
 import { getAvailableStockStatus } from "../helpers/inventory.js";
@@ -66,6 +67,7 @@ export default function SalesPage() {
   const [saleToReactivate, setSaleToReactivate] = useState(null);
   const [saleDetail, setSaleDetail] = useState(null);
   const [loadingSaleDetail, setLoadingSaleDetail] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState("");
@@ -118,9 +120,15 @@ export default function SalesPage() {
   const hasSalesFilters = Boolean(normalizedSearch);
 
   const loadData = async () => {
-    const [productData, saleData] = await Promise.all([getProductsRequest(), getSalesRequest()]);
-    setProducts(productData);
-    setSales(saleData);
+    setLoading(true);
+
+    try {
+      const [productData, saleData] = await Promise.all([getProductsRequest(), getSalesRequest()]);
+      setProducts(productData);
+      setSales(saleData);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -423,6 +431,8 @@ export default function SalesPage() {
 
   return (
     <section className={`${pageClass} gap-3 py-4`}>
+      <LoadingOverlay active={loading} />
+
       <div className={pageHeaderClass}>
         <div>
           <h1>Ventas</h1>
@@ -581,8 +591,9 @@ export default function SalesPage() {
         onClose={closeDetailModal}
         size="large"
       >
-        <div className="grid gap-4">
-          {loadingSaleDetail && <p className="m-0 rounded-[5px] border border-slate-200 bg-[#fafbfc] px-3.5 py-3 text-sm font-semibold text-slate-600">Cargando detalle de la venta...</p>}
+        <div className="relative grid min-h-45 gap-4">
+          <LoadingOverlay active={loadingSaleDetail} contained />
+
           {saleDetail && (
             <>
               <div className="grid grid-cols-3 gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[720px]:grid-cols-1">

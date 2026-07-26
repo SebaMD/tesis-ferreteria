@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
 import useAuth from "../hooks/useAuth.js";
 
@@ -47,6 +48,8 @@ export default function LoginPage() {
 
   return (
     <main className="relative isolate grid min-h-screen grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
+      <LoadingOverlay active={loading} fullScreen />
+
       <section className="relative z-10 grid min-h-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">
         <div className="relative z-1 flex items-center gap-2.5">
           <BrandLogo className="size-13" />
@@ -118,7 +121,7 @@ export default function LoginPage() {
           </label>
 
           <button className="mt-0.5 w-full" type="submit" disabled={loading}>
-            {loading ? "Ingresando..." : "Ingresar"}
+            Ingresar
           </button>
         </form>
       </section>

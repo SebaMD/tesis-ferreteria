@@ -2,6 +2,7 @@ import { BarChart3, CalendarDays, DollarSign, FileSpreadsheet, Filter, RotateCcw
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
@@ -203,6 +204,8 @@ export default function ReportsPage() {
 
   return (
     <section className={`${pageClass} content-start`}>
+      <LoadingOverlay active={loading} />
+
       <div className={pageHeaderClass}>
         <div>
           <h1>Reportes de ventas</h1>
@@ -390,7 +393,6 @@ export default function ReportsPage() {
             })}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {loading && <span className={badgeClass("neutral")}>Cargando</span>}
             <button
               className={`${secondaryButtonClass} mr-0`}
               type="button"

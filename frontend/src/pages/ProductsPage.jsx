@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
@@ -114,6 +115,7 @@ export default function ProductsPage() {
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
   const [productStatusTarget, setProductStatusTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const canManage = user?.role === "ADMIN";
   const canViewHistory = ["ADMIN", "MANAGER"].includes(user?.role);
@@ -246,16 +248,22 @@ export default function ProductsPage() {
     return matchesSearch;
   }) : [];
   const loadData = async () => {
-    const [productData, movementData] = await Promise.all([
-      getProductsRequest(),
-      canViewHistory ? getInventoryMovementsRequest() : Promise.resolve([]),
-    ]);
-    setProducts(productData);
-    setMovements(movementData);
+    setLoading(true);
 
-    if (canManage) {
-      const categoryData = await getCategoriesRequest();
-      setCategories(categoryData);
+    try {
+      const [productData, movementData] = await Promise.all([
+        getProductsRequest(),
+        canViewHistory ? getInventoryMovementsRequest() : Promise.resolve([]),
+      ]);
+      setProducts(productData);
+      setMovements(movementData);
+
+      if (canManage) {
+        const categoryData = await getCategoriesRequest();
+        setCategories(categoryData);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -752,6 +760,8 @@ export default function ProductsPage() {
 
   return (
     <section className={pageClass}>
+      <LoadingOverlay active={loading} />
+
       <div className={pageHeaderClass}>
         <div>
           <h1>Inventario</h1>

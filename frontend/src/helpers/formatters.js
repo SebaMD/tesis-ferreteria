@@ -19,6 +19,17 @@ export function formatSaleFolio(id) {
   return `V-${String(id).padStart(6, "0")}`;
 }
 
+export function getSaleTotals(sale) {
+  const originalTotal = Number(sale?.total || 0);
+  const returnedTotal = Math.max(0, Number(sale?.returnedTotal || 0));
+  const netTotal = Math.max(
+    0,
+    Number(sale?.netTotal ?? originalTotal - returnedTotal),
+  );
+
+  return { originalTotal, returnedTotal, netTotal };
+}
+
 export function formatTableRecordCount({
   visibleCount,
   totalCount,

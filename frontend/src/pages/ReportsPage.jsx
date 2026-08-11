@@ -5,7 +5,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
@@ -42,6 +42,12 @@ const reportMetricIconClasses = {
   warning: "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600",
   positive: "inline-flex size-[38px] shrink-0 items-center justify-center rounded-[5px] bg-positive-50 text-positive-600",
 };
+
+function getSaleStatusTone(status) {
+  if (status === "ACTIVE") return "success";
+  if (status === "PARTIALLY_RETURNED") return "warning";
+  return "critical";
+}
 
 function dateInputValue(date) {
   const year = date.getFullYear();
@@ -188,7 +194,9 @@ export default function ReportsPage() {
         { key: "cajero", header: "Cajero" },
         { key: "metodoPago", header: "Método de pago" },
         { key: "estado", header: "Estado" },
-        { key: "total", header: "Total" },
+        { key: "totalOriginal", header: "Total original" },
+        { key: "totalDevuelto", header: "Total devuelto" },
+        { key: "totalNeto", header: "Total neto" },
       ],
       rows: reportSales.map((sale) => ({
         folio: formatSaleFolio(sale.id),
@@ -196,7 +204,9 @@ export default function ReportsPage() {
         cajero: `${sale.cashierNames || ""} ${sale.cashierSurnames || ""}`.trim(),
         metodoPago: getPaymentMethodLabel(sale.paymentMethod),
         estado: getSaleStatusLabel(sale.status),
-        total: Number(sale.total || 0),
+        totalOriginal: getSaleTotals(sale).originalTotal,
+        totalDevuelto: getSaleTotals(sale).returnedTotal,
+        totalNeto: getSaleTotals(sale).netTotal,
       })),
     });
     toast.success("Reporte de ventas exportado exitosamente");
@@ -292,12 +302,12 @@ export default function ReportsPage() {
             <span>Total vendido</span>
           </div>
           <strong className={reportMetricValueClass}>{formatClp(report?.total)}</strong>
-          <span className={reportMetricDescriptionClass}>Solo ventas activas del período</span>
+          <span className={reportMetricDescriptionClass}>Ventas activas y parcialmente devueltas</span>
         </article>
         <article className={reportMetricCardClass}>
           <div className={reportMetricHeaderClass}>
             <span className={reportMetricIconClasses.neutral}><ShoppingCart size={20} /></span>
-            <span>Ventas activas</span>
+            <span>Ventas incluidas</span>
           </div>
           <strong className={reportMetricValueClass}>{report?.salesCount ?? 0}</strong>
           <span className={reportMetricDescriptionClass}>Operaciones incluidas en el total</span>
@@ -308,7 +318,7 @@ export default function ReportsPage() {
             <span>Mayor total por cajero</span>
           </div>
           <strong className={`${reportMetricValueClass} max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-sans text-xl`}>{topCashier?.cashierName || "Sin ventas"}</strong>
-          <span className={reportMetricDescriptionClass}>{topCashier ? formatClp(topCashier.total) : "Sin ventas activas en el período"}</span>
+          <span className={reportMetricDescriptionClass}>{topCashier ? formatClp(topCashier.total) : "Sin ventas incluidas en el período"}</span>
         </article>
       </div>
 
@@ -317,7 +327,7 @@ export default function ReportsPage() {
           <div className={dashboardPanelHeadingClass}>
             <div>
               <h2>Resumen por cajero</h2>
-              <p>Ventas activas y total recaudado</p>
+              <p>Ventas vigentes y total neto recaudado</p>
             </div>
             <span className={panelCountClass}>{displayedCashierSummary.length}</span>
           </div>
@@ -343,7 +353,7 @@ export default function ReportsPage() {
                 </div>
                 <div className={listRowEndClass}>
                   <strong>{formatClp(cashier.total)}</strong>
-                  <span>{cashier.salesCount} {cashier.salesCount === 1 ? "venta activa" : "ventas activas"}</span>
+                  <span>{cashier.salesCount} {cashier.salesCount === 1 ? "venta incluida" : "ventas incluidas"}</span>
                   <span>ID #{cashier.cashierId}</span>
                 </div>
               </div>
@@ -361,7 +371,7 @@ export default function ReportsPage() {
           <div className={dashboardPanelHeadingClass}>
             <div>
               <h2>Resumen por método de pago</h2>
-              <p>Distribución de las ventas activas</p>
+              <p>Distribución del total neto</p>
             </div>
             <span className={panelCountClass}>{report?.byPaymentMethod?.length || 0}</span>
           </div>
@@ -412,7 +422,9 @@ export default function ReportsPage() {
                 <th>Fecha y hora</th>
                 <th>Cajero</th>
                 <th>Método</th>
-                <th>Total</th>
+                <th>Total original</th>
+                <th>Devuelto</th>
+                <th>Total neto</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -423,16 +435,18 @@ export default function ReportsPage() {
                   <td>{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</td>
                   <td>{sale.cashierNames} {sale.cashierSurnames}</td>
                   <td>{getPaymentMethodLabel(sale.paymentMethod)}</td>
-                  <td className={numericCellClass}>{formatClp(sale.total)}</td>
+                  <td className={numericCellClass}>{formatClp(getSaleTotals(sale).originalTotal)}</td>
+                  <td className={numericCellClass}>{formatClp(getSaleTotals(sale).returnedTotal)}</td>
+                  <td className={numericCellClass}>{formatClp(getSaleTotals(sale).netTotal)}</td>
                   <td>
-                    <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
+                    <span className={badgeClass(getSaleStatusTone(sale.status))}>
                       {getSaleStatusLabel(sale.status)}
                     </span>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td className={emptyTableCellClass} colSpan="6">No hay ventas para los filtros seleccionados.</td>
+                  <td className={emptyTableCellClass} colSpan="8">No hay ventas para los filtros seleccionados.</td>
                 </tr>
               )}
             </tbody>

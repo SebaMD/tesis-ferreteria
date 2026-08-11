@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
-import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate, getSaleTotals } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct } from "../helpers/inventory.js";
 import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
@@ -50,6 +50,12 @@ function isToday(value) {
     date.getMonth() === today.getMonth() &&
     date.getDate() === today.getDate()
   );
+}
+
+function getSaleStatusTone(status) {
+  if (status === "ACTIVE") return "success";
+  if (status === "PARTIALLY_RETURNED") return "warning";
+  return "critical";
 }
 
 export default function DashboardPage() {
@@ -129,14 +135,16 @@ export default function DashboardPage() {
     [products],
   );
   const activeSales = useMemo(
-    () => sales.filter((sale) => sale.status === "ACTIVE"),
+    () => sales.filter(
+      (sale) => sale.status === "ACTIVE" || sale.status === "PARTIALLY_RETURNED",
+    ),
     [sales],
   );
   const cashierTodaySalesTotal = useMemo(
     () =>
       activeSales
         .filter((sale) => String(sale.userId) === String(user?.id) && isToday(sale.date || sale.createdAt))
-        .reduce((total, sale) => total + Number(sale.total || 0), 0),
+        .reduce((total, sale) => total + getSaleTotals(sale).netTotal, 0),
     [activeSales, user?.id],
   );
   const recentMovements = useMemo(
@@ -185,7 +193,7 @@ export default function DashboardPage() {
       }]
       : []),
     ...(canViewSales
-      ? [{ label: "Ventas activas", value: activeSales.length, icon: ShoppingCart, tone: "positive", path: "/sales?view=history" }]
+      ? [{ label: "Ventas vigentes", value: activeSales.length, icon: ShoppingCart, tone: "positive", path: "/sales?view=history" }]
       : []),
     ...(user?.role === "CASHIER"
       ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive", path: "/sales?view=history" }]
@@ -294,8 +302,8 @@ export default function DashboardPage() {
                       <span>{sale.userNames} {sale.userSurnames} · {formatDate(sale.date, DASHBOARD_DATE_OPTIONS)}</span>
                     </div>
                     <div className={listRowEndClass}>
-                      <strong>{formatClp(sale.total)}</strong>
-                      <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
+                      <strong>{formatClp(getSaleTotals(sale).netTotal)}</strong>
+                      <span className={badgeClass(getSaleStatusTone(sale.status))}>
                         {getSaleStatusLabel(sale.status)}
                       </span>
                     </div>

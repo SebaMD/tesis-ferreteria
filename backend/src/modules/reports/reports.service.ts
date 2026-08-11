@@ -30,10 +30,14 @@ function fromCents(value: number) {
   return value / 100;
 }
 
-function addPaymentTotal(map: Map<string, { salesCount: number; totalCents: number }>, sale: ReportSale) {
+function addPaymentTotal(
+  map: Map<string, { salesCount: number; totalCents: number }>,
+  sale: ReportSale,
+  amountCents: number,
+) {
   const current = map.get(sale.paymentMethod) ?? { salesCount: 0, totalCents: 0 };
   current.salesCount += 1;
-  current.totalCents += toCents(sale.total);
+  current.totalCents += amountCents;
   map.set(sale.paymentMethod, current);
 }
 
@@ -48,7 +52,9 @@ function paymentSummary(map: Map<string, { salesCount: number; totalCents: numbe
 }
 
 function aggregateSales(sales: ReportSale[]) {
-  const activeSales = sales.filter((sale) => sale.status === "ACTIVE");
+  const includedSales = sales.filter(
+    (sale) => sale.status === "ACTIVE" || sale.status === "PARTIALLY_RETURNED",
+  );
   const paymentTotals = new Map<string, { salesCount: number; totalCents: number }>();
   const cashierTotals = new Map<
     number,
@@ -67,6 +73,8 @@ function aggregateSales(sales: ReportSale[]) {
   >();
 
   let totalCents = 0;
+  let originalTotalCents = 0;
+  let returnedTotalCents = 0;
 
   for (const sale of sales) {
     if (!cashierTotals.has(sale.cashierId)) {
@@ -85,10 +93,12 @@ function aggregateSales(sales: ReportSale[]) {
     }
   }
 
-  for (const sale of activeSales) {
-    const saleCents = toCents(sale.total);
+  for (const sale of includedSales) {
+    const saleCents = toCents(sale.netTotal);
     totalCents += saleCents;
-    addPaymentTotal(paymentTotals, sale);
+    originalTotalCents += toCents(sale.total);
+    returnedTotalCents += toCents(sale.returnedTotal);
+    addPaymentTotal(paymentTotals, sale, saleCents);
 
     const cashier = cashierTotals.get(sale.cashierId) ?? {
       cashierNames: sale.cashierNames,
@@ -105,7 +115,7 @@ function aggregateSales(sales: ReportSale[]) {
 
     cashier.salesCount += 1;
     cashier.totalCents += saleCents;
-    addPaymentTotal(cashier.payments, sale);
+    addPaymentTotal(cashier.payments, sale, saleCents);
     cashierTotals.set(sale.cashierId, cashier);
   }
 
@@ -128,7 +138,9 @@ function aggregateSales(sales: ReportSale[]) {
 
   return {
     total: fromCents(totalCents),
-    salesCount: activeSales.length,
+    originalTotal: fromCents(originalTotalCents),
+    returnedTotal: fromCents(returnedTotalCents),
+    salesCount: includedSales.length,
     byPaymentMethod: paymentSummary(paymentTotals),
     byCashier,
   };
@@ -141,6 +153,8 @@ export async function getDailySalesReportService(filters: ReportDateRange) {
   return {
     date: filters.fromLabel,
     total: summary.total,
+    originalTotal: summary.originalTotal,
+    returnedTotal: summary.returnedTotal,
     salesCount: summary.salesCount,
     byPaymentMethod: summary.byPaymentMethod,
     byCashier: summary.byCashier,
@@ -160,6 +174,8 @@ export async function getSalesReportService(filters: ReportDateRange) {
     },
     sales,
     total: summary.total,
+    originalTotal: summary.originalTotal,
+    returnedTotal: summary.returnedTotal,
     salesCount: summary.salesCount,
     byCashier: summary.byCashier,
     byPaymentMethod: summary.byPaymentMethod,

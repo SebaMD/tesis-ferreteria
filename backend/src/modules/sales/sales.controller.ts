@@ -3,14 +3,23 @@ import type { AuthenticatedRequest } from "../../middlewares/authentication.midd
 import { InventoryMovementError } from "../inventory/inventory.service.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import {
+  approveCancellationRequestService,
   cancelSaleService,
+  createCancellationRequestService,
+  createDirectReturnService,
   createSaleService,
+  getCancellationRequestsService,
   getSaleByIdService,
   getSalesService,
+  rejectCancellationRequestService,
   SaleError,
-  undoCancelSaleService,
+  undoCancellationRequestService,
 } from "./sales.service.js";
-import { validateCreateSaleBody } from "./sales.validation.js";
+import {
+  validateCancellationRequestBody,
+  validateCancellationReviewBody,
+  validateCreateSaleBody,
+} from "./sales.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -63,6 +72,134 @@ export async function createSaleController(req: AuthenticatedRequest, res: Respo
   }
 }
 
+export async function getCancellationRequestsController(_req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Solicitudes de devolución obtenidas exitosamente",
+      await getCancellationRequestsService(),
+    );
+  } catch (error) {
+    return handleErrorServer(res, 500, "Error al obtener solicitudes de devolución", msg(error));
+  }
+}
+
+export async function createCancellationRequestController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
+    const saleId = parseId(req.params.id);
+    if (!saleId) return handleErrorClient(res, 400, "El id debe ser valido");
+
+    const validation = validateCancellationRequestBody(req.body);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const request = await createCancellationRequestService(
+      saleId,
+      req.user.id,
+      validation.value,
+    );
+
+    return handleSuccess(res, 201, "Solicitud de devolución enviada exitosamente", request);
+  } catch (error) {
+    if (error instanceof SaleError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al solicitar devolución", msg(error));
+  }
+}
+
+export async function createDirectReturnController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
+    const saleId = parseId(req.params.id);
+    if (!saleId) return handleErrorClient(res, 400, "El id debe ser valido");
+
+    const validation = validateCancellationRequestBody(req.body);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const result = await createDirectReturnService(saleId, req.user.id, validation.value);
+    return handleSuccess(res, 200, "Devolución registrada exitosamente", result);
+  } catch (error) {
+    if (error instanceof SaleError || error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al registrar devolución", msg(error));
+  }
+}
+
+export async function approveCancellationRequestController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
+    const requestId = parseId(req.params.requestId);
+    if (!requestId) return handleErrorClient(res, 400, "El id debe ser valido");
+
+    const validation = validateCancellationReviewBody(req.body, false);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const request = await approveCancellationRequestService(
+      requestId,
+      req.user.id,
+      validation.value,
+    );
+
+    return handleSuccess(res, 200, "Solicitud de devolución aprobada exitosamente", request);
+  } catch (error) {
+    if (error instanceof SaleError || error instanceof InventoryMovementError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al aprobar solicitud de devolución", msg(error));
+  }
+}
+
+export async function rejectCancellationRequestController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+
+    const requestId = parseId(req.params.requestId);
+    if (!requestId) return handleErrorClient(res, 400, "El id debe ser valido");
+
+    const validation = validateCancellationReviewBody(req.body, true);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const request = await rejectCancellationRequestService(
+      requestId,
+      req.user.id,
+      validation.value,
+    );
+
+    return handleSuccess(res, 200, "Solicitud de devolución rechazada", request);
+  } catch (error) {
+    if (error instanceof SaleError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al rechazar solicitud de devolución", msg(error));
+  }
+}
+
 export async function cancelSaleController(req: AuthenticatedRequest, res: Response) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
@@ -80,19 +217,22 @@ export async function cancelSaleController(req: AuthenticatedRequest, res: Respo
   }
 }
 
-export async function undoCancelSaleController(req: AuthenticatedRequest, res: Response) {
+export async function undoCancellationRequestController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   try {
     if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
 
-    const id = parseId(req.params.id);
-    if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
+    const requestId = parseId(req.params.requestId);
+    if (!requestId) return handleErrorClient(res, 400, "El id debe ser valido");
 
-    const sale = await undoCancelSaleService(id, req.user.id);
-    return handleSuccess(res, 200, "Cancelación deshecha exitosamente", sale);
+    const result = await undoCancellationRequestService(requestId, req.user.id);
+    return handleSuccess(res, 200, "Devolución deshecha exitosamente", result);
   } catch (error) {
     if (error instanceof SaleError || error instanceof InventoryMovementError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
-    return handleErrorServer(res, 500, "Error al deshacer cancelación de venta", msg(error));
+    return handleErrorServer(res, 500, "Error al deshacer devolución", msg(error));
   }
 }

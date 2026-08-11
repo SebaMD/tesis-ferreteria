@@ -29,6 +29,20 @@
       "when": 1784318613210,
       "tag": "0003_remove_categories_status",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785304341356,
+      "tag": "0004_sale_cancellation_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785908478506,
+      "tag": "0005_furry_mentor",
+      "breakpoints": true
     }
   ]
 }

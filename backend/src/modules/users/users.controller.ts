@@ -215,7 +215,7 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response) {
       return handleErrorClient(
         res,
         409,
-        "No se puede eliminar este usuario porque tiene ventas o movimientos de inventario asociados",
+        "No se puede eliminar este usuario porque tiene ventas, movimientos de inventario o solicitudes de cancelación asociadas",
       );
     }
 

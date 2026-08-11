@@ -1238,7 +1238,7 @@ export default function ProductsPage() {
                   placeholder="Buscar por nombre o descripción"
                 />
               </label>
-              <div className="grid max-h-56 gap-2 overflow-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [transform:translateZ(0)]">
+              <div className="grid max-h-56 gap-2 overflow-auto overscroll-contain pr-1 scrollbar-gutter-stable transform-[translateZ(0)]">
                 {categories.length === 0 ? (
                   <p className="m-0 text-xs text-slate-500">Todavía no hay categorías registradas.</p>
                 ) : filteredExistingCategories.length === 0 ? (

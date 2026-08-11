@@ -8,7 +8,15 @@ export const MOVEMENT_LABELS = {
 
 export const SALE_STATUS_LABELS = {
   ACTIVE: "Activa",
+  PARTIALLY_RETURNED: "Devuelta parcialmente",
   CANCELLED: "Cancelada",
+};
+
+export const CANCELLATION_REQUEST_STATUS_LABELS = {
+  PENDING: "Pendiente",
+  APPROVED: "Aprobada",
+  REJECTED: "Rechazada",
+  REVERSED: "Revertida",
 };
 
 export const WORK_SHIFT_LABELS = {
@@ -19,6 +27,10 @@ export const WORK_SHIFT_LABELS = {
 
 export function getSaleStatusLabel(status) {
   return SALE_STATUS_LABELS[status] || status;
+}
+
+export function getCancellationRequestStatusLabel(status) {
+  return CANCELLATION_REQUEST_STATUS_LABELS[status] || status;
 }
 
 export function getPaymentMethodLabel(value = "") {

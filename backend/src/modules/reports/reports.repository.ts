@@ -1,7 +1,18 @@
 import { and, desc, eq, gte, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { salesTable, usersTable } from "../../db/schema/index.js";
+import { saleDetailsTable, salesTable, usersTable } from "../../db/schema/index.js";
 import type { ReportDateRange } from "./reports.validation.js";
+
+const returnedTotalExpression = sql<string>`coalesce((
+  select sum(${saleDetailsTable.returnedQuantity} * ${saleDetailsTable.unitPrice})
+  from ${saleDetailsTable}
+  where ${saleDetailsTable.saleId} = ${salesTable.id}
+), 0)`;
+
+const netTotalExpression = sql<string>`greatest(
+  ${salesTable.total} - ${returnedTotalExpression},
+  0
+)`;
 
 const reportSaleColumns = {
   id: salesTable.id,
@@ -16,6 +27,8 @@ const reportSaleColumns = {
   date: salesTable.date,
   paymentMethod: salesTable.paymentMethod,
   total: salesTable.total,
+  returnedTotal: returnedTotalExpression,
+  netTotal: netTotalExpression,
   status: salesTable.status,
 };
 

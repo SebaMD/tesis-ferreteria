@@ -15,12 +15,32 @@ export async function createSaleRequest(data) {
   return response.data.data;
 }
 
-export async function cancelSaleRequest(id) {
-  const response = await api.delete(`/sales/${id}`);
+export async function createDirectReturnRequest(id, data) {
+  const response = await api.post(`/sales/${id}/returns`, data);
   return response.data.data;
 }
 
-export async function undoCancelSaleRequest(id) {
-  const response = await api.patch(`/sales/${id}/undo-cancel`);
+export async function undoCancellationRequest(id) {
+  const response = await api.patch(`/sales/cancellation-requests/${id}/undo`);
+  return response.data.data;
+}
+
+export async function getCancellationRequestsRequest() {
+  const response = await api.get("/sales/cancellation-requests");
+  return response.data.data || [];
+}
+
+export async function createCancellationRequest(id, data) {
+  const response = await api.post(`/sales/${id}/cancellation-requests`, data);
+  return response.data.data;
+}
+
+export async function approveCancellationRequest(id, data = {}) {
+  const response = await api.patch(`/sales/cancellation-requests/${id}/approve`, data);
+  return response.data.data;
+}
+
+export async function rejectCancellationRequest(id, data) {
+  const response = await api.patch(`/sales/cancellation-requests/${id}/reject`, data);
   return response.data.data;
 }

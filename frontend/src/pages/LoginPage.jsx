@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
 import useAuth from "../hooks/useAuth.js";
 
@@ -46,8 +47,10 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative isolate grid min-h-screen grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
-      <section className="relative z-10 grid min-h-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">
+    <main className="relative isolate grid h-dvh min-h-0 grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
+      <LoadingOverlay active={loading} fullScreen />
+
+      <section className="relative z-10 grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">
         <div className="relative z-1 flex items-center gap-2.5">
           <BrandLogo className="size-13" />
           <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
@@ -67,9 +70,9 @@ export default function LoginPage() {
         fetchPriority="high"
       />
       <section
-        className="relative z-1 grid min-h-screen place-items-center p-8 max-[720px]:p-6"
+        className="relative z-1 grid h-full min-h-0 place-items-center overflow-hidden p-8 max-[720px]:p-6"
       >
-        <form className="z-10 grid w-full max-w-110 min-w-0 gap-6 rounded-md border-2 border-rust-500 bg-white p-7.5 shadow-[0_14px_38px_rgba(16,21,31,0.09)] max-[720px]:w-[calc(100vw-48px)] max-[720px]:px-5 max-[720px]:py-6" onSubmit={handleSubmit}>
+        <form className="z-10 grid w-full max-w-110 min-w-0 gap-6 rounded-md border-2 border-rust-500 bg-white p-7.5 shadow-[0_14px_38px_rgba(16,21,31,0.09)] max-[720px]:w-[calc(100vw-48px)] max-[720px]:gap-4 max-[720px]:px-5 max-[720px]:py-6" onSubmit={handleSubmit}>
           <div className="hidden items-center justify-center gap-2.5 text-ink-950 max-[720px]:flex">
             <BrandLogo className="size-13" />
             <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
@@ -118,7 +121,7 @@ export default function LoginPage() {
           </label>
 
           <button className="mt-0.5 w-full" type="submit" disabled={loading}>
-            {loading ? "Ingresando..." : "Ingresar"}
+            Ingresar
           </button>
         </form>
       </section>

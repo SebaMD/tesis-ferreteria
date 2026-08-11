@@ -1,4 +1,5 @@
-import { integer, numeric, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, integer, numeric, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.js";
 
 export const salesTable = pgTable(
@@ -13,7 +14,13 @@ export const salesTable = pgTable(
     status: varchar({ length: 50 }).notNull().default("ACTIVE"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  }
+  },
+  (table) => [
+    check(
+      "sales_status_check",
+      sql`${table.status} in ('ACTIVE', 'PARTIALLY_RETURNED', 'CANCELLED')`,
+    ),
+  ],
 );
 
 export type Sale = typeof salesTable.$inferSelect;

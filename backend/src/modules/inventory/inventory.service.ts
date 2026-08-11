@@ -75,7 +75,12 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       break;
     }
     case "EXIT": {
-      const updatedProduct = await decreaseProductStock(tx, data.productId, data.quantity);
+      const updatedProduct = await decreaseProductStock(
+        tx,
+        data.productId,
+        data.quantity,
+        data.allowInactive,
+      );
 
       if (!updatedProduct) {
         throw new InventoryMovementError("Stock insuficiente para realizar el movimiento", 409);

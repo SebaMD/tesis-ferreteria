@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
@@ -244,6 +245,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const roleOptions = useMemo(() => getRoleOptions(users), [users]);
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
@@ -288,8 +290,14 @@ export default function UsersPage() {
   );
 
   const loadUsers = async () => {
-    const data = await getUsersRequest();
-    setUsers(data);
+    setLoading(true);
+
+    try {
+      const data = await getUsersRequest();
+      setUsers(data);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -508,6 +516,8 @@ export default function UsersPage() {
 
   return (
     <section className={pageClass}>
+      <LoadingOverlay active={loading} />
+
       <div className={pageHeaderClass}>
         <div>
           <h1>Usuarios</h1>

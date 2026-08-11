@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
-import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
+import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import { compareByNewest, formatClp, formatDate, getSaleTotals } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct } from "../helpers/inventory.js";
 import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
@@ -22,7 +23,6 @@ import {
   metricIconClasses,
   pageClass,
   pageHeaderClass,
-  panelClass,
   panelCountClass,
 } from "../helpers/uiClasses.js";
 
@@ -50,6 +50,12 @@ function isToday(value) {
     date.getMonth() === today.getMonth() &&
     date.getDate() === today.getDate()
   );
+}
+
+function getSaleStatusTone(status) {
+  if (status === "ACTIVE") return "success";
+  if (status === "PARTIALLY_RETURNED") return "warning";
+  return "critical";
 }
 
 export default function DashboardPage() {
@@ -129,14 +135,16 @@ export default function DashboardPage() {
     [products],
   );
   const activeSales = useMemo(
-    () => sales.filter((sale) => sale.status === "ACTIVE"),
+    () => sales.filter(
+      (sale) => sale.status === "ACTIVE" || sale.status === "PARTIALLY_RETURNED",
+    ),
     [sales],
   );
   const cashierTodaySalesTotal = useMemo(
     () =>
       activeSales
         .filter((sale) => String(sale.userId) === String(user?.id) && isToday(sale.date || sale.createdAt))
-        .reduce((total, sale) => total + Number(sale.total || 0), 0),
+        .reduce((total, sale) => total + getSaleTotals(sale).netTotal, 0),
     [activeSales, user?.id],
   );
   const recentMovements = useMemo(
@@ -185,7 +193,7 @@ export default function DashboardPage() {
       }]
       : []),
     ...(canViewSales
-      ? [{ label: "Ventas activas", value: activeSales.length, icon: ShoppingCart, tone: "positive", path: "/sales?view=history" }]
+      ? [{ label: "Ventas vigentes", value: activeSales.length, icon: ShoppingCart, tone: "positive", path: "/sales?view=history" }]
       : []),
     ...(user?.role === "CASHIER"
       ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive", path: "/sales?view=history" }]
@@ -212,140 +220,136 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className={`${panelClass} text-center text-[13px] text-slate-500`}>Cargando información del sistema...</div>
-      ) : (
-        <>
-          <div className={metricsGridClass}>
-            {metrics.map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <article
-                  className={`${metricCardClass} ${metric.path ? quickLinkClass : ""}`}
-                  key={metric.label}
-                  {...quickLinkProps(metric.path)}
-                >
-                  <span className={metricIconClasses[metric.tone]}><Icon size={20} /></span>
-                  <strong>{metric.value}</strong>
-                  <span>{metric.label}</span>
-                </article>
-              );
-            })}
-          </div>
+      <LoadingOverlay active={loading} />
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
-            {canViewStockReplenishment && (
-              <section
-                className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
-                {...quickLinkProps(ROUTE_PERMISSIONS.products.includes(user?.role) ? `/products${canUseLowStockFilter ? "?filter=low-stock" : ""}` : null)}
-              >
-                <div className={dashboardPanelHeadingClass}>
-                  <div>
-                    <h2>Productos a reponer</h2>
-                    <p>Stock igual o inferior al mínimo definido</p>
-                  </div>
-                  <span className={panelCountClass}>{lowStockProducts.length}</span>
-                </div>
+      <div className={metricsGridClass}>
+        {metrics.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <article
+              className={`${metricCardClass} ${metric.path ? quickLinkClass : ""}`}
+              key={metric.label}
+              {...quickLinkProps(metric.path)}
+            >
+              <span className={metricIconClasses[metric.tone]}><Icon size={20} /></span>
+              <strong>{metric.value}</strong>
+              <span>{metric.label}</span>
+            </article>
+          );
+        })}
+      </div>
 
-                <div className="grid">
-                  {priorityLowStockProducts.length === 0 ? (
-                    <p className={emptyStateClass}>No hay productos con stock bajo.</p>
-                  ) : (
-                    priorityLowStockProducts.map((product) => {
-                      const stockStatus = getStockStatus(product, user?.role);
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
+        {canViewStockReplenishment && (
+          <section
+            className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
+            {...quickLinkProps(ROUTE_PERMISSIONS.products.includes(user?.role) ? `/products${canUseLowStockFilter ? "?filter=low-stock" : ""}` : null)}
+          >
+            <div className={dashboardPanelHeadingClass}>
+              <div>
+                <h2>Productos a reponer</h2>
+                <p>Stock igual o inferior al mínimo definido</p>
+              </div>
+              <span className={panelCountClass}>{lowStockProducts.length}</span>
+            </div>
 
-                      return (
-                        <article className={dashboardListRowClass} key={product.id}>
-                          <div>
-                            <strong>{product.name}</strong>
-                            <span>{product.categoryName}</span>
-                          </div>
-                          <div className={listRowEndClass}>
-                            <strong>{product.currentStock} / {product.minimumStock}</strong>
-                            <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
-                          </div>
-                        </article>
-                      );
-                    })
-                  )}
-                </div>
-              </section>
-            )}
+            <div className="grid">
+              {priorityLowStockProducts.length === 0 ? (
+                <p className={emptyStateClass}>No hay productos con stock bajo.</p>
+              ) : (
+                priorityLowStockProducts.map((product) => {
+                  const stockStatus = getStockStatus(product, user?.role);
 
-            {canViewSales && (
-              <section
-                className={`${dashboardPanelClass} ${canViewSales ? quickLinkClass : ""}`}
-                {...quickLinkProps(canViewSales ? "/sales?view=history" : null)}
-              >
-                <div className={dashboardPanelHeadingClass}>
-                  <div>
-                    <h2>Últimas ventas</h2>
-                    <p>Ventas presenciales más recientes</p>
-                  </div>
-                  <span className={panelCountClass}>{sales.length}</span>
-                </div>
+                  return (
+                    <article className={dashboardListRowClass} key={product.id}>
+                      <div>
+                        <strong>{product.name}</strong>
+                        <span>{product.categoryName}</span>
+                      </div>
+                      <div className={listRowEndClass}>
+                        <strong>{product.currentStock} / {product.minimumStock}</strong>
+                        <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        )}
 
-                <div className="grid">
-                  {latestSales.length === 0 ? (
-                    <p className={emptyStateClass}>Todavía no hay ventas registradas.</p>
-                  ) : (
-                    latestSales.map((sale) => (
-                      <article className={dashboardListRowClass} key={sale.id}>
-                        <div>
-                          <strong>Venta #{sale.id}</strong>
-                          <span>{sale.userNames} {sale.userSurnames} · {formatDate(sale.date, DASHBOARD_DATE_OPTIONS)}</span>
-                        </div>
-                        <div className={listRowEndClass}>
-                          <strong>{formatClp(sale.total)}</strong>
-                          <span className={badgeClass(sale.status === "ACTIVE" ? "success" : "critical")}>
-                            {getSaleStatusLabel(sale.status)}
-                          </span>
-                        </div>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </section>
-            )}
+        {canViewSales && (
+          <section
+            className={`${dashboardPanelClass} ${canViewSales ? quickLinkClass : ""}`}
+            {...quickLinkProps(canViewSales ? "/sales?view=history" : null)}
+          >
+            <div className={dashboardPanelHeadingClass}>
+              <div>
+                <h2>Últimas ventas</h2>
+                <p>Ventas presenciales más recientes</p>
+              </div>
+              <span className={panelCountClass}>{sales.length}</span>
+            </div>
 
-            {canViewInventoryHistory && (
-              <section
-                className={`${dashboardPanelClass} ${canViewInventoryHistory ? quickLinkClass : ""}`}
-                {...quickLinkProps(canViewInventoryHistory ? "/products?view=history" : null)}
-              >
-                <div className={dashboardPanelHeadingClass}>
-                  <div>
-                    <h2>Movimientos recientes</h2>
-                    <p>Últimas operaciones de inventario</p>
-                  </div>
-                  <span className={panelCountClass}>{movements.length}</span>
-                </div>
+            <div className="grid">
+              {latestSales.length === 0 ? (
+                <p className={emptyStateClass}>Todavía no hay ventas registradas.</p>
+              ) : (
+                latestSales.map((sale) => (
+                  <article className={dashboardListRowClass} key={sale.id}>
+                    <div>
+                      <strong>Venta #{sale.id}</strong>
+                      <span>{sale.userNames} {sale.userSurnames} · {formatDate(sale.date, DASHBOARD_DATE_OPTIONS)}</span>
+                    </div>
+                    <div className={listRowEndClass}>
+                      <strong>{formatClp(getSaleTotals(sale).netTotal)}</strong>
+                      <span className={badgeClass(getSaleStatusTone(sale.status))}>
+                        {getSaleStatusLabel(sale.status)}
+                      </span>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
-                <div className="grid">
-                  {latestMovements.length === 0 ? (
-                    <p className={emptyStateClass}>Todavía no hay movimientos registrados.</p>
-                  ) : (
-                    latestMovements.map((movement) => (
-                      <article className={dashboardListRowClass} key={movement.id}>
-                        <div>
-                          <strong>{movement.productName}</strong>
-                          <span>{formatDate(movement.date, DASHBOARD_DATE_OPTIONS)}</span>
-                        </div>
-                        <div className={listRowEndClass}>
-                          <strong>{movement.quantity} unidades</strong>
-                          <span className={badgeClass(getMovementTone(movement))}>
-                            {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
-                          </span>
-                        </div>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
-        </>
-      )}
+        {canViewInventoryHistory && (
+          <section
+            className={`${dashboardPanelClass} ${canViewInventoryHistory ? quickLinkClass : ""}`}
+            {...quickLinkProps(canViewInventoryHistory ? "/products?view=history" : null)}
+          >
+            <div className={dashboardPanelHeadingClass}>
+              <div>
+                <h2>Movimientos recientes</h2>
+                <p>Últimas operaciones de inventario</p>
+              </div>
+              <span className={panelCountClass}>{movements.length}</span>
+            </div>
+
+            <div className="grid">
+              {latestMovements.length === 0 ? (
+                <p className={emptyStateClass}>Todavía no hay movimientos registrados.</p>
+              ) : (
+                latestMovements.map((movement) => (
+                  <article className={dashboardListRowClass} key={movement.id}>
+                    <div>
+                      <strong>{movement.productName}</strong>
+                      <span>{formatDate(movement.date, DASHBOARD_DATE_OPTIONS)}</span>
+                    </div>
+                    <div className={listRowEndClass}>
+                      <strong>{movement.quantity} unidades</strong>
+                      <span className={badgeClass(getMovementTone(movement))}>
+                        {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
+                      </span>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        )}
+      </div>
     </section>
   );
 }

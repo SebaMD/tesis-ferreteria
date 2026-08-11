@@ -128,7 +128,12 @@ export async function increaseProductStock(
     return product ?? null;
 }
 
-export async function decreaseProductStock(tx: DbTransaction, productId: number, quantity: number) {
+export async function decreaseProductStock(
+    tx: DbTransaction,
+    productId: number,
+    quantity: number,
+    allowInactive = false,
+) {
     const [product] = await tx
         .update(productsTable)
         .set({
@@ -138,7 +143,7 @@ export async function decreaseProductStock(tx: DbTransaction, productId: number,
         .where(
             and(
                 eq(productsTable.id, productId),
-                eq(productsTable.status, true),
+                allowInactive ? undefined : eq(productsTable.status, true),
                 gte(productsTable.currentStock, quantity),
             ),
         )

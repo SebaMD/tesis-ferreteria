@@ -5,3 +5,5 @@ export * from "./products.js";
 export * from "./sales.js";
 export * from "./saleDetails.js";
 export * from "./inventoryMovements.js";
+export * from "./saleCancellationRequests.js";
+export * from "./saleCancellationRequestItems.js";

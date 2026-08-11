@@ -1,4 +1,4 @@
-import { CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -43,6 +43,24 @@ const INVENTORY_DATE_OPTIONS = {
 const suggestionListClass = "mt-2 grid max-h-36 overflow-auto rounded-[5px] border border-slate-200 bg-white p-1 shadow-[0_8px_18px_rgba(16,21,31,0.08)]";
 const suggestionButtonClass = "flex min-h-8 w-full items-center justify-between rounded-[4px] border-0 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-ink-700 hover:bg-rust-50 hover:text-rust-700";
 const suggestionEmptyClass = "rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500";
+const UNIT_PLURALS = {
+  unidad: "unidades",
+  litro: "litros",
+  metro: "metros",
+  caja: "cajas",
+  paquete: "paquetes",
+  saco: "sacos",
+  bolsa: "bolsas",
+  par: "pares",
+  rollo: "rollos",
+  plancha: "planchas",
+  barra: "barras",
+  tubo: "tubos",
+  pieza: "piezas",
+  docena: "docenas",
+  set: "sets",
+  galón: "galones",
+};
 
 function normalizeEntityName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
@@ -64,6 +82,23 @@ function getSingleOrExactSuggestion(options, searchValue, getComparableValues) {
   }
 
   return options.length === 1 ? options[0] : null;
+}
+
+function compareCategoriesByNewest(left, right) {
+  const leftDate = left.createdAt ? Date.parse(left.createdAt) : Number.NaN;
+  const rightDate = right.createdAt ? Date.parse(right.createdAt) : Number.NaN;
+
+  if (Number.isFinite(leftDate) && Number.isFinite(rightDate) && leftDate !== rightDate) {
+    return rightDate - leftDate;
+  }
+
+  return Number(right.id) - Number(left.id);
+}
+
+function getDisplayUnit(quantity, unitMeasure) {
+  const normalizedUnit = String(unitMeasure || "unidad").trim();
+  if (Number(quantity) === 1) return normalizedUnit;
+  return UNIT_PLURALS[normalizedUnit.toLocaleLowerCase("es")] || normalizedUnit;
 }
 
 const emptyForm = {
@@ -115,6 +150,9 @@ export default function ProductsPage() {
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
   const [productStatusTarget, setProductStatusTarget] = useState(null);
+  const [linkedRegistration, setLinkedRegistration] = useState(null);
+  const [submittingCategory, setSubmittingCategory] = useState(false);
+  const [submittingProduct, setSubmittingProduct] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const canManage = user?.role === "ADMIN";
@@ -199,7 +237,7 @@ export default function ProductsPage() {
             String(category.description || "").toLocaleLowerCase("es").includes(normalizedCategoryListSearch)
           );
         })
-        .sort((left, right) => left.name.localeCompare(right.name, "es")),
+        .sort(compareCategoriesByNewest),
     [categories, normalizedCategoryListSearch],
   );
   const normalizedUnitSearch = unitSearch.trim().toLocaleLowerCase("es");
@@ -341,8 +379,71 @@ export default function ProductsPage() {
     estimatedStock !== null &&
     estimatedStock <= Number(selectedMovementProduct.minimumStock);
 
-  const handleCreateCategory = async (event) => {
+  const normalizedCategoryFormName = normalizeEntityName(categoryName);
+  const categoryFormHasDuplicate = categories.some(
+    (category) =>
+      category.id !== editingCategoryId &&
+      normalizeEntityName(category.name) === normalizedCategoryFormName,
+  );
+  const linkedCategoryIsSaved =
+    linkedRegistration?.step === "category" &&
+    linkedRegistration.category?.id === editingCategoryId;
+  const categoryHasPendingChanges = linkedCategoryIsSaved && (
+    normalizeSearchValue(categoryName) !== normalizeSearchValue(linkedRegistration.category.name) ||
+    normalizeSearchValue(categoryDescription) !== normalizeSearchValue(linkedRegistration.category.description)
+  );
+  const showCategoryContinueAction =
+    activeForm === "category" &&
+    (!editingCategoryId || linkedCategoryIsSaved);
+  const canSaveCategoryAndContinue =
+    showCategoryContinueAction &&
+    categoryName.trim().length >= 2 &&
+    categoryName.trim().length <= 100 &&
+    !categoryFormHasDuplicate;
+  const productFormHasDuplicate = products.some(
+    (product) =>
+      product.id !== editingProductId &&
+      product.categoryId === Number(form.categoryId) &&
+      normalizeEntityName(product.name) === normalizeEntityName(form.name),
+  );
+  const parsedProductPrice = Number(form.price);
+  const parsedMinimumStock = Number(form.minimumStock);
+  const linkedProductIsSaved =
+    linkedRegistration?.step === "product" &&
+    linkedRegistration.product?.id === editingProductId;
+  const productHasPendingChanges = linkedProductIsSaved && (
+    Number(form.categoryId) !== Number(linkedRegistration.product.categoryId) ||
+    normalizeSearchValue(form.name) !== normalizeSearchValue(linkedRegistration.product.name) ||
+    normalizeSearchValue(form.description) !== normalizeSearchValue(linkedRegistration.product.description) ||
+    normalizeSearchValue(unitSearch) !== normalizeSearchValue(linkedRegistration.product.unitMeasure) ||
+    Number(form.price) !== Number(linkedRegistration.product.price) ||
+    Number(form.minimumStock) !== Number(linkedRegistration.product.minimumStock) ||
+    Boolean(form.status) !== Boolean(linkedRegistration.product.status)
+  );
+  const showProductContinueAction = linkedRegistration?.step === "product";
+  const canSaveProductAndContinue =
+    showProductContinueAction &&
+    Boolean(form.categoryId) &&
+    form.name.trim().length >= 2 &&
+    form.name.trim().length <= 150 &&
+    unitSearch.trim().length >= 1 &&
+    unitSearch.trim().length <= 50 &&
+    form.price !== "" &&
+    Number.isFinite(parsedProductPrice) &&
+    parsedProductPrice >= 0 &&
+    Number.isInteger(parsedMinimumStock) &&
+    parsedMinimumStock >= 0 &&
+    !productFormHasDuplicate;
+  const categoryContinueLabel = linkedCategoryIsSaved
+    ? "Actualizar y continuar"
+    : "Guardar y agregar producto";
+  const productContinueLabel = linkedProductIsSaved
+    ? "Actualizar y registrar entrada"
+    : "Guardar y registrar entrada";
+
+  const handleCreateCategory = async (event, shouldContinue = false) => {
     event.preventDefault();
+    const wasEditing = Boolean(editingCategoryId);
 
     const normalizedCategoryName = normalizeEntityName(categoryName);
     const duplicate = categories.some(
@@ -357,6 +458,7 @@ export default function ProductsPage() {
     }
 
     try {
+      setSubmittingCategory(true);
       const payload = {
         name: categoryName,
         description: categoryDescription.trim() || null,
@@ -364,18 +466,63 @@ export default function ProductsPage() {
       const category = editingCategoryId
         ? await updateCategoryRequest(editingCategoryId, payload)
         : await createCategoryRequest(payload);
-      setCategoryName("");
-      setCategoryDescription("");
-      setEditingCategoryId(null);
-      toast.success(editingCategoryId ? `Categoria actualizada: ${category.name}` : `Categoria creada: ${category.name}`);
+
+      const belongsToLinkedFlow = linkedRegistration?.category?.id === category.id;
+      const nextRegistration = {
+        step: "category",
+        direction: "idle",
+        category,
+        product: belongsToLinkedFlow && linkedRegistration.product?.categoryId === category.id
+          ? { ...linkedRegistration.product, categoryName: category.name }
+          : belongsToLinkedFlow
+            ? linkedRegistration.product
+            : null,
+        entryCompleted: belongsToLinkedFlow ? linkedRegistration.entryCompleted : false,
+        entryResult: belongsToLinkedFlow ? linkedRegistration.entryResult : null,
+      };
+
+      setCategories((current) => current.some((item) => item.id === category.id)
+        ? current.map((item) => item.id === category.id ? category : item)
+        : [...current, category]);
+
+      if (shouldContinue) {
+        goToLinkedProduct("forward", nextRegistration);
+      } else if (wasEditing) {
+
+        if (belongsToLinkedFlow) {
+          setCategoryName(category.name);
+          setCategoryDescription(category.description || "");
+          setEditingCategoryId(category.id);
+          setLinkedRegistration({
+            ...nextRegistration,
+            product: nextRegistration.product?.categoryId === category.id
+              ? { ...nextRegistration.product, categoryName: category.name }
+              : nextRegistration.product,
+          });
+        } else {
+          setCategoryName("");
+          setCategoryDescription("");
+          setEditingCategoryId(null);
+        }
+      } else {
+        setCategoryName(category.name);
+        setCategoryDescription(category.description || "");
+        setEditingCategoryId(category.id);
+        setLinkedRegistration(nextRegistration);
+      }
+
+      toast.success(wasEditing ? `Categoria actualizada: ${category.name}` : `Categoria creada: ${category.name}`);
       await loadData();
     } catch (err) {
-      toast.error(getApiError(err, editingCategoryId ? "No se pudo actualizar la categoria" : "No se pudo crear la categoria"));
+      toast.error(getApiError(err, wasEditing ? "No se pudo actualizar la categoria" : "No se pudo crear la categoria"));
+    } finally {
+      setSubmittingCategory(false);
     }
   };
 
-  const handleCreateProduct = async (event) => {
+  const handleCreateProduct = async (event, shouldContinue = false) => {
     event.preventDefault();
+    const wasEditing = Boolean(editingProductId);
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
 
@@ -402,6 +549,7 @@ export default function ProductsPage() {
     }
 
     try {
+      setSubmittingProduct(true);
       const productData = {
         ...form,
         categoryId: Number(form.categoryId),
@@ -410,24 +558,77 @@ export default function ProductsPage() {
         minimumStock: Number(form.minimumStock),
       };
 
-      if (editingProductId) {
-        await updateProductRequest(editingProductId, productData);
-      } else {
-        await createProductRequest(productData);
-      }
+      const product = editingProductId
+        ? await updateProductRequest(editingProductId, productData)
+        : await createProductRequest(productData);
 
-      setForm(emptyForm);
-      setCategorySearch("");
-      setShowCategorySuggestions(false);
-      setUnitSearch("unidad");
-      setShowUnitSuggestions(false);
-      setEditingProductId(null);
-      setActiveForm(null);
-      toast.success(editingProductId ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
+      if (linkedRegistration?.step === "product") {
+        const nextRegistration = {
+          ...linkedRegistration,
+          product,
+          entryCompleted: wasEditing ? linkedRegistration.entryCompleted : false,
+          entryResult: wasEditing ? linkedRegistration.entryResult : null,
+        };
+
+        setProducts((current) => current.some((item) => item.id === product.id)
+          ? current.map((item) => item.id === product.id ? product : item)
+          : [...current, product]);
+        setForm({
+          categoryId: String(product.categoryId),
+          name: product.name,
+          description: product.description || "",
+          price: product.price,
+          unitMeasure: product.unitMeasure,
+          minimumStock: product.minimumStock,
+          status: product.status,
+        });
+        setCategorySearch(product.categoryName || "");
+        setShowCategorySuggestions(false);
+        setUnitSearch(product.unitMeasure || "unidad");
+        setShowUnitSuggestions(false);
+        setEditingProductId(product.id);
+        if (shouldContinue) goToLinkedEntry(nextRegistration);
+        else setLinkedRegistration(nextRegistration);
+      } else {
+        setForm(emptyForm);
+        setCategorySearch("");
+        setShowCategorySuggestions(false);
+        setUnitSearch("unidad");
+        setShowUnitSuggestions(false);
+        setEditingProductId(null);
+        setActiveForm(null);
+      }
+      toast.success(wasEditing ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
       await loadData();
     } catch (err) {
-      toast.error(getApiError(err, "No se pudo crear el producto"));
+      toast.error(getApiError(err, wasEditing ? "No se pudo actualizar el producto" : "No se pudo crear el producto"));
+    } finally {
+      setSubmittingProduct(false);
     }
+  };
+
+  const handleCategoryContinue = async (event) => {
+    event.preventDefault();
+    if (!canSaveCategoryAndContinue || submittingCategory) return;
+
+    if (linkedCategoryIsSaved && !categoryHasPendingChanges) {
+      goToLinkedProduct("forward");
+      return;
+    }
+
+    await handleCreateCategory(event, true);
+  };
+
+  const handleProductContinue = async (event) => {
+    event.preventDefault();
+    if (!canSaveProductAndContinue || submittingProduct) return;
+
+    if (linkedProductIsSaved && !productHasPendingChanges) {
+      goToLinkedEntry();
+      return;
+    }
+
+    await handleCreateProduct(event, true);
   };
 
   const handleCreateMovement = async (event) => {
@@ -464,10 +665,29 @@ export default function ProductsPage() {
         reason,
       });
 
-      setMovementForm(initialMovementForm());
-      setProductSearch("");
-      setShowMovementProductSuggestions(false);
-      setActiveForm(null);
+      if (linkedRegistration?.step === "ENTRY") {
+        setLinkedRegistration((current) => current ? {
+          ...current,
+          entryCompleted: true,
+          entryResult: {
+            quantity: Number(movement.quantity ?? movementForm.quantity),
+            unitMeasure: current.product?.unitMeasure || selectedMovementProduct?.unitMeasure || "unidad",
+            productName: movement.stock?.productName || movement.productName || current.product?.name || "Producto",
+            currentStock: Number(movement.stock?.currentStock ?? current.product?.currentStock ?? 0),
+          },
+          product: current.product
+            ? {
+                ...current.product,
+                currentStock: movement.stock?.currentStock ?? current.product.currentStock,
+              }
+            : current.product,
+        } : current);
+      } else {
+        setMovementForm(initialMovementForm());
+        setProductSearch("");
+        setShowMovementProductSuggestions(false);
+        setActiveForm(null);
+      }
       toast.success(movementForm.movementType === "ENTRY" ? "Entrada registrada exitosamente" : "Ajuste registrado exitosamente");
 
       if (movement.stock?.lowStock) {
@@ -480,6 +700,116 @@ export default function ProductsPage() {
     } finally {
       setSubmittingMovement(false);
     }
+  };
+
+  const closeLinkedRegistration = () => {
+    if (submittingCategory || submittingProduct || submittingMovement) return;
+
+    const hasIncompleteSavedRecords =
+      linkedRegistration?.category &&
+      ["product", "ENTRY"].includes(linkedRegistration.step) &&
+      !linkedRegistration.entryCompleted;
+
+    setLinkedRegistration(null);
+    setActiveForm(null);
+    setEditingCategoryId(null);
+    setEditingProductId(null);
+    setCategoryName("");
+    setCategoryDescription("");
+    setCategoryListSearch("");
+    setCategoryDeleteTarget(null);
+    setForm(emptyForm);
+    setCategorySearch("");
+    setShowCategorySuggestions(false);
+    setUnitSearch("unidad");
+    setShowUnitSuggestions(false);
+    setMovementForm(initialMovementForm());
+    setProductSearch("");
+    setShowMovementProductSuggestions(false);
+
+    if (hasIncompleteSavedRecords) {
+      toast.info("Los registros guardados se conservaron en el sistema.");
+    }
+  };
+
+  const goToLinkedCategory = () => {
+    const category = linkedRegistration?.category;
+    if (!category) return;
+
+    setLinkedRegistration((current) => current ? { ...current, step: "category", direction: "backward" } : current);
+    setEditingCategoryId(category.id);
+    setCategoryName(category.name);
+    setCategoryDescription(category.description || "");
+    setActiveForm("category");
+  };
+
+  const goToLinkedProduct = (direction = "forward", registration = linkedRegistration) => {
+    const category = registration?.category;
+    const product = registration?.product;
+    if (!category) return;
+
+    setLinkedRegistration({ ...registration, step: "product", direction });
+    setEditingProductId(product?.id ?? null);
+    setForm(product ? {
+      categoryId: String(product.categoryId),
+      name: product.name,
+      description: product.description || "",
+      price: product.price,
+      unitMeasure: product.unitMeasure,
+      minimumStock: product.minimumStock,
+      status: product.status,
+    } : {
+      ...emptyForm,
+      categoryId: String(category.id),
+    });
+    setCategorySearch(product?.categoryName || category.name);
+    setShowCategorySuggestions(false);
+    setUnitSearch(product?.unitMeasure || "unidad");
+    setShowUnitSuggestions(false);
+    setActiveForm("product");
+  };
+
+  const goToLinkedEntry = (registration = linkedRegistration) => {
+    const product = registration?.product;
+    if (!product) return;
+
+    setLinkedRegistration({ ...registration, step: "ENTRY", direction: "forward" });
+    if (!registration.entryCompleted) {
+      setMovementForm({
+        ...initialMovementForm("ENTRY"),
+        productId: String(product.id),
+      });
+    }
+    setProductSearch(product.name);
+    setShowMovementProductSuggestions(false);
+    setActiveForm("ENTRY");
+  };
+
+  const addAnotherProductToLinkedCategory = () => {
+    const category = linkedRegistration?.category;
+    if (!category) return;
+
+    setLinkedRegistration((current) => current ? {
+      ...current,
+      step: "product",
+      direction: "backward",
+      product: null,
+      entryCompleted: false,
+      entryResult: null,
+    } : current);
+    setEditingProductId(null);
+    setForm({
+      ...emptyForm,
+      categoryId: String(category.id),
+    });
+    setCategorySearch(category.name);
+    setShowCategorySuggestions(false);
+    setUnitSearch("unidad");
+    setShowUnitSuggestions(false);
+    setMovementForm(initialMovementForm());
+    setProductSearch("");
+    setShowMovementProductSuggestions(false);
+    setActiveForm("product");
   };
 
   const startEditing = (product) => {
@@ -538,6 +868,7 @@ export default function ProductsPage() {
   };
 
   const openCategoryForm = () => {
+    setLinkedRegistration(null);
     setActiveForm("category");
     setEditingProductId(null);
     setEditingCategoryId(null);
@@ -553,6 +884,7 @@ export default function ProductsPage() {
   };
 
   const openProductForm = () => {
+    setLinkedRegistration(null);
     setActiveForm("product");
     setEditingProductId(null);
     setForm(emptyForm);
@@ -563,6 +895,7 @@ export default function ProductsPage() {
   };
 
   const openMovementForm = (movementType) => {
+    setLinkedRegistration(null);
     setActiveForm(movementType);
     setMovementForm(initialMovementForm(movementType));
     setProductSearch("");
@@ -570,6 +903,11 @@ export default function ProductsPage() {
   };
 
   const closeCategoryForm = () => {
+    if (linkedRegistration) {
+      closeLinkedRegistration();
+      return;
+    }
+
     setActiveForm(null);
     setCategoryName("");
     setCategoryDescription("");
@@ -579,12 +917,14 @@ export default function ProductsPage() {
   };
 
   const startEditingCategory = (category) => {
+    if (linkedRegistration?.category?.id !== category.id) setLinkedRegistration(null);
     setEditingCategoryId(category.id);
     setCategoryName(category.name);
     setCategoryDescription(category.description || "");
   };
 
   const cancelCategoryEditing = () => {
+    if (linkedRegistration?.category?.id === editingCategoryId) setLinkedRegistration(null);
     setEditingCategoryId(null);
     setCategoryName("");
     setCategoryDescription("");
@@ -620,6 +960,11 @@ export default function ProductsPage() {
   };
 
   const closeMovementForm = () => {
+    if (linkedRegistration) {
+      closeLinkedRegistration();
+      return;
+    }
+
     setActiveForm(null);
     setMovementForm(initialMovementForm());
     setProductSearch("");
@@ -815,16 +1160,16 @@ export default function ProductsPage() {
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.25 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
-            {canViewInactiveProducts && (
+            {canManage && (
               <>
-            <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
-              <FolderPlus size={17} />
-              Gestionar categorías
-            </button>
-            <button type="button" onClick={openProductForm}>
-              <Plus size={17} />
-              Nuevo producto
-            </button>
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
+                  <FolderPlus size={17} />
+                  Gestionar categorías
+                </button>
+                <button type="button" onClick={openProductForm}>
+                  <Plus size={17} />
+                  Nuevo producto
+                </button>
               </>
             )}
             {canCreateMovement && (
@@ -850,6 +1195,20 @@ export default function ProductsPage() {
         onClose={closeCategoryForm}
         size="medium"
       >
+        {canSaveCategoryAndContinue && !submittingCategory && (
+          <button
+            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--medium"
+            type="button"
+            onClick={handleCategoryContinue}
+            aria-label={categoryContinueLabel}
+          >
+            <span>{categoryContinueLabel}</span>
+            <ArrowRight size={22} />
+          </button>
+        )}
+        <div
+          className={linkedRegistration?.step === "category" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
+        >
           <form className="grid gap-3.75" onSubmit={handleCreateCategory}>
             <label>
               Nombre
@@ -879,7 +1238,7 @@ export default function ProductsPage() {
                   placeholder="Buscar por nombre o descripción"
                 />
               </label>
-              <div className="grid max-h-56 gap-2 overflow-auto pr-1">
+              <div className="grid max-h-56 gap-2 overflow-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [transform:translateZ(0)]">
                 {categories.length === 0 ? (
                   <p className="m-0 text-xs text-slate-500">Todavía no hay categorías registradas.</p>
                 ) : filteredExistingCategories.length === 0 ? (
@@ -902,6 +1261,7 @@ export default function ProductsPage() {
                               className={`${secondaryButtonClass} mr-0 min-h-8 px-2.5 text-xs`}
                               type="button"
                               onClick={() => startEditingCategory(category)}
+                              disabled={submittingCategory}
                             >
                               Editar
                             </button>
@@ -909,6 +1269,7 @@ export default function ProductsPage() {
                               className={`${dangerButtonClass} min-h-8 px-2.5 text-xs`}
                               type="button"
                               onClick={() => requestDeleteCategory(category)}
+                              disabled={submittingCategory}
                             >
                               Eliminar
                             </button>
@@ -920,20 +1281,37 @@ export default function ProductsPage() {
               </div>
             </div>
             <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
-              {editingCategoryId ? (
-                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={cancelCategoryEditing}>
+              {linkedRegistration?.step === "category" ? (
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeLinkedRegistration} disabled={submittingCategory}>
+                  Finalizar
+                </button>
+              ) : editingCategoryId ? (
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={cancelCategoryEditing} disabled={submittingCategory}>
                   Cancelar edición
                 </button>
               ) : (
-                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeCategoryForm}>
+                <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeCategoryForm} disabled={submittingCategory}>
                   Cancelar
                 </button>
               )}
-              <button className="mr-0" type="submit">
-                {editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
-              </button>
+              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+                {canSaveCategoryAndContinue && !submittingCategory && (
+                  <button
+                    className="linked-flow-mobile-action"
+                    type="button"
+                    onClick={handleCategoryContinue}
+                  >
+                    {categoryContinueLabel}
+                    <ArrowRight size={17} />
+                  </button>
+                )}
+                <button className="mr-0" type="submit" disabled={submittingCategory}>
+                  {submittingCategory ? "Guardando..." : editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
+                </button>
+              </div>
             </div>
           </form>
+        </div>
       </AppModal>
 
       <AppModal
@@ -957,11 +1335,37 @@ export default function ProductsPage() {
 
       <AppModal
         open={canManage && activeForm === "product"}
-        title={editingProductId ? "Editar producto" : "Nuevo producto"}
+        title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId ? "Editar producto" : "Nuevo producto"}
         description="Completa la información comercial y de inventario."
-        onClose={cancelEditing}
+        onClose={linkedRegistration ? closeLinkedRegistration : cancelEditing}
         size="large"
       >
+        {linkedRegistration?.step === "product" && (
+          <button
+            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
+            type="button"
+            onClick={goToLinkedCategory}
+            disabled={submittingProduct}
+            aria-label="Volver a categoría"
+          >
+            <ArrowLeft size={22} />
+            <span>Volver a categoría</span>
+          </button>
+        )}
+        {canSaveProductAndContinue && !submittingProduct && (
+          <button
+            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--large"
+            type="button"
+            onClick={handleProductContinue}
+            aria-label={productContinueLabel}
+          >
+            <span>{productContinueLabel}</span>
+            <ArrowRight size={22} />
+          </button>
+        )}
+        <div
+          className={linkedRegistration?.step === "product" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
+        >
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
             <label className="relative">
               Buscar categoría
@@ -1070,10 +1474,35 @@ export default function ProductsPage() {
               </label>
             </div>
             <div className={formActionsClass}>
-              <button className={secondaryButtonClass} type="button" onClick={cancelEditing}>Cancelar</button>
-              <button type="submit">{editingProductId ? "Actualizar producto" : "Guardar producto"}</button>
+              {linkedRegistration?.step === "product" ? (
+                <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct}>
+                  Finalizar
+                </button>
+              ) : (
+                <button className={secondaryButtonClass} type="button" onClick={cancelEditing} disabled={submittingProduct}>
+                  Cancelar
+                </button>
+              )}
+              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+                {linkedRegistration?.step === "product" && (
+                  <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={goToLinkedCategory} disabled={submittingProduct}>
+                    <ArrowLeft size={17} />
+                    Volver
+                  </button>
+                )}
+                {canSaveProductAndContinue && !submittingProduct && (
+                  <button className="linked-flow-mobile-action" type="button" onClick={handleProductContinue}>
+                    {productContinueLabel}
+                    <ArrowRight size={17} />
+                  </button>
+                )}
+                <button type="submit" disabled={submittingProduct}>
+                  {submittingProduct ? "Guardando..." : editingProductId ? "Actualizar producto" : "Guardar producto"}
+                </button>
+              </div>
             </div>
           </form>
+        </div>
       </AppModal>
 
       <AppModal
@@ -1120,6 +1549,49 @@ export default function ProductsPage() {
         onClose={closeMovementForm}
         size="large"
       >
+        {linkedRegistration?.step === "ENTRY" && (
+          <button
+            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
+            type="button"
+            onClick={() => goToLinkedProduct("backward")}
+            disabled={submittingMovement}
+            aria-label="Volver a producto"
+          >
+            <ArrowLeft size={22} />
+            <span>Volver a producto</span>
+          </button>
+        )}
+        <div
+          className={linkedRegistration?.step === "ENTRY" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
+        >
+        {linkedRegistration?.step === "ENTRY" && linkedRegistration.entryCompleted ? (
+          <div className="grid gap-4">
+            <div className="grid gap-2 rounded-[5px] border border-[#bbf7d0] bg-positive-50 p-4 text-positive-600">
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <CheckCircle size={19} />
+                Entrada registrada correctamente
+              </span>
+              <span className="text-xs text-slate-600">
+                Se agregaron {linkedRegistration.entryResult?.quantity} {getDisplayUnit(
+                  linkedRegistration.entryResult?.quantity,
+                  linkedRegistration.entryResult?.unitMeasure,
+                )} a {linkedRegistration.entryResult?.productName}. Stock actual: {linkedRegistration.entryResult?.currentStock} {getDisplayUnit(
+                  linkedRegistration.entryResult?.currentStock,
+                  linkedRegistration.entryResult?.unitMeasure,
+                )}.
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
+              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
+                Finalizar
+              </button>
+              <button type="button" onClick={addAnotherProductToLinkedCategory} disabled={submittingMovement}>
+                <Plus size={17} />
+                Agregar otro producto a esta categoría
+              </button>
+            </div>
+          </div>
+        ) : (
         <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
           {movementForm.movementType === "ADJUSTMENT" && (
             <div className="flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
@@ -1141,10 +1613,11 @@ export default function ProductsPage() {
                 onFocus={() => setShowMovementProductSuggestions(Boolean(productSearch.trim()))}
                 onKeyDown={handleMovementProductSearchKeyDown}
                 placeholder="Buscar por producto, ID o categoría"
+                readOnly={linkedRegistration?.step === "ENTRY"}
                 required
               />
             </div>
-            {showMovementProductSuggestions && productSearch.trim() && (
+            {linkedRegistration?.step !== "ENTRY" && showMovementProductSuggestions && productSearch.trim() && (
               filteredMovementProducts.length > 0 ? (
                 <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
                   {filteredMovementProducts.slice(0, 6).map((product) => (
@@ -1218,12 +1691,32 @@ export default function ProductsPage() {
             </div>
           )}
           <div className={formActionsClass}>
-            <button className={secondaryButtonClass} type="button" onClick={closeMovementForm}>Cancelar</button>
-            <button type="submit" disabled={submittingMovement}>
-              {movementForm.movementType === "ENTRY" ? "Confirmar entrada" : "Confirmar ajuste administrativo"}
-            </button>
+            {linkedRegistration?.step === "ENTRY" ? (
+              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
+                Finalizar
+              </button>
+            ) : (
+              <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>Cancelar</button>
+            )}
+            <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+              {linkedRegistration?.step === "ENTRY" && (
+                <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={() => goToLinkedProduct("backward")} disabled={submittingMovement}>
+                  <ArrowLeft size={17} />
+                  Volver
+                </button>
+              )}
+              <button type="submit" disabled={submittingMovement}>
+                {submittingMovement
+                  ? "Registrando..."
+                  : movementForm.movementType === "ENTRY"
+                    ? "Confirmar entrada"
+                    : "Confirmar ajuste administrativo"}
+              </button>
+            </div>
           </div>
         </form>
+        )}
+        </div>
       </AppModal>
 
       {activeView === "inventory" && (

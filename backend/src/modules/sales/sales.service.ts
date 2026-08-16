@@ -300,7 +300,6 @@ export async function cancelSaleService(id: number, userId: number) {
         tx,
         availableDetails.map((detail) => ({
           requestId: request.id,
-          saleId: id,
           productId: detail.productId,
           requestedQuantity: detail.quantity,
         })),
@@ -363,7 +362,6 @@ export async function createDirectReturnService(
         tx,
         requestedDetails.map((detail) => ({
           requestId: request.id,
-          saleId,
           productId: detail.productId,
           requestedQuantity: detail.quantity,
         })),
@@ -427,7 +425,6 @@ export async function createCancellationRequestService(
         tx,
         requestedDetails.map((detail) => ({
           requestId: request.id,
-          saleId,
           productId: detail.productId,
           requestedQuantity: detail.quantity,
         })),

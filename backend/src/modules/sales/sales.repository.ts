@@ -236,7 +236,7 @@ const cancellationRequestColumns = {
 
 const cancellationRequestItemColumns = {
   requestId: saleCancellationRequestItemsTable.requestId,
-  saleId: saleCancellationRequestItemsTable.saleId,
+  saleId: saleCancellationRequestsTable.saleId,
   productId: saleCancellationRequestItemsTable.productId,
   productName: productsTable.name,
   requestedQuantity: saleCancellationRequestItemsTable.requestedQuantity,
@@ -251,11 +251,15 @@ async function attachCancellationRequestItems<T extends { id: number }>(requests
   const items = await db
     .select(cancellationRequestItemColumns)
     .from(saleCancellationRequestItemsTable)
+    .innerJoin(
+      saleCancellationRequestsTable,
+      eq(saleCancellationRequestItemsTable.requestId, saleCancellationRequestsTable.id),
+    )
     .innerJoin(productsTable, eq(saleCancellationRequestItemsTable.productId, productsTable.id))
     .innerJoin(
       saleDetailsTable,
       and(
-        eq(saleCancellationRequestItemsTable.saleId, saleDetailsTable.saleId),
+        eq(saleCancellationRequestsTable.saleId, saleDetailsTable.saleId),
         eq(saleCancellationRequestItemsTable.productId, saleDetailsTable.productId),
       ),
     )
@@ -385,7 +389,6 @@ export async function findCancellationRequestItemsForUpdate(
   return tx
     .select({
       requestId: saleCancellationRequestItemsTable.requestId,
-      saleId: saleCancellationRequestItemsTable.saleId,
       productId: saleCancellationRequestItemsTable.productId,
       requestedQuantity: saleCancellationRequestItemsTable.requestedQuantity,
     })

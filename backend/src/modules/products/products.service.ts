@@ -1,6 +1,7 @@
 import {
   createProduct,
   deleteProductById,
+  findProductByBarcode,
   findProductByCategoryAndName,
   findProductById,
   findProducts,
@@ -28,10 +29,24 @@ export async function getProductByIdService(id: number, includeInactive = false)
   return product;
 }
 
+export async function getProductByBarcodeService(barcode: string) {
+  const product = await findProductByBarcode(barcode);
+  if (!product) throw new ProductError("No existe un producto asociado a este codigo de barra", 404);
+  if (!product.status) throw new ProductError("El producto asociado a este codigo de barra esta desactivado", 409);
+  if (Number(product.currentStock) < 1) {
+    throw new ProductError("El producto asociado a este codigo de barra no tiene stock disponible", 409);
+  }
+  return product;
+}
+
 export async function createProductService(data: ProductBody) {
   const duplicate = await findProductByCategoryAndName(data.categoryId, data.name);
   if (duplicate) {
     throw new ProductError("Ya existe un producto con ese nombre en la categoria seleccionada", 409);
+  }
+
+  if (data.barcode && await findProductByBarcode(data.barcode)) {
+    throw new ProductError("El codigo de barra ya esta asociado a otro producto", 409);
   }
 
   return createProduct(data);
@@ -47,6 +62,10 @@ export async function editProductService(id: number, data: EditProductBody) {
 
   if (duplicate) {
     throw new ProductError("Ya existe un producto con ese nombre en la categoria seleccionada", 409);
+  }
+
+  if (data.barcode && await findProductByBarcode(data.barcode, id)) {
+    throw new ProductError("El codigo de barra ya esta asociado a otro producto", 409);
   }
 
   const product = await updateProductById(id, data);

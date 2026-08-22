@@ -2,7 +2,7 @@ const NAME_REGEX = /^[\p{L} ]+$/u;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
-const PHONE_REGEX = /^\+?[\d\s-]{8,20}$/;
+const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 
 export type LoginBody = {
   correo: string;
@@ -102,6 +102,13 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
   }
 
   const input = body as Record<string, unknown>;
+  const allowedFields = ["rut", "names", "surnames", "correo", "password", "phone"];
+
+  for (const field of Object.keys(input)) {
+    if (!allowedFields.includes(field)) {
+      return { success: false, error: `El campo ${field} no esta permitido en el registro publico` };
+    }
+  }
 
   if (typeof input.rut !== "string") return { success: false, error: "El RUT debe ser texto" };
   if (typeof input.names !== "string") return { success: false, error: "Los nombres deben ser texto" };
@@ -148,10 +155,15 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
       phone = null;
     } else {
       if (typeof input.phone !== "string") return { success: false, error: "El telefono debe ser texto" };
-      phone = input.phone.trim();
-      if (!PHONE_REGEX.test(phone)) {
-        return { success: false, error: "El telefono debe tener un formato valido" };
+      const compactPhone = input.phone.trim().replace(/[\s().-]/g, "");
+      if (!PHONE_REGEX.test(compactPhone)) {
+        return { success: false, error: "El telefono debe ser un movil chileno valido" };
       }
+      phone = compactPhone.startsWith("+56")
+        ? compactPhone
+        : compactPhone.startsWith("56")
+          ? `+${compactPhone}`
+          : `+56${compactPhone}`;
     }
   }
 

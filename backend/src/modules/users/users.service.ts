@@ -4,6 +4,7 @@ import {
   createUser,
   deleteUserById,
   findRoleById,
+  findRoles,
   findUserById,
   findUsers,
   updateUserById,
@@ -13,6 +14,10 @@ import type { CashierScheduleBody, CreateUserBody, EditUserBody } from "./users.
 
 export async function getUsersService() {
   return findUsers();
+}
+
+export async function getUserRolesService() {
+  return findRoles();
 }
 
 export async function getUserByIdService(id: number) {

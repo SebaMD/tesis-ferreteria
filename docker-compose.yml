@@ -45,6 +45,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "3000:3000"
+    volumes:
+      - product_uploads:/app/uploads
     networks:
       - backend_network
       - frontend_network
@@ -126,3 +128,4 @@ networks:
 
 volumes:
   postgres_data:
+  product_uploads:

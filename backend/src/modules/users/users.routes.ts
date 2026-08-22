@@ -6,6 +6,7 @@ import {
   deleteUser,
   editUser,
   getUserById,
+  getUserRoles,
   getUsers,
   updateCashierSchedule,
 } from "./users.controller.js";
@@ -16,6 +17,7 @@ router.use(authenticateJwt);
 router.use(verifyRoles(["ADMIN"]));
 
 router.get("/", getUsers);
+router.get("/roles", getUserRoles);
 router.post("/", createUser);
 router.patch("/:id/work-schedule", updateCashierSchedule);
 router.get("/:id", getUserById);

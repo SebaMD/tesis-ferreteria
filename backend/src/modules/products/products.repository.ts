@@ -1,12 +1,15 @@
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import { categoriesTable, productsTable, type NewProduct } from "../../db/schema/index.js";
+import { findProductImagesByProductIds } from "../productImages/productImages.repository.js";
+import { presentProductImage } from "../productImages/productImages.presenter.js";
 
 const productColumns = {
     id: productsTable.id,
     categoryId: productsTable.categoryId,
     categoryName: categoriesTable.name,
     name: productsTable.name,
+    barcode: productsTable.barcode,
     description: productsTable.description,
     price: productsTable.price,
     unitMeasure: productsTable.unitMeasure,
@@ -17,10 +20,27 @@ const productColumns = {
     updatedAt: productsTable.updatedAt,
 };
 
+async function attachProductImages<T extends { id: number }>(products: T[]) {
+    const images = await findProductImagesByProductIds(products.map((product) => product.id));
+    type PresentedImage = (typeof images)[number] & { imageUrl: string };
+    const imagesByProduct = new Map<number, PresentedImage[]>();
+
+    for (const image of images) {
+        const currentImages = imagesByProduct.get(image.productId) ?? [];
+        currentImages.push(presentProductImage(image));
+        imagesByProduct.set(image.productId, currentImages);
+    }
+
+    return products.map((product) => ({
+        ...product,
+        images: imagesByProduct.get(product.id) ?? [],
+    }));
+}
+
 export async function findProducts(includeInactive = false) {
     const query = db.select(productColumns).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
-    if (includeInactive) return query;
-    return query.where(eq(productsTable.status, true));
+    const products = includeInactive ? await query : await query.where(eq(productsTable.status, true));
+    return attachProductImages(products);
 }
 
 export async function findProductById(id: number, includeInactive = false) {
@@ -33,7 +53,9 @@ export async function findProductById(id: number, includeInactive = false) {
         .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
         .where(and(...conditions))
         .limit(1);
-    return product;
+    if (!product) return null;
+    const [productWithImages] = await attachProductImages([product]);
+    return productWithImages;
 }
 
 export async function findProductByCategoryAndName(categoryId: number, name: string, excludeId?: number) {
@@ -49,6 +71,25 @@ export async function findProductByCategoryAndName(categoryId: number, name: str
     const [product] = await db
         .select({ id: productsTable.id })
         .from(productsTable)
+        .where(and(...conditions))
+        .limit(1);
+
+    if (!product) return null;
+    const [productWithImages] = await attachProductImages([product]);
+    return productWithImages;
+}
+
+export async function findProductByBarcode(barcode: string, excludeId?: number) {
+    const conditions = [eq(productsTable.barcode, barcode)];
+
+    if (excludeId !== undefined) {
+        conditions.push(ne(productsTable.id, excludeId));
+    }
+
+    const [product] = await db
+        .select(productColumns)
+        .from(productsTable)
+        .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
         .where(and(...conditions))
         .limit(1);
 

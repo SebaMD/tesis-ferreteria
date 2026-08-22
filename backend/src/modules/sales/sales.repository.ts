@@ -43,11 +43,21 @@ const saleColumns = {
 };
 
 export async function findSales() {
-  const [sales, cancellationRequests] = await Promise.all([
+  const [sales, cancellationRequests, saleSearchDetails] = await Promise.all([
     db.select(saleColumns).from(salesTable).innerJoin(usersTable, eq(salesTable.userId, usersTable.id)),
     findCancellationRequests(),
+    db
+      .select({
+        saleId: saleDetailsTable.saleId,
+        productId: saleDetailsTable.productId,
+        productName: productsTable.name,
+        productBarcode: productsTable.barcode,
+      })
+      .from(saleDetailsTable)
+      .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id)),
   ]);
   const latestRequestBySale = new Map<number, (typeof cancellationRequests)[number]>();
+  const detailsBySale = new Map<number, typeof saleSearchDetails>();
 
   for (const request of cancellationRequests) {
     if (!latestRequestBySale.has(request.saleId)) {
@@ -55,8 +65,15 @@ export async function findSales() {
     }
   }
 
+  for (const detail of saleSearchDetails) {
+    const currentDetails = detailsBySale.get(detail.saleId) ?? [];
+    currentDetails.push(detail);
+    detailsBySale.set(detail.saleId, currentDetails);
+  }
+
   return sales.map((sale) => ({
     ...sale,
+    details: detailsBySale.get(sale.id) ?? [],
     cancellationRequest: latestRequestBySale.get(sale.id) ?? null,
   }));
 }
@@ -76,6 +93,7 @@ export async function findSaleById(id: number) {
       saleId: saleDetailsTable.saleId,
       productId: saleDetailsTable.productId,
       productName: productsTable.name,
+      productBarcode: productsTable.barcode,
       quantity: saleDetailsTable.quantity,
       returnedQuantity: saleDetailsTable.returnedQuantity,
       unitPrice: saleDetailsTable.unitPrice,

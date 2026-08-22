@@ -50,6 +50,20 @@
       "when": 1786841377782,
       "tag": "0006_great_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786938260871,
+      "tag": "0007_known_captain_flint",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787242840766,
+      "tag": "0008_gifted_talkback",
+      "breakpoints": true
     }
   ]
 }

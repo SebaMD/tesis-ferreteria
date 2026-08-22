@@ -19,6 +19,7 @@ export const DATABASE_URL = process.env.DATABASE_URL;
 
 export const COOKIE_KEY = process.env.COOKIE_KEY;
 export const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+export const UPLOADS_ROOT = process.env.UPLOADS_ROOT || path.resolve(process.cwd(), "uploads");
 
 export const EMAIL_USER = process.env.EMAIL_USER;
 export const EMAIL_PASS = process.env.EMAIL_PASS;

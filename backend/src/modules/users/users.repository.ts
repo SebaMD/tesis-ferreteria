@@ -40,6 +40,16 @@ export async function findRoleById(id: number) {
     return role;
 }
 
+export async function findRoles() {
+    return db
+        .select({
+        id: rolesTable.id,
+        name: rolesTable.name,
+        description: rolesTable.description,
+        })
+        .from(rolesTable);
+}
+
 export async function findUserById(id: number) {
     const [user] = await db
         .select(publicUserColumns)

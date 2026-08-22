@@ -7,6 +7,7 @@ const roleNames: Record<string, string> = {
   MANAGER: "Gerente",
   CASHIER: "Cajero",
   WAREHOUSE: "Bodeguero",
+  CLIENT: "Cliente",
 };
 
 export function verifyRoles(roles: string[]) {

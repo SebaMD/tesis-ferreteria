@@ -1,35 +1,44 @@
 import bcrypt from "bcrypt";
+import { inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { rolesTable, usersTable } from "../db/schema/index.js";
 
 export async function createInitialUsers() {
-  const existingUsers = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
-  if (existingUsers.length > 0) return;
+  const roleDefinitions = [
+    {
+      name: "ADMIN",
+      description: "Gestiona usuarios, roles, categorias, productos, inventario y ventas",
+    },
+    {
+      name: "MANAGER",
+      description: "Visualiza reportes, analisis de ventas e informacion estrategica",
+    },
+    {
+      name: "CASHIER",
+      description: "Registra ventas presenciales y consulta productos/stock",
+    },
+    {
+      name: "WAREHOUSE",
+      description: "Gestiona movimientos de inventario y consulta productos",
+    },
+    {
+      name: "CLIENT",
+      description: "Consulta el catalogo y utiliza las funciones destinadas a clientes",
+    },
+  ];
+
+  await db
+    .insert(rolesTable)
+    .values(roleDefinitions)
+    .onConflictDoNothing({ target: rolesTable.name });
 
   const roles = await db
-    .insert(rolesTable)
-    .values([
-      {
-        name: "ADMIN",
-        description: "Gestiona usuarios, roles, categorias, productos, inventario y ventas",
-      },
-      {
-        name: "MANAGER",
-        description: "Visualiza reportes, analisis de ventas e informacion estrategica",
-      },
-      {
-        name: "CASHIER",
-        description: "Registra ventas presenciales y consulta productos/stock",
-      },
-      {
-        name: "WAREHOUSE",
-        description: "Gestiona movimientos de inventario y consulta productos",
-      },
-    ])
-    .returning({
-      id: rolesTable.id,
-      name: rolesTable.name,
-    });
+    .select({ id: rolesTable.id, name: rolesTable.name })
+    .from(rolesTable)
+    .where(inArray(rolesTable.name, roleDefinitions.map((role) => role.name)));
+
+  const existingUsers = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+  if (existingUsers.length > 0) return;
 
   const roleByName = new Map(roles.map((role) => [role.name, role.id]));
 

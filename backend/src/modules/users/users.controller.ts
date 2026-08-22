@@ -10,6 +10,7 @@ import {
   deleteUserService,
   editUserService,
   getUserByIdService,
+  getUserRolesService,
   getUsersService,
   updateCashierScheduleService,
 } from "./users.service.js";
@@ -71,6 +72,14 @@ export async function getUsers(_req: Request, res: Response) {
     return handleSuccess(res, 200, "Usuarios obtenidos exitosamente", users);
   } catch (error) {
     return handleErrorServer(res, 500, "Error al obtener usuarios", getErrorMessage(error));
+  }
+}
+
+export async function getUserRoles(_req: Request, res: Response) {
+  try {
+    return handleSuccess(res, 200, "Roles obtenidos exitosamente", await getUserRolesService());
+  } catch (error) {
+    return handleErrorServer(res, 500, "Error al obtener roles", getErrorMessage(error));
   }
 }
 

@@ -27,18 +27,13 @@ import useAuth from "../hooks/useAuth.js";
 import {
   createUserRequest,
   deleteUserRequest,
+  getUserRolesRequest,
   getUsersRequest,
   updateCashierScheduleRequest,
   updateUserRequest,
 } from "../services/users.service.js";
 
-const ROLE_ORDER = ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"];
-const ROLE_FALLBACK_IDS = {
-  ADMIN: 1,
-  MANAGER: 2,
-  CASHIER: 3,
-  WAREHOUSE: 4,
-};
+const ROLE_ORDER = ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE", "CLIENT"];
 const USER_DATE_OPTIONS = {
   day: "2-digit",
   month: "short",
@@ -223,19 +218,19 @@ function normalizeScheduleTimes(workShift, startTime, endTime) {
   };
 }
 
-function getRoleOptions(users) {
-  const roleIdByName = new Map(users.map((user) => [user.roleName, user.roleId]));
+function getRoleOptions(roles) {
+  const roleByName = new Map(roles.map((role) => [role.name, role]));
 
-  return ROLE_ORDER.map((roleName) => ({
-    id: roleIdByName.get(roleName) ?? ROLE_FALLBACK_IDS[roleName],
-    name: roleName,
-    label: ROLE_NAMES[roleName] || roleName,
-  }));
+  return ROLE_ORDER
+    .map((roleName) => roleByName.get(roleName))
+    .filter(Boolean)
+    .map((role) => ({ ...role, label: ROLE_NAMES[role.name] || role.name }));
 }
 
 export default function UsersPage() {
   const { user: authUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
   const [activeForm, setActiveForm] = useState(false);
@@ -243,14 +238,16 @@ export default function UsersPage() {
   const [scheduleUser, setScheduleUser] = useState(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState(null);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const roleOptions = useMemo(() => getRoleOptions(users), [users]);
+  const roleOptions = useMemo(() => getRoleOptions(roles), [roles]);
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const filteredUsers = useMemo(
     () => users.filter((user) => {
+      if (roleFilter && user.roleName !== roleFilter) return false;
       if (!normalizedSearch) return true;
 
       const searchableValues = [
@@ -272,12 +269,12 @@ export default function UsersPage() {
 
       return searchableValues.some((value) => String(value || "").toLocaleLowerCase("es").includes(normalizedSearch));
     }).sort(compareByNewest),
-    [normalizedSearch, users],
+    [normalizedSearch, roleFilter, users],
   );
   const usersPagination = usePagination(filteredUsers, {
-    resetKey: `${normalizedSearch}|${users.length}`,
+    resetKey: `${normalizedSearch}|${roleFilter}|${users.length}`,
   });
-  const hasUserFilters = Boolean(normalizedSearch);
+  const hasUserFilters = Boolean(normalizedSearch || roleFilter);
   const isEditing = Boolean(editingUserId);
   const editingUser = users.find((user) => user.id === editingUserId);
   const isEditingOwnUser = isEditing && Number(editingUser?.id) === Number(authUser?.id);
@@ -293,8 +290,12 @@ export default function UsersPage() {
     setLoading(true);
 
     try {
-      const data = await getUsersRequest();
-      setUsers(data);
+      const [usersData, rolesData] = await Promise.all([
+        getUsersRequest(),
+        getUserRolesRequest(),
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
     } finally {
       setLoading(false);
     }
@@ -343,18 +344,26 @@ export default function UsersPage() {
     setActiveForm(false);
   };
 
-  const closeForm = () => {
-    if (submitting) return;
+  const resetForm = () => {
     setForm(emptyForm);
     setEditingUserId(null);
     setShowPassword(false);
     setActiveForm(false);
   };
 
-  const closeScheduleForm = () => {
+  const closeForm = () => {
     if (submitting) return;
+    resetForm();
+  };
+
+  const resetScheduleForm = () => {
     setScheduleUser(null);
     setScheduleForm(emptyScheduleForm);
+  };
+
+  const closeScheduleForm = () => {
+    if (submitting) return;
+    resetScheduleForm();
   };
 
   const openDeleteUserModal = () => {
@@ -425,7 +434,7 @@ export default function UsersPage() {
         await createUserRequest(payload);
       }
       toast.success(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
-      closeForm();
+      resetForm();
       await loadUsers();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo guardar el usuario"));
@@ -486,7 +495,7 @@ export default function UsersPage() {
         shiftNote: scheduleForm.shiftNote.trim() || null,
       });
       toast.success("Horario de cajero actualizado exitosamente");
-      closeScheduleForm();
+      resetScheduleForm();
       await loadUsers();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo actualizar el horario del cajero"));
@@ -521,21 +530,27 @@ export default function UsersPage() {
       <div className={pageHeaderClass}>
         <div>
           <h1>Usuarios</h1>
-          <p>Creación y edición de usuarios internos del sistema.</p>
+          <p>Administración de usuarios internos y cuentas de clientes.</p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
-        <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
-          <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-          <input
-            className="pl-9.75"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por nombre, correo, RUT o rol"
-            aria-label="Buscar usuarios"
-          />
-        </label>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+          <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
+            <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+            <input
+              className="pl-9.75"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nombre, correo o RUT"
+              aria-label="Buscar usuarios"
+            />
+          </label>
+          <select className="w-full max-w-55 max-[720px]:max-w-none" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filtrar usuarios por rol">
+            <option value="">Todos los roles</option>
+            {roleOptions.map((role) => <option key={role.name} value={role.name}>{role.label}</option>)}
+          </select>
+        </div>
         <button type="button" onClick={openCreateForm}>
           <UserPlus size={18} />
           Nuevo usuario
@@ -545,7 +560,7 @@ export default function UsersPage() {
       <AppModal
         open={activeForm}
         title={isEditing ? "Editar usuario" : "Nuevo usuario"}
-        description="Los usuarios internos son creados únicamente por el Administrador."
+        description="El Administrador puede gestionar usuarios internos y cuentas de clientes."
         onClose={closeForm}
         size="large"
       >
@@ -751,8 +766,7 @@ export default function UsersPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <h2>Usuarios registrados</h2>
-            <p>{formatTableRecordCount({
+            <p className="!m-0">{formatTableRecordCount({
               visibleCount: usersPagination.paginatedItems.length,
               totalCount: users.length,
               filteredCount: filteredUsers.length,

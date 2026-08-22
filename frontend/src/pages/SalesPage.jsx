@@ -1,5 +1,5 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -15,8 +15,9 @@ import {
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import useAuth from "../hooks/useAuth.js";
+import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
-import { getProductsRequest } from "../services/products.service.js";
+import { getProductByBarcodeRequest, getProductsRequest } from "../services/products.service.js";
 import {
   approveCancellationRequest,
   createCancellationRequest,
@@ -112,6 +113,13 @@ function preventNonIntegerQuantityPaste(event) {
   }
 }
 
+function getRemainingPosStock(product, cartQuantity = 0) {
+  return Math.max(
+    Number(product?.currentStock || 0) - Number(cartQuantity || 0),
+    0,
+  );
+}
+
 function ReturnHistoryText({ label, text }) {
   return (
     <div className="grid min-w-0 content-start gap-1.5">
@@ -135,6 +143,12 @@ export default function SalesPage() {
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
   const [cashReceived, setCashReceived] = useState("");
   const [cartItems, setCartItems] = useState([]);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [lastScannedProduct, setLastScannedProduct] = useState(null);
+  const [salesScannerOpen, setSalesScannerOpen] = useState(false);
+  const [scannedSalesProduct, setScannedSalesProduct] = useState(null);
+  const barcodeQueueRef = useRef(Promise.resolve());
+  const catalogSearchInputRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [requestToReverse, setRequestToReverse] = useState(null);
@@ -192,18 +206,23 @@ export default function SalesPage() {
   }, [canReviewCancellation, pendingCancellationSales, sales, salesFilter]);
   const filteredSales = useMemo(
     () => salesByStatusFilter.filter((sale) => {
+      const matchesScannedProduct = !scannedSalesProduct || getSaleDetails(sale).some(
+        (detail) => String(detail.productId) === String(scannedSalesProduct.id),
+      );
+
+      if (!matchesScannedProduct) return false;
       if (!normalizedSearch) return true;
 
       const cashierName = `${sale.userNames || ""} ${sale.userSurnames || ""}`;
-      const productValues = getSaleDetails(sale).flatMap((detail) => [
-        detail.productName,
-        detail.name,
-        detail.productId,
-      ]);
+      const saleDate = sale.date || sale.createdAt;
       const searchableValues = [
         String(sale.id),
         formatSaleFolio(sale.id),
         cashierName,
+        sale.userId,
+        saleDate,
+        formatDate(saleDate, SALE_DATE_OPTIONS, ""),
+        formatDate(saleDate, SALE_DATE_TIME_OPTIONS, ""),
         sale.paymentMethod,
         getPaymentMethodLabel(sale.paymentMethod),
         String(sale.total),
@@ -213,17 +232,18 @@ export default function SalesPage() {
         String(getSaleTotals(sale).netTotal),
         formatClp(getSaleTotals(sale).returnedTotal),
         formatClp(getSaleTotals(sale).netTotal),
-        ...productValues,
       ];
 
       return searchableValues.some((value) => String(value || "").toLocaleLowerCase("es").includes(normalizedSearch));
     }).sort(compareByNewest),
-    [normalizedSearch, salesByStatusFilter],
+    [normalizedSearch, salesByStatusFilter, scannedSalesProduct],
   );
   const salesPagination = usePagination(filteredSales, {
-    resetKey: `${salesFilter}|${normalizedSearch}|${sales.length}`,
+    resetKey: `${salesFilter}|${normalizedSearch}|${scannedSalesProduct?.id || ""}|${sales.length}`,
   });
-  const hasSalesFilters = Boolean(normalizedSearch || salesFilter !== "current");
+  const hasSalesFilters = Boolean(
+    normalizedSearch || scannedSalesProduct || salesFilter !== "current",
+  );
   const detailReturnRequests = Array.isArray(saleDetail?.cancellationRequests)
     ? saleDetail.cancellationRequests
     : [];
@@ -280,11 +300,12 @@ export default function SalesPage() {
       activeProducts
         .filter((product) => {
           const quantityInCart = cartQuantityByProduct.get(String(product.id)) || 0;
-          const availableStock = Number(product.currentStock || 0) - quantityInCart;
+          const availableStock = getRemainingPosStock(product, quantityInCart);
           const matchesCategory = !catalogCategoryFilter || String(product.categoryId) === catalogCategoryFilter;
           const matchesSearch =
             !normalizedCatalogSearch ||
             String(product.id).includes(normalizedCatalogSearch) ||
+            String(product.barcode || "").includes(normalizedCatalogSearch) ||
             product.name.toLocaleLowerCase("es").includes(normalizedCatalogSearch) ||
             product.categoryName.toLocaleLowerCase("es").includes(normalizedCatalogSearch);
 
@@ -386,12 +407,12 @@ export default function SalesPage() {
 
     if (availableStock < 1) {
       toast.error("Este producto no tiene stock disponible para venta");
-      return;
+      return false;
     }
 
     if (currentQuantity >= availableStock) {
       toast.error("No puedes agregar más unidades que el stock disponible");
-      return;
+      return false;
     }
 
     setCartItems((current) => {
@@ -407,7 +428,68 @@ export default function SalesPage() {
 
       return [...current, { productId: String(product.id), quantity: 1 }];
     });
+
+    return true;
   };
+
+  const processBarcodeScan = async (barcode) => {
+    try {
+      setScanningBarcode(true);
+      const shouldAddToCart = canCreate && activeView === "sales";
+      const knownProduct = shouldAddToCart
+        ? null
+        : products.find((product) => String(product.barcode || "") === barcode);
+      const product = knownProduct || await getProductByBarcodeRequest(barcode);
+
+      setProducts((current) => current.some((item) => item.id === product.id)
+        ? current.map((item) => item.id === product.id ? product : item)
+        : [...current, product]);
+      setLastScannedProduct(product);
+
+      if (shouldAddToCart && addProductToCart(product)) {
+        toast.success(`${product.name}: unidad agregada al carrito`);
+      } else if (!shouldAddToCart) {
+        setScannedSalesProduct(product);
+        const productState = product.status === false ? " · producto inactivo" : "";
+        toast.success(
+          `Filtro aplicado: ${product.name} · código ${product.barcode}${productState}`,
+        );
+      }
+    } catch (err) {
+      toast.error(getApiError(err, "No se pudo procesar el código de barra"));
+    } finally {
+      setScanningBarcode(false);
+    }
+  };
+
+  const enqueueBarcodeScan = (value) => {
+    const barcode = String(value || "").trim();
+    if (!/^\d{1,64}$/.test(barcode)) {
+      toast.warning("El código de barra debe contener entre 1 y 64 dígitos");
+      return;
+    }
+
+    barcodeQueueRef.current = barcodeQueueRef.current
+      .catch(() => undefined)
+      .then(() => processBarcodeScan(barcode));
+  };
+
+
+  useBarcodeScanner({
+    captureInModal: !canCreate && salesScannerOpen,
+    enabled: canCreate ? activeView === "sales" : salesScannerOpen,
+    isInputAllowed: (target) => target === catalogSearchInputRef.current,
+    onScan: (barcode, { previousValue, target }) => {
+      if (canCreate && activeView === "sales") {
+        if (target === catalogSearchInputRef.current) {
+          setCatalogSearch(previousValue ?? "");
+        }
+      } else {
+        setSalesScannerOpen(false);
+      }
+      enqueueBarcodeScan(barcode);
+    },
+  });
 
   const updateCartQuantity = (productId, value) => {
     const product = productById.get(String(productId));
@@ -810,6 +892,31 @@ export default function SalesPage() {
           </div>
         )}
       </div>
+
+      <AppModal
+        open={canReviewCancellation && salesScannerOpen}
+        title="Escanear producto"
+        description="El producto se utilizará como filtro del historial de ventas."
+        onClose={() => setSalesScannerOpen(false)}
+        size="small"
+        footer={(
+          <button
+            className={secondaryButtonClass}
+            type="button"
+            onClick={() => setSalesScannerOpen(false)}
+          >
+            Cancelar
+          </button>
+        )}
+      >
+        <div className="grid justify-items-center gap-3 py-4 text-center" role="status" aria-live="polite">
+          <div className="grid size-16 place-items-center rounded-full bg-rust-50 text-rust-600">
+            <ScanBarcode className="animate-pulse" size={34} />
+          </div>
+          <strong className="text-base text-ink-950">Escanee el código de barra ahora</strong>
+          <span className="text-sm text-slate-500">Esperando lectura del scanner...</span>
+        </div>
+      </AppModal>
 
       <AppModal
         open={canCreate && paymentModalOpen}
@@ -1463,7 +1570,7 @@ export default function SalesPage() {
             <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-200 pb-2.5">
               <div>
                 <h2 className="m-0 text-base font-bold text-ink-950">Catálogo de productos</h2>
-                <p className="mt-0.75 mb-0 text-xs text-slate-500">Busca por ID, producto o categoría para agregar al carrito.</p>
+                <p className="mt-0.75 mb-0 text-xs text-slate-500">Escanea un código o busca por ID, producto o categoría para agregar al carrito.</p>
               </div>
               <span className="rounded bg-slate-100 px-2.5 py-1 font-mono text-xs font-bold text-ink-700">
                 {filteredCatalogProducts.length} productos
@@ -1474,11 +1581,12 @@ export default function SalesPage() {
               <label className="relative block min-w-65 flex-1 max-[720px]:min-w-0">
                 <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
                 <input
+                  ref={catalogSearchInputRef}
                   className="min-h-9 pl-9.75"
                   value={catalogSearch}
                   onChange={(event) => setCatalogSearch(event.target.value)}
-                  placeholder="Buscar por ID, producto o categoría"
-                  aria-label="Buscar productos para venta"
+                  placeholder="Buscar por ID, código, producto o categoría"
+                  aria-label="Buscar productos para venta por ID, código, nombre o categoría"
                 />
               </label>
               <select
@@ -1492,12 +1600,20 @@ export default function SalesPage() {
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
               </select>
+              <span
+                className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 text-xs font-bold text-positive-600"
+                role="status"
+                aria-live="polite"
+              >
+                <ScanBarcode className={scanningBarcode ? "animate-pulse" : ""} size={17} />
+                {scanningBarcode ? "Procesando código..." : "Escáner activo"}
+              </span>
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 max-[980px]:grid-cols-2 max-[620px]:grid-cols-1">
               {catalogPagination.paginatedItems.map((product) => {
                 const cartQuantity = getCartQuantity(product.id);
-                const availableStock = Number(product.currentStock || 0) - cartQuantity;
+                const availableStock = getRemainingPosStock(product, cartQuantity);
                 const addButtonStatus = getAvailableStockStatus(product, availableStock);
                 const addButtonClass = addButtonStatus.tone === "warning"
                     ? "border-rust-600 bg-rust-500 text-white hover:border-rust-700 hover:bg-rust-600"
@@ -1550,16 +1666,18 @@ export default function SalesPage() {
           </section>
 
           <aside className={`${panelClass} sticky top-4 gap-3 p-3.5 max-[1080px]:static`}>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-2.5">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2.5">
               <div>
                 <h2 className="m-0 flex items-center gap-2 text-base font-bold text-ink-950">
                   <ShoppingCart size={18} />
                   Carrito de venta
                 </h2>
-                <p className="mt-0.75 mb-0 text-xs text-slate-500">{cartRows.length} productos agregados</p>
+                <p className="mt-0.75 mb-0 text-xs text-slate-500">
+                  {cartRows.length === 1 ? "1 producto agregado" : `${cartRows.length} productos agregados`}
+                </p>
               </div>
               {cartRows.length > 0 && (
-                <button className={`${secondaryButtonClass} mr-0 min-h-8 px-2.5 text-xs`} type="button" onClick={clearCart}>
+                <button className={`${secondaryButtonClass} ml-auto mr-0! min-h-8 shrink-0 px-2.5 text-xs`} type="button" onClick={clearCart}>
                   Limpiar
                 </button>
               )}
@@ -1577,7 +1695,7 @@ export default function SalesPage() {
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="truncate text-[13px] text-ink-950">{row.product.name}</strong>
                         <span className="text-[11px] text-slate-500">
-                          {formatClp(row.product.price)} · stock {row.product.currentStock}
+                          {formatClp(row.product.price)} · stock {getRemainingPosStock(row.product, row.quantity)} {row.product.unitMeasure}
                         </span>
                       </div>
                       <button
@@ -1612,6 +1730,17 @@ export default function SalesPage() {
               )}
             </div>
 
+            {lastScannedProduct && (
+              <div className="rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 py-2 text-xs text-positive-600">
+                <span className="font-semibold">Último escaneado:</span>{" "}
+                <strong>{lastScannedProduct.name}</strong>
+                {" · "}stock disponible {getRemainingPosStock(
+                  lastScannedProduct,
+                  cartQuantityByProduct.get(String(lastScannedProduct.id)) || 0,
+                )} {lastScannedProduct.unitMeasure}
+              </div>
+            )}
+
             <div className="grid gap-2.5 border-t border-slate-200 pt-2.5">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-bold text-slate-600">Total</span>
@@ -1627,39 +1756,69 @@ export default function SalesPage() {
 
       {activeView === "history" && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
+          <div className="flex flex-wrap items-center gap-2.5 max-[720px]:items-stretch">
             <label className="relative block w-full max-w-120 max-[720px]:max-w-none">
               <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
               <input
                 className="pl-9.75"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por folio, cajero, método de pago o total"
+                placeholder="Buscar por folio, fecha, cajero, método o total"
                 aria-label="Buscar ventas"
               />
             </label>
+            {canReviewCancellation && (
+              <button
+                className={`${secondaryButtonClass} mr-0 size-11 min-h-11 shrink-0 p-0`}
+                type="button"
+                onClick={() => setSalesScannerOpen(true)}
+                aria-label="Escanear código de barra"
+                title="Escanear código de barra"
+              >
+                <ScanBarcode size={20} />
+              </button>
+            )}
+            {canReviewCancellation && scannedSalesProduct && (
+              <div className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border border-rust-200 bg-rust-50 py-1 pr-1.5 pl-3 text-xs text-rust-700">
+                <span className="truncate">
+                  Producto escaneado: <strong>{scannedSalesProduct.name}</strong>
+                  {scannedSalesProduct.barcode ? ` · ${scannedSalesProduct.barcode}` : ""}
+                </span>
+                <button
+                  className="size-7 min-h-7 shrink-0 rounded-full border-rust-200 bg-white p-0 text-rust-700 hover:bg-rust-100"
+                  type="button"
+                  onClick={() => setScannedSalesProduct(null)}
+                  aria-label="Quitar filtro de producto escaneado"
+                  title="Quitar filtro"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className={tablePanelClass}>
             <div className={tableHeadingClass}>
               <div>
-                <h2>
-                  {salesFilter === "partial"
+                {salesFilter !== "current" && (
+                  <h2>
+                    {salesFilter === "partial"
                     ? "Ventas devueltas parcialmente"
                     : salesFilter === "cancelled"
                     ? "Ventas canceladas"
                     : salesFilter === "pending" && canReviewCancellation
                       ? "Solicitudes pendientes"
-                      : "Ventas vigentes"}
-                </h2>
-                <p>{formatTableRecordCount({
+                      : "Ventas"}
+                  </h2>
+                )}
+                <p className={salesFilter === "current" ? "!m-0" : undefined}>{formatTableRecordCount({
                   visibleCount: salesPagination.paginatedItems.length,
                   totalCount: salesByStatusFilter.length,
                   filteredCount: filteredSales.length,
                   hasFilters: hasSalesFilters,
                 })}</p>
               </div>
-              <div className="ml-auto flex flex-wrap justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
                 <button
                   className={`mr-0 min-h-9 px-3 text-xs ${salesFilter === "cancelled" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : salesFilter === "partial" ? "border-ink-950 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                   type="button"

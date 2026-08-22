@@ -1,6 +1,6 @@
-import { LockKeyhole, Mail } from "lucide-react";
+import { LockKeyhole, Mail, Store, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
@@ -11,7 +11,7 @@ import useAuth from "../hooks/useAuth.js";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, user } = useAuth();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
@@ -23,7 +23,7 @@ export default function LoginPage() {
     clearSessionNotice();
   }, [sessionNotice]);
 
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isAuthenticated) return <Navigate to={user?.role === "CLIENT" ? "/catalog" : "/dashboard"} replace />;
 
   const clearExpiredSessionMessage = () => {
     if (!sessionNotice) return;
@@ -37,8 +37,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login({ correo, password });
-      navigate("/dashboard");
+      const authenticatedUser = await login({ correo, password });
+      navigate(authenticatedUser.role === "CLIENT" ? "/catalog" : "/dashboard");
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
@@ -79,7 +79,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h2 className="m-0 text-2xl font-bold text-ink-950">Iniciar sesión</h2>
-            <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta institucional para continuar.</p>
+            <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta para continuar.</p>
           </div>
 
           <label>
@@ -123,6 +123,14 @@ export default function LoginPage() {
           <button className="mt-0.5 w-full" type="submit" disabled={loading}>
             Ingresar
           </button>
+          <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register">
+              <UserPlus size={17} /> Registrarse
+            </Link>
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">
+              <Store size={17} /> Ver catálogo
+            </Link>
+          </div>
         </form>
       </section>
     </main>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
+import ClientLayout from "./components/ClientLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import useAuth from "./hooks/useAuth.js";
@@ -11,6 +12,11 @@ import ProductsPage from "./pages/ProductsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SalesPage from "./pages/SalesPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
+import CatalogPage from "./pages/CatalogPage.jsx";
+import ClientAccountPage from "./pages/ClientAccountPage.jsx";
+import ClientCartPage from "./pages/ClientCartPage.jsx";
+import ProductDetailPage from "./pages/ProductDetailPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,12 +41,29 @@ function ProtectedPage({ children, allowedRoles }) {
   );
 }
 
+function StorePage({ children }) {
+  return <ClientLayout>{children}</ClientLayout>;
+}
+
+function ProtectedClientPage({ children }) {
+  return (
+    <ProtectedRoute allowedRoles={ROUTE_PERMISSIONS.client}>
+      <ClientLayout>{children}</ClientLayout>
+    </ProtectedRoute>
+  );
+}
+
 export default function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
+      <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
+      <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
+      <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
       <Route
         path="/dashboard"
         element={
@@ -89,7 +112,11 @@ export default function App() {
           </ProtectedPage>
         }
       />
-      <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
+      <Route path="/" element={<Navigate to="/catalog" replace />} />
+      <Route
+        path="*"
+        element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
     </Routes>
   );
 }

@@ -5,7 +5,7 @@ import {
   readStoredAuth,
   storeAuthSession,
 } from "../helpers/session.js";
-import { loginRequest, logoutRequest } from "../services/auth.service.js";
+import { loginRequest, logoutRequest, registerClientRequest } from "../services/auth.service.js";
 import AuthContext from "./AuthContext.js";
 
 export default function AuthProvider({ children }) {
@@ -30,12 +30,21 @@ export default function AuthProvider({ children }) {
     }
   };
 
+  const registerClient = async (data) => {
+    const sessionData = await registerClientRequest(data);
+    storeAuthSession(sessionData.token, sessionData.user);
+    clearSessionNotice();
+    setSession({ token: sessionData.token, user: sessionData.user });
+    return sessionData.user;
+  };
+
   const value = useMemo(
     () => ({
       user,
       token,
       isAuthenticated: Boolean(token && user),
       login,
+      registerClient,
       logout,
     }),
     [token, user],

@@ -1,5 +1,10 @@
 import api from "../api/httpClient.js";
 
+export async function getUserRolesRequest() {
+  const response = await api.get("/users/roles");
+  return response.data.data || [];
+}
+
 export async function getUsersRequest() {
   const response = await api.get("/users");
   return response.data.data || [];

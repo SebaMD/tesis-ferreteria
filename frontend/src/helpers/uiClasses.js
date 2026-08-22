@@ -8,7 +8,7 @@ export const tablePanelClass = "overflow-hidden rounded-md border border-slate-2
 
 export const tableScrollClass = "w-full overflow-x-auto";
 
-export const tableHeadingClass = "flex min-h-[58px] items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
+export const tableHeadingClass = "flex min-h-[58px] flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
 
 export const secondaryButtonClass = "mr-auto border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:mr-0";
 

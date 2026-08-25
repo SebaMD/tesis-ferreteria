@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Home, ShoppingCart, UsersRound } from "lucide-react";
+import { BarChart3, Boxes, Home, PackageCheck, ShoppingCart, UsersRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
@@ -8,6 +8,7 @@ const items = [
   { to: "/dashboard", label: "Inicio", icon: Home, roles: ROUTE_PERMISSIONS.dashboard },
   { to: "/products", label: "Inventario", icon: Boxes, roles: ROUTE_PERMISSIONS.products },
   { to: "/sales", label: "Ventas", icon: ShoppingCart, roles: ROUTE_PERMISSIONS.sales },
+  { to: "/online-orders-management", label: "Pedidos online", icon: PackageCheck, roles: ROUTE_PERMISSIONS.onlineOrdersManagement },
   { to: "/reports", label: "Reportes", icon: BarChart3, roles: ROUTE_PERMISSIONS.reports },
   { to: "/users", label: "Usuarios", icon: UsersRound, roles: ROUTE_PERMISSIONS.users },
 ];

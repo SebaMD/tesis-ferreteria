@@ -21,5 +21,29 @@ export const COOKIE_KEY = process.env.COOKIE_KEY;
 export const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET;
 export const UPLOADS_ROOT = process.env.UPLOADS_ROOT || path.resolve(process.cwd(), "uploads");
 
+export const WEBPAY_ENVIRONMENT = (process.env.WEBPAY_ENVIRONMENT || "integration").toLowerCase();
+export const WEBPAY_COMMERCE_CODE = process.env.WEBPAY_COMMERCE_CODE;
+export const WEBPAY_API_KEY = process.env.WEBPAY_API_KEY;
+export const WEBPAY_RETURN_URL = process.env.WEBPAY_RETURN_URL
+  || `http://localhost:${PORT}/api/online-orders/payments/webpay/return`;
+export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
+const configuredWebpayTimeout = Number.parseInt(process.env.WEBPAY_TIMEOUT_MS || "30000", 10);
+export const WEBPAY_TIMEOUT_MS = Number.isInteger(configuredWebpayTimeout)
+  && configuredWebpayTimeout >= 5_000
+  && configuredWebpayTimeout <= 120_000
+  ? configuredWebpayTimeout
+  : 30_000;
+
+const configuredReservationMinutes = Number.parseInt(
+  process.env.ONLINE_ORDER_RESERVATION_MINUTES || "20",
+  10,
+);
+
+export const ONLINE_ORDER_RESERVATION_MINUTES = Number.isInteger(configuredReservationMinutes)
+  && configuredReservationMinutes >= 15
+  ? configuredReservationMinutes
+  : 20;
+
 export const EMAIL_USER = process.env.EMAIL_USER;
 export const EMAIL_PASS = process.env.EMAIL_PASS;

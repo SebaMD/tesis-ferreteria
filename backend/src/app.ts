@@ -6,8 +6,11 @@ import { UPLOADS_ROOT } from "./config/configEnv.js";
 
 const app = express();
 
+morgan.token("safe-url", (req) => String(req.url || "").split("?")[0]);
+
 app.use(express.json());
-app.use(morgan("dev"));
+app.use(express.urlencoded({ extended: false }));
+app.use(morgan(":method :safe-url :status :response-time ms - :res[content-length]"));
 app.use("/uploads", express.static(UPLOADS_ROOT, { maxAge: "7d" }));
 
 app.use(

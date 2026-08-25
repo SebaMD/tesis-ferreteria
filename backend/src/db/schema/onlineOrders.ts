@@ -1,0 +1,100 @@
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
+import { usersTable } from "./users.js";
+
+export const onlineOrdersTable = pgTable(
+  "online_orders",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => usersTable.id),
+    checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
+    status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
+    total: numeric({ precision: 12, scale: 2 }).notNull(),
+    deliveryType: varchar("delivery_type", { length: 20 }).notNull().default("PICKUP"),
+    deliveryRecipientName: varchar("delivery_recipient_name", { length: 240 }),
+    deliveryPhone: varchar("delivery_phone", { length: 20 }),
+    deliveryAddress: varchar("delivery_address", { length: 300 }),
+    deliveryCommune: varchar("delivery_commune", { length: 120 }),
+    deliveryReference: varchar("delivery_reference", { length: 500 }),
+    reservationExpiresAt: timestamp("reservation_expires_at").notNull(),
+    paidAt: timestamp("paid_at"),
+    clientArchivedAt: timestamp("client_archived_at"),
+    preparationStartedBy: integer("preparation_started_by")
+      .references(() => usersTable.id),
+    preparationStartedAt: timestamp("preparation_started_at"),
+    preparedBy: integer("prepared_by")
+      .references(() => usersTable.id),
+    preparedAt: timestamp("prepared_at"),
+    deliveryStartedBy: integer("delivery_started_by")
+      .references(() => usersTable.id),
+    deliveryStartedAt: timestamp("delivery_started_at"),
+    deliveredBy: integer("delivered_by")
+      .references(() => usersTable.id),
+    deliveredAt: timestamp("delivered_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("online_orders_client_id_idx").on(table.clientId),
+    index("online_orders_status_idx").on(table.status),
+    index("online_orders_delivery_type_idx").on(table.deliveryType),
+    index("online_orders_reservation_expires_at_idx").on(table.reservationExpiresAt),
+    uniqueIndex("online_orders_client_checkout_key_unique").on(
+      table.clientId,
+      table.checkoutKey,
+    ),
+    uniqueIndex("online_orders_pending_client_unique")
+      .on(table.clientId)
+      .where(sql`${table.status} = 'PENDING_PAYMENT'`),
+    check(
+      "online_orders_status_check",
+      sql`${table.status} in ('PENDING_PAYMENT', 'PAID', 'PAYMENT_FAILED', 'CANCELLED', 'EXPIRED', 'PAYMENT_REVIEW', 'PREPARING', 'READY_FOR_PICKUP', 'READY_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED')`,
+    ),
+    check(
+      "online_orders_delivery_type_check",
+      sql`${table.deliveryType} in ('PICKUP', 'DELIVERY')`,
+    ),
+    check(
+      "online_orders_delivery_data_check",
+      sql`${table.deliveryType} = 'PICKUP' or (
+        ${table.deliveryRecipientName} is not null
+        and length(btrim(${table.deliveryRecipientName})) > 0
+        and ${table.deliveryPhone} is not null
+        and length(btrim(${table.deliveryPhone})) > 0
+        and ${table.deliveryAddress} is not null
+        and length(btrim(${table.deliveryAddress})) > 0
+        and ${table.deliveryCommune} is not null
+        and length(btrim(${table.deliveryCommune})) > 0
+      )`,
+    ),
+    check("online_orders_total_positive", sql`${table.total} > 0`),
+  ],
+);
+
+export type OnlineOrder = typeof onlineOrdersTable.$inferSelect;
+export type NewOnlineOrder = typeof onlineOrdersTable.$inferInsert;
+
+export type OnlineOrderDeliveryType = "PICKUP" | "DELIVERY";
+export type OnlineOrderStatus =
+  | "PENDING_PAYMENT"
+  | "PAID"
+  | "PAYMENT_FAILED"
+  | "CANCELLED"
+  | "EXPIRED"
+  | "PAYMENT_REVIEW"
+  | "PREPARING"
+  | "READY_FOR_PICKUP"
+  | "READY_FOR_DELIVERY"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED";

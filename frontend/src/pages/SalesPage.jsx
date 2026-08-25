@@ -14,6 +14,7 @@ import {
   getSaleStatusLabel,
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
+import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
@@ -115,7 +116,7 @@ function preventNonIntegerQuantityPaste(event) {
 
 function getRemainingPosStock(product, cartQuantity = 0) {
   return Math.max(
-    Number(product?.currentStock || 0) - Number(cartQuantity || 0),
+    getOnlineAvailableStock(product) - Number(cartQuantity || 0),
     0,
   );
 }
@@ -269,10 +270,27 @@ export default function SalesPage() {
     }
   }, []);
 
+  const refreshProducts = useCallback(async () => {
+    setProducts(await getProductsRequest());
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData().catch((err) => toast.error(getApiError(err, "No se pudieron cargar ventas")));
   }, [loadData]);
+
+  useEffect(() => {
+    if (!canCreate || activeView !== "sales") return undefined;
+
+    const refreshAvailability = () => refreshProducts().catch(() => undefined);
+    const refreshTimer = window.setInterval(refreshAvailability, 30_000);
+    window.addEventListener("focus", refreshAvailability);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshAvailability);
+    };
+  }, [activeView, canCreate, refreshProducts]);
 
   const productById = useMemo(
     () => new Map(products.map((product) => [String(product.id), product])),
@@ -342,7 +360,7 @@ export default function SalesPage() {
     [cartItems, productById],
   );
   const cartTotal = cartRows.reduce((total, row) => total + row.subtotal, 0);
-  const cartHasInvalidStock = cartRows.some((row) => row.quantity < 1 || row.quantity > Number(row.product.currentStock || 0));
+  const cartHasInvalidStock = cartRows.some((row) => row.quantity < 1 || row.quantity > getOnlineAvailableStock(row.product));
   const isCashPayment = paymentMethod === "efectivo";
   const receivedAmount = Number(cashReceived || 0);
   const cashChange = receivedAmount - cartTotal;
@@ -403,7 +421,7 @@ export default function SalesPage() {
 
   const addProductToCart = (product) => {
     const currentQuantity = getCartQuantity(product.id);
-    const availableStock = Number(product.currentStock || 0);
+    const availableStock = getOnlineAvailableStock(product);
 
     if (availableStock < 1) {
       toast.error("Este producto no tiene stock disponible para venta");
@@ -493,7 +511,7 @@ export default function SalesPage() {
 
   const updateCartQuantity = (productId, value) => {
     const product = productById.get(String(productId));
-    const availableStock = Number(product?.currentStock || 0);
+    const availableStock = getOnlineAvailableStock(product);
     const requestedQuantity = Math.max(1, Number(value || 1));
     const nextQuantity = availableStock > 0 ? Math.min(requestedQuantity, availableStock) : 1;
 
@@ -582,6 +600,7 @@ export default function SalesPage() {
       await loadData();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo registrar la venta"));
+      await refreshProducts().catch(() => undefined);
     } finally {
       setSubmitting(false);
     }
@@ -1714,7 +1733,7 @@ export default function SalesPage() {
                         <input
                           type="number"
                           min="1"
-                          max={row.product.currentStock}
+                          max={getOnlineAvailableStock(row.product)}
                           value={row.quantity}
                           onChange={(event) => updateCartQuantity(row.product.id, event.target.value)}
                           required

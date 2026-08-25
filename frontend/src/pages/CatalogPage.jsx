@@ -15,10 +15,21 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCatalogProductsRequest()
+    const loadCatalog = (notifyError = false) => getCatalogProductsRequest()
       .then(setProducts)
-      .catch((error) => toast.error(getApiError(error, "No se pudo cargar el catálogo")))
+      .catch((error) => {
+        if (notifyError) toast.error(getApiError(error, "No se pudo cargar el catálogo"));
+      })
       .finally(() => setLoading(false));
+
+    loadCatalog(true);
+    const refreshCatalog = () => loadCatalog(false);
+    const refreshTimer = window.setInterval(refreshCatalog, 30_000);
+    window.addEventListener("focus", refreshCatalog);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshCatalog);
+    };
   }, []);
 
   const categories = useMemo(() => (
@@ -53,7 +64,7 @@ export default function CatalogPage() {
       <section className="rounded-lg bg-ink-950 bg-[linear-gradient(120deg,rgba(217,119,6,0.22),transparent_60%)] px-7 py-8 text-white max-[620px]:px-5">
         <span className="text-xs font-extrabold text-rust-500 uppercase">Catálogo Ferretería FYF</span>
         <h1 className="mt-2 mb-2 max-w-180 text-3xl font-bold max-[620px]:text-2xl">Encuentra materiales y herramientas para tu próximo proyecto</h1>
-        <p className="m-0 max-w-180 text-sm leading-6 text-slate-300">Consulta precios y disponibilidad actual. El carrito es informativo y todavía no realiza pedidos ni reservas.</p>
+        <p className="m-0 max-w-180 text-sm leading-6 text-slate-300">Consulta precios y disponibilidad para comprar de forma segura mediante Webpay Plus.</p>
       </section>
 
       <section className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4">

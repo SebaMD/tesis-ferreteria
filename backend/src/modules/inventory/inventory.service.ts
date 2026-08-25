@@ -11,6 +11,10 @@ import {
   findInventoryMovementById,
   findInventoryMovements,
 } from "./inventory.repository.js";
+import {
+  calculateAvailableStock,
+  findActiveReservedQuantities,
+} from "./stockAvailability.repository.js";
 import type { InventoryMovementBody } from "./inventory.validation.js";
 
 export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
@@ -19,6 +23,7 @@ export type ApplyInventoryMovementData = Omit<InventoryMovementBody, "movementTy
   movementType: InventoryMovementType;
   userId: number;
   allowInactive?: boolean;
+  excludedReservationOrderId?: number;
 };
 
 export class InventoryMovementError extends Error {
@@ -75,6 +80,23 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       break;
     }
     case "EXIT": {
+      const reservedByProduct = await findActiveReservedQuantities(
+        tx,
+        [data.productId],
+        data.excludedReservationOrderId,
+      );
+      const availableStock = calculateAvailableStock(
+        product.currentStock,
+        reservedByProduct.get(data.productId) || 0,
+      );
+
+      if (data.quantity > availableStock) {
+        throw new InventoryMovementError(
+          "Stock insuficiente: existen unidades reservadas para pedidos online",
+          409,
+        );
+      }
+
       const updatedProduct = await decreaseProductStock(
         tx,
         data.productId,
@@ -89,6 +111,16 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       break;
     }
     case "ADJUSTMENT": {
+      const reservedByProduct = await findActiveReservedQuantities(tx, [data.productId]);
+      const reservedQuantity = reservedByProduct.get(data.productId) || 0;
+
+      if (data.quantity < reservedQuantity) {
+        throw new InventoryMovementError(
+          `El ajuste no puede dejar menos de ${reservedQuantity} unidades reservadas para pedidos online`,
+          409,
+        );
+      }
+
       const updatedProduct = await setProductStock(tx, data.productId, data.quantity);
 
       if (!updatedProduct) {

@@ -1,4 +1,4 @@
-import { LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { ClipboardList, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
@@ -34,8 +34,7 @@ export default function ClientNavbar() {
 
         <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
-          <NavLink className={navClass} to="/cart">Carrito</NavLink>
-          {isClient && <NavLink className={navClass} to="/account">Mi cuenta</NavLink>}
+          {isClient && <NavLink className={navClass} to="/orders"><ClipboardList className="inline" size={15} /> Mis pedidos</NavLink>}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -57,13 +56,7 @@ export default function ClientNavbar() {
             </>
           )}
 
-          {isClient && (
-            <Link className="grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title="Mi cuenta" aria-label="Mi cuenta">
-              <UserRound size={18} />
-            </Link>
-          )}
-
-          <Link className="relative grid size-11 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} unidades`}>
+          <Link className="relative grid size-11 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
             <ShoppingCart size={20} />
             {totalUnits > 0 && (
               <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
@@ -71,6 +64,12 @@ export default function ClientNavbar() {
               </span>
             )}
           </Link>
+
+          {isClient && (
+            <Link className="grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title="Mi cuenta" aria-label="Mi cuenta">
+              <UserRound size={18} />
+            </Link>
+          )}
 
           {isAuthenticated && (
             <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">

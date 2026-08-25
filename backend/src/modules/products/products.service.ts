@@ -1,3 +1,8 @@
+import { db } from "../../db/index.js";
+import {
+  calculateAvailableStock,
+  findActiveReservedQuantities,
+} from "../inventory/stockAvailability.repository.js";
 import {
   createProduct,
   deleteProductById,
@@ -19,24 +24,37 @@ export class ProductError extends Error {
   }
 }
 
+async function attachAvailableStock<T extends { id: number; currentStock: number }>(products: T[]) {
+  const reservedByProduct = await findActiveReservedQuantities(
+    db,
+    products.map((product) => product.id),
+  );
+
+  return products.map((product) => {
+    const reservedQuantity = reservedByProduct.get(product.id) || 0;
+    return {
+      ...product,
+      reservedQuantity,
+      availableStock: calculateAvailableStock(product.currentStock, reservedQuantity),
+    };
+  });
+}
+
 export async function getProductsService(includeInactive = false) {
-  return findProducts(includeInactive);
+  return attachAvailableStock(await findProducts(includeInactive));
 }
 
 export async function getProductByIdService(id: number, includeInactive = false) {
   const product = await findProductById(id, includeInactive);
   if (!product) throw new Error("Producto no encontrado");
-  return product;
+  return (await attachAvailableStock([product]))[0];
 }
 
 export async function getProductByBarcodeService(barcode: string) {
   const product = await findProductByBarcode(barcode);
   if (!product) throw new ProductError("No existe un producto asociado a este codigo de barra", 404);
   if (!product.status) throw new ProductError("El producto asociado a este codigo de barra esta desactivado", 409);
-  if (Number(product.currentStock) < 1) {
-    throw new ProductError("El producto asociado a este codigo de barra no tiene stock disponible", 409);
-  }
-  return product;
+  return (await attachAvailableStock([product]))[0];
 }
 
 export async function createProductService(data: ProductBody) {

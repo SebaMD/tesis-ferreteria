@@ -1,6 +1,10 @@
 import { db, type DbTransaction } from "../../db/index.js";
 import { applyInventoryMovement, InventoryMovementError } from "../inventory/inventory.service.js";
-import { findProductsForSale } from "../products/products.repository.js";
+import {
+  calculateAvailableStock,
+  findActiveReservedQuantities,
+  lockProductsForAvailability,
+} from "../inventory/stockAvailability.repository.js";
 import {
   createSale,
   createSaleDetails,
@@ -62,11 +66,13 @@ export async function getSaleByIdService(id: number) {
 
 export async function createSaleService(data: CreateSaleData) {
   const createdSale = await db.transaction(async (tx) => {
-    const products = await findProductsForSale(
+    const productIds = data.details.map((detail) => detail.productId);
+    const products = await lockProductsForAvailability(
       tx,
-      data.details.map((detail) => detail.productId),
+      productIds,
     );
     const productById = new Map(products.map((product) => [product.id, product]));
+    const reservedQuantityByProduct = await findActiveReservedQuantities(tx, productIds);
 
     const saleDetails = data.details.map((detail) => {
       const product = productById.get(detail.productId);
@@ -77,6 +83,18 @@ export async function createSaleService(data: CreateSaleData) {
 
       if (!product.status) {
         throw new SaleError(`El producto ${product.name} esta inactivo`, 409);
+      }
+
+      const availableStock = calculateAvailableStock(
+        product.currentStock,
+        reservedQuantityByProduct.get(product.id) || 0,
+      );
+
+      if (detail.quantity > availableStock) {
+        throw new SaleError(
+          `El stock disponible de ${product.name} cambio. Solo quedan ${availableStock} unidades sin reservar.`,
+          409,
+        );
       }
 
       const unitPriceInCents = Math.round(Number(product.price) * 100);
@@ -216,7 +234,7 @@ async function approveReturnRequest(
   );
   const detailByProduct = new Map(saleDetails.map((detail) => [detail.productId, detail]));
 
-  for (const detail of requestedDetails) {
+  for (const detail of [...requestedDetails].sort((left, right) => left.productId - right.productId)) {
     await applyInventoryMovement(tx, {
       productId: detail.productId,
       userId: data.reviewedBy,
@@ -516,7 +534,7 @@ export async function undoCancellationRequestService(requestId: number, userId: 
 
     const detailByProduct = new Map(saleDetails.map((detail) => [detail.productId, detail]));
 
-    for (const item of requestItems) {
+    for (const item of [...requestItems].sort((left, right) => left.productId - right.productId)) {
       const saleDetail = detailByProduct.get(item.productId);
 
       if (!saleDetail || saleDetail.returnedQuantity < item.requestedQuantity) {
@@ -535,10 +553,10 @@ export async function undoCancellationRequestService(requestId: number, userId: 
       } catch (error) {
         if (
           error instanceof InventoryMovementError &&
-          error.message === "Stock insuficiente para realizar el movimiento"
+          error.statusCode === 409
         ) {
           throw new SaleError(
-            "No se puede deshacer la devolución porque no existe stock suficiente.",
+            "No se puede deshacer la devolución porque no existe stock disponible suficiente.",
             409,
           );
         }

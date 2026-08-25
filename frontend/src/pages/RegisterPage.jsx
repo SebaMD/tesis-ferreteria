@@ -1,6 +1,6 @@
 import { LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import BrandLogo from "../components/BrandLogo.jsx";
@@ -11,6 +11,7 @@ const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, registerClient, user } = useAuth();
   const [form, setForm] = useState({
     rut: "",
@@ -23,8 +24,14 @@ export default function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
 
+  const requestedPath = typeof location.state?.from === "string"
+    && location.state.from.startsWith("/")
+    && !location.state.from.startsWith("//")
+    ? location.state.from
+    : null;
+
   if (isAuthenticated) {
-    return <Navigate to={user?.role === "CLIENT" ? "/catalog" : "/dashboard"} replace />;
+    return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace />;
   }
 
   const updateField = (field, value) => {
@@ -55,7 +62,7 @@ export default function RegisterPage() {
         password: form.password,
       });
       toast.success("Cuenta creada exitosamente");
-      navigate("/catalog");
+      navigate(requestedPath || "/catalog");
     } catch (error) {
       toast.error(getApiError(error, "No se pudo crear la cuenta"));
     } finally {
@@ -134,7 +141,7 @@ export default function RegisterPage() {
 
           <button className="w-full" type="submit" disabled={loading}>Crear cuenta</button>
           <p className="m-0 text-center text-sm text-slate-500">
-            ¿Ya tienes una cuenta? <Link className="font-bold text-rust-600" to="/login">Inicia sesión</Link>
+            ¿Ya tienes una cuenta? <Link className="font-bold text-rust-600" to="/login" state={requestedPath ? { from: requestedPath } : undefined}>Inicia sesión</Link>
           </p>
         </form>
       </div>

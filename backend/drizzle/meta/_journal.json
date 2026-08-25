@@ -64,6 +64,34 @@
       "when": 1787242840766,
       "tag": "0008_gifted_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787370007819,
+      "tag": "0009_deep_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787371112204,
+      "tag": "0010_cold_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787590407751,
+      "tag": "0011_faulty_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787600399286,
+      "tag": "0012_giant_vulture",
+      "breakpoints": true
     }
   ]
 }

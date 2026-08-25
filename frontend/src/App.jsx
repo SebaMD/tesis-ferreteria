@@ -15,6 +15,10 @@ import UsersPage from "./pages/UsersPage.jsx";
 import CatalogPage from "./pages/CatalogPage.jsx";
 import ClientAccountPage from "./pages/ClientAccountPage.jsx";
 import ClientCartPage from "./pages/ClientCartPage.jsx";
+import CheckoutPage from "./pages/CheckoutPage.jsx";
+import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
+import PaymentResultPage from "./pages/PaymentResultPage.jsx";
+import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
 import ProductDetailPage from "./pages/ProductDetailPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 
@@ -42,6 +46,12 @@ function ProtectedPage({ children, allowedRoles }) {
 }
 
 function StorePage({ children }) {
+  const { isAuthenticated, user } = useAuth();
+
+  if (isAuthenticated && user?.role !== "CLIENT") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return <ClientLayout>{children}</ClientLayout>;
 }
 
@@ -64,6 +74,9 @@ export default function App() {
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
       <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
+      <Route path="/checkout" element={<ProtectedClientPage><CheckoutPage /></ProtectedClientPage>} />
+      <Route path="/orders" element={<ProtectedClientPage><ClientOrdersPage /></ProtectedClientPage>} />
+      <Route path="/payment-result" element={<ProtectedClientPage><PaymentResultPage /></ProtectedClientPage>} />
       <Route
         path="/dashboard"
         element={
@@ -97,6 +110,14 @@ export default function App() {
         }
       />
       <Route
+        path="/online-orders-management"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.onlineOrdersManagement}>
+            <OnlineOrdersManagementPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
         path="/reports"
         element={
           <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.reports}>
@@ -112,7 +133,10 @@ export default function App() {
           </ProtectedPage>
         }
       />
-      <Route path="/" element={<Navigate to="/catalog" replace />} />
+      <Route
+        path="/"
+        element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
       <Route
         path="*"
         element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}

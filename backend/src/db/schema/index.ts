@@ -8,3 +8,6 @@ export * from "./saleDetails.js";
 export * from "./inventoryMovements.js";
 export * from "./saleCancellationRequests.js";
 export * from "./saleCancellationRequestItems.js";
+export * from "./onlineOrders.js";
+export * from "./onlineOrderItems.js";
+export * from "./onlinePayments.js";

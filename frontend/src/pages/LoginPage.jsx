@@ -1,6 +1,6 @@
 import { LockKeyhole, Mail, Store, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
@@ -11,6 +11,7 @@ import useAuth from "../hooks/useAuth.js";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, login, user } = useAuth();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,13 @@ export default function LoginPage() {
     clearSessionNotice();
   }, [sessionNotice]);
 
-  if (isAuthenticated) return <Navigate to={user?.role === "CLIENT" ? "/catalog" : "/dashboard"} replace />;
+  const requestedPath = typeof location.state?.from === "string"
+    && location.state.from.startsWith("/")
+    && !location.state.from.startsWith("//")
+    ? location.state.from
+    : null;
+
+  if (isAuthenticated) return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace />;
 
   const clearExpiredSessionMessage = () => {
     if (!sessionNotice) return;
@@ -38,7 +45,7 @@ export default function LoginPage() {
 
     try {
       const authenticatedUser = await login({ correo, password });
-      navigate(authenticatedUser.role === "CLIENT" ? "/catalog" : "/dashboard");
+      navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
@@ -124,7 +131,7 @@ export default function LoginPage() {
             Ingresar
           </button>
           <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
-            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register">
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={requestedPath ? { from: requestedPath } : undefined}>
               <UserPlus size={17} /> Registrarse
             </Link>
             <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">

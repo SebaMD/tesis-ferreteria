@@ -1314,7 +1314,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-190 flex-none"}`}>
+        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-[860px] flex-none") : "w-full max-w-190 flex-none"}`}>
           <label className="relative block min-w-0 flex-1 max-[720px]:min-w-60 max-[720px]:max-w-none">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
@@ -1337,7 +1337,7 @@ export default function ProductsPage() {
             </button>
           )}
           <select
-            className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? "max-w-40" : "max-w-55"}`}
+            className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
             aria-label="Filtrar productos por categoría"

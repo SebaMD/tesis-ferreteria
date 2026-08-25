@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useAuth from "../hooks/useAuth.js";
+import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import CartContext from "./CartContext.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
@@ -19,8 +20,42 @@ function readCart(storageKey) {
   }
 }
 
-function CartStore({ children, storageKey }) {
-  const [items, setItems] = useState(() => readCart(storageKey));
+function mergeCartItems(baseItems, incomingItems) {
+  const merged = new Map(baseItems.map((item) => [Number(item.product.id), item]));
+
+  for (const item of incomingItems) {
+    const productId = Number(item.product.id);
+    const existing = merged.get(productId);
+    merged.set(productId, existing
+      ? { ...existing, product: item.product, quantity: Number(existing.quantity) + Number(item.quantity) }
+      : item);
+  }
+
+  return [...merged.values()];
+}
+
+function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
+  const [items, setItems] = useState(() => {
+    const storedItems = readCart(storageKey);
+    if (!mergeGuestCart) return storedItems;
+
+    const guestItems = readCart(guestStorageKey);
+    if (guestItems.length === 0) return storedItems;
+
+    const mergedItems = mergeCartItems(storedItems, guestItems);
+    localStorage.setItem(storageKey, JSON.stringify(mergedItems));
+    localStorage.removeItem(guestStorageKey);
+    return mergedItems;
+  });
+
+  useEffect(() => {
+    const syncCart = (event) => {
+      if (event.key === storageKey) setItems(readCart(storageKey));
+    };
+
+    window.addEventListener("storage", syncCart);
+    return () => window.removeEventListener("storage", syncCart);
+  }, [storageKey]);
 
   const saveItems = (updater) => {
     setItems((current) => {
@@ -32,7 +67,7 @@ function CartStore({ children, storageKey }) {
 
   const addItem = (product, quantity = 1) => {
     const requestedQuantity = Number(quantity);
-    const stock = Number(product?.currentStock || 0);
+    const stock = getOnlineAvailableStock(product);
     const currentItem = items.find((item) => Number(item.product.id) === Number(product?.id));
     const currentQuantity = Number(currentItem?.quantity || 0);
 
@@ -83,6 +118,18 @@ function CartStore({ children, storageKey }) {
 
   const clearCart = () => saveItems([]);
 
+  const removePurchasedItems = (purchasedItems = []) => {
+    const purchasedByProduct = new Map(
+      purchasedItems.map((item) => [Number(item.productId), Number(item.quantity || 0)]),
+    );
+
+    saveItems((current) => current.flatMap((item) => {
+      const purchasedQuantity = purchasedByProduct.get(Number(item.product.id)) || 0;
+      const remainingQuantity = Number(item.quantity) - purchasedQuantity;
+      return remainingQuantity > 0 ? [{ ...item, quantity: remainingQuantity }] : [];
+    }));
+  };
+
   const value = useMemo(() => ({
     items,
     totalUnits: items.reduce((total, item) => total + Number(item.quantity || 0), 0),
@@ -94,6 +141,7 @@ function CartStore({ children, storageKey }) {
     updateQuantity,
     removeItem,
     clearCart,
+    removePurchasedItems,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [items]);
 
@@ -104,9 +152,15 @@ export default function CartProvider({ children }) {
   const { user } = useAuth();
   const ownerKey = user?.role === "CLIENT" ? `client_${user.id}` : "guest";
   const storageKey = `${CART_STORAGE_PREFIX}_${ownerKey}`;
+  const guestStorageKey = `${CART_STORAGE_PREFIX}_guest`;
 
   return (
-    <CartStore key={storageKey} storageKey={storageKey}>
+    <CartStore
+      key={storageKey}
+      storageKey={storageKey}
+      guestStorageKey={guestStorageKey}
+      mergeGuestCart={user?.role === "CLIENT"}
+    >
       {children}
     </CartStore>
   );

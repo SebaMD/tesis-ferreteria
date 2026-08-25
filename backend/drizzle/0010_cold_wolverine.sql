@@ -1,0 +1,2 @@
+ALTER TABLE "online_payments" DROP CONSTRAINT "online_payments_status_check";--> statement-breakpoint
+ALTER TABLE "online_payments" ADD CONSTRAINT "online_payments_status_check" CHECK ("online_payments"."status" in ('CREATED', 'PROCESSING', 'AUTHORIZED', 'FAILED', 'CANCELLED', 'EXPIRED'));

@@ -38,6 +38,13 @@ services:
       PORT: ${PORT:-3000}
       JWT_SECRET: ${JWT_SECRET:-super_secret}
       COOKIE_KEY: ${COOKIE_KEY:-cookie_key}
+      WEBPAY_ENVIRONMENT: ${WEBPAY_ENVIRONMENT:-integration}
+      WEBPAY_COMMERCE_CODE: ${WEBPAY_COMMERCE_CODE:-}
+      WEBPAY_API_KEY: ${WEBPAY_API_KEY:-}
+      WEBPAY_RETURN_URL: ${WEBPAY_RETURN_URL:-http://localhost:3000/api/online-orders/payments/webpay/return}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      WEBPAY_TIMEOUT_MS: ${WEBPAY_TIMEOUT_MS:-30000}
+      ONLINE_ORDER_RESERVATION_MINUTES: ${ONLINE_ORDER_RESERVATION_MINUTES:-20}
     depends_on:
       db:
         condition: service_healthy

@@ -1,6 +1,14 @@
+import { db } from "../../db/index.js";
+import {
+  calculateAvailableStock,
+  findActiveReservedQuantities,
+} from "../inventory/stockAvailability.repository.js";
 import { findProductById, findProducts } from "../products/products.repository.js";
 
-function toCatalogProduct(product: NonNullable<Awaited<ReturnType<typeof findProductById>>>) {
+function toCatalogProduct(
+  product: NonNullable<Awaited<ReturnType<typeof findProductById>>>,
+  reservedQuantity: number,
+) {
   return {
     id: product.id,
     categoryId: product.categoryId,
@@ -10,6 +18,8 @@ function toCatalogProduct(product: NonNullable<Awaited<ReturnType<typeof findPro
     price: product.price,
     unitMeasure: product.unitMeasure,
     currentStock: product.currentStock,
+    reservedQuantity,
+    availableStock: calculateAvailableStock(product.currentStock, reservedQuantity),
     images: product.images.map((image) => ({
       id: image.id,
       imageUrl: image.imageUrl,
@@ -20,10 +30,20 @@ function toCatalogProduct(product: NonNullable<Awaited<ReturnType<typeof findPro
 }
 
 export async function findCatalogProducts() {
-  return (await findProducts(false)).map(toCatalogProduct);
+  const products = await findProducts(false);
+  const reservedByProduct = await findActiveReservedQuantities(
+    db,
+    products.map((product) => product.id),
+  );
+  return products.map((product) => toCatalogProduct(
+    product,
+    reservedByProduct.get(product.id) || 0,
+  ));
 }
 
 export async function findCatalogProductById(id: number) {
   const product = await findProductById(id, false);
-  return product ? toCatalogProduct(product) : null;
+  if (!product) return null;
+  const reservedByProduct = await findActiveReservedQuantities(db, [product.id]);
+  return toCatalogProduct(product, reservedByProduct.get(product.id) || 0);
 }

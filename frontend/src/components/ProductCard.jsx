@@ -1,6 +1,7 @@
 import { ImageOff, ShoppingCart } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatClp } from "../helpers/formatters.js";
+import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
@@ -8,7 +9,8 @@ function getPrimaryImage(product) {
 
 export default function ProductCard({ product, onAdd }) {
   const primaryImage = getPrimaryImage(product);
-  const hasStock = Number(product.currentStock || 0) > 0;
+  const availableStock = getOnlineAvailableStock(product);
+  const hasStock = availableStock > 0;
 
   return (
     <article className="group grid min-h-full grid-rows-[220px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_12px_rgba(16,21,31,0.05)] transition hover:-translate-y-0.5 hover:border-rust-200 hover:shadow-[0_8px_24px_rgba(16,21,31,0.09)]">
@@ -29,7 +31,7 @@ export default function ProductCard({ product, onAdd }) {
           </Link>
           <strong className="font-mono text-xl text-ink-950">{formatClp(product.price)}</strong>
           <span className={`text-xs font-extrabold ${hasStock ? "text-positive-600" : "text-critical-600"}`}>
-            {hasStock ? `Disponible · ${product.currentStock} ${product.unitMeasure}` : "SIN STOCK"}
+            {hasStock ? `Disponible · ${availableStock} ${product.unitMeasure}` : "SIN STOCK"}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">

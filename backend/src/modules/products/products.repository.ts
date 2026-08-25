@@ -134,7 +134,8 @@ export async function findProductStockById(tx: DbTransaction, id: number) {
         })
         .from(productsTable)
         .where(eq(productsTable.id, id))
-        .limit(1);
+        .limit(1)
+        .for("update");
 
     return product ?? null;
 }

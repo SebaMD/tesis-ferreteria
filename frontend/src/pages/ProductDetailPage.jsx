@@ -6,6 +6,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductGallery from "../components/ProductGallery.jsx";
 import { formatClp } from "../helpers/formatters.js";
+import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useCart from "../hooks/useCart.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 
@@ -17,10 +18,22 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCatalogProductByIdRequest(id)
+    const loadProduct = (notifyError = false) => getCatalogProductByIdRequest(id)
       .then(setProduct)
-      .catch((error) => toast.error(getApiError(error, "No se pudo cargar el producto")))
+      .catch((error) => {
+        if ([404, 409].includes(error?.response?.status)) setProduct(null);
+        if (notifyError) toast.error(getApiError(error, "No se pudo cargar el producto"));
+      })
       .finally(() => setLoading(false));
+
+    loadProduct(true);
+    const refreshProduct = () => loadProduct(false);
+    const refreshTimer = window.setInterval(refreshProduct, 30_000);
+    window.addEventListener("focus", refreshProduct);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshProduct);
+    };
   }, [id]);
 
   const handleAdd = () => {
@@ -39,7 +52,8 @@ export default function ProductDetailPage() {
     );
   }
 
-  const hasStock = Number(product.currentStock || 0) > 0;
+  const availableStock = getOnlineAvailableStock(product);
+  const hasStock = availableStock > 0;
 
   return (
     <main className="mx-auto grid w-full max-w-320 gap-5 px-6 py-8 max-[720px]:px-3.5">
@@ -58,19 +72,19 @@ export default function ProductDetailPage() {
           <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
             <span><strong>Unidad de medida:</strong> {product.unitMeasure}</span>
             <span className={hasStock ? "font-bold text-positive-600" : "font-bold text-critical-600"}>
-              {hasStock ? `Stock disponible: ${product.currentStock} ${product.unitMeasure}` : "SIN STOCK"}
+              {hasStock ? `Stock disponible: ${availableStock} ${product.unitMeasure}` : "SIN STOCK"}
             </span>
           </div>
           <div className="grid max-w-80 grid-cols-[110px_1fr] items-end gap-3 max-[420px]:max-w-none max-[420px]:grid-cols-1">
             <label>
               Cantidad
-              <input type="number" min="1" max={product.currentStock} value={quantity} onChange={(event) => setQuantity(event.target.value)} disabled={!hasStock} />
+              <input type="number" min="1" max={availableStock} value={quantity} onChange={(event) => setQuantity(event.target.value)} disabled={!hasStock} />
             </label>
             <button type="button" onClick={handleAdd} disabled={!hasStock}>
               <ShoppingCart size={18} /> Agregar al carrito
             </button>
           </div>
-          <p className="m-0 text-xs leading-5 text-slate-500">Agregar al carrito no descuenta ni reserva stock. Los pedidos online se habilitarán en una etapa posterior.</p>
+          <p className="m-0 text-xs leading-5 text-slate-500">Agregar al carrito no reserva stock. La disponibilidad se vuelve a validar al iniciar el pago.</p>
         </div>
       </section>
     </main>

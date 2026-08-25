@@ -13,5 +13,6 @@ export const ROUTE_PERMISSIONS = {
   inventory: ["ADMIN", "MANAGER", "WAREHOUSE"],
   reports: ["ADMIN", "MANAGER"],
   users: ["ADMIN"],
+  onlineOrdersManagement: ["ADMIN", "MANAGER", "WAREHOUSE"],
   client: ["CLIENT"],
 };

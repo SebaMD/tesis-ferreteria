@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,6 +15,8 @@ import {
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
@@ -61,6 +63,23 @@ const SALE_DATE_OPTIONS = {
   month: "2-digit",
   year: "numeric",
 };
+const EMPTY_SALE_DELIVERY = {
+  recipientName: "",
+  recipientRut: "",
+  phone: "",
+  address: "",
+  reference: "",
+  latitude: null,
+  longitude: null,
+};
+
+function normalizeChileanMobile(value) {
+  const compactPhone = String(value || "").trim().replace(/[\s().-]/g, "");
+  if (!/^(?:\+?56)?9\d{8}$/.test(compactPhone)) return null;
+  if (compactPhone.startsWith("+56")) return compactPhone;
+  if (compactPhone.startsWith("56")) return `+${compactPhone}`;
+  return `+56${compactPhone}`;
+}
 
 function getSaleDetails(sale) {
   if (Array.isArray(sale?.details)) return sale.details;
@@ -143,6 +162,8 @@ export default function SalesPage() {
   const [sales, setSales] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
   const [cashReceived, setCashReceived] = useState("");
+  const [saleDeliveryType, setSaleDeliveryType] = useState("IMMEDIATE");
+  const [saleDelivery, setSaleDelivery] = useState(EMPTY_SALE_DELIVERY);
   const [cartItems, setCartItems] = useState([]);
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [lastScannedProduct, setLastScannedProduct] = useState(null);
@@ -369,7 +390,13 @@ export default function SalesPage() {
     !submitting &&
     cartRows.length > 0 &&
     !cartHasInvalidStock &&
-    (!isCashPayment || (cashReceived !== "" && receivedAmount >= cartTotal));
+    (!isCashPayment || (cashReceived !== "" && receivedAmount >= cartTotal)) &&
+    (saleDeliveryType === "IMMEDIATE" || (
+      saleDelivery.recipientName.trim().length >= 3 &&
+      isValidRut(saleDelivery.recipientRut) &&
+      Boolean(normalizeChileanMobile(saleDelivery.phone)) &&
+      Boolean(saleDelivery.address.trim())
+    ));
 
   const returnableDetails = useMemo(
     () => getSaleDetails(saleForReturn)
@@ -536,6 +563,8 @@ export default function SalesPage() {
     setCartItems([]);
     setPaymentMethod("efectivo");
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
   };
 
   const openPaymentModal = () => {
@@ -551,12 +580,16 @@ export default function SalesPage() {
 
     setPaymentMethod("efectivo");
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
     setPaymentModalOpen(true);
   };
 
   const closePaymentModal = () => {
     if (submitting) return;
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
     setPaymentModalOpen(false);
   };
 
@@ -585,15 +618,46 @@ export default function SalesPage() {
       }
     }
 
+    if (saleDeliveryType === "DELIVERY") {
+      if (saleDelivery.recipientName.trim().length < 3) {
+        toast.warning("Ingresa el nombre completo del destinatario");
+        return;
+      }
+      if (!isValidRut(saleDelivery.recipientRut)) {
+        toast.warning("Ingresa un RUT valido para el destinatario");
+        return;
+      }
+      if (!normalizeChileanMobile(saleDelivery.phone)) {
+        toast.warning("Ingresa un teléfono móvil chileno válido");
+        return;
+      }
+      if (!saleDelivery.address.trim()) {
+        toast.warning("Ingresa la direccion del despacho");
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
-      await createSaleRequest({
+      const salePayload = {
         paymentMethod,
         details: cartRows.map((row) => ({
           productId: Number(row.product.id),
           quantity: Number(row.quantity),
         })),
-      });
+      };
+      if (saleDeliveryType === "DELIVERY") {
+        Object.assign(salePayload, {
+          deliveryType: "DELIVERY",
+          deliveryRecipientName: saleDelivery.recipientName,
+          deliveryRecipientRut: normalizeRut(saleDelivery.recipientRut),
+          deliveryPhone: normalizeChileanMobile(saleDelivery.phone),
+          deliveryAddress: saleDelivery.address,
+          deliveryCommune: DELIVERY_COMMUNE,
+          deliveryReference: saleDelivery.reference || null,
+        });
+      }
+      await createSaleRequest(salePayload);
       clearCart();
       toast.success("Venta registrada exitosamente");
       setPaymentModalOpen(false);
@@ -991,6 +1055,82 @@ export default function SalesPage() {
               </div>
             </div>
           )}
+
+          <fieldset className="grid gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
+            <legend className="px-1 text-sm font-bold text-ink-950">Tipo de entrega</legend>
+            <div className="grid grid-cols-2 gap-2 max-[620px]:grid-cols-1">
+              <label className={`flex cursor-pointer items-start gap-2 rounded-[5px] border p-3 ${saleDeliveryType === "IMMEDIATE" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
+                <input
+                  className="mt-1 size-4"
+                  type="radio"
+                  name="saleDeliveryType"
+                  checked={saleDeliveryType === "IMMEDIATE"}
+                  onChange={() => setSaleDeliveryType("IMMEDIATE")}
+                />
+                <span className="grid gap-0.5"><strong className="flex items-center gap-1.5 text-sm"><Store size={16} /> Entrega inmediata</strong><span className="text-xs font-normal text-slate-500">Flujo presencial habitual.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-start gap-2 rounded-[5px] border p-3 ${saleDeliveryType === "DELIVERY" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
+                <input
+                  className="mt-1 size-4"
+                  type="radio"
+                  name="saleDeliveryType"
+                  checked={saleDeliveryType === "DELIVERY"}
+                  onChange={() => setSaleDeliveryType("DELIVERY")}
+                />
+                <span className="grid gap-0.5"><strong className="flex items-center gap-1.5 text-sm"><Truck size={16} /> Despacho a domicilio</strong><span className="text-xs font-normal text-slate-500">Crea una tarea para Bodega.</span></span>
+              </label>
+            </div>
+
+            {saleDeliveryType === "DELIVERY" && (
+              <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Nombre destinatario
+                  <input
+                    maxLength="240"
+                    value={saleDelivery.recipientName}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientName: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">RUT destinatario
+                  <input
+                    maxLength="12"
+                    placeholder="12345678-9"
+                    value={saleDelivery.recipientRut}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientRut: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Telefono
+                  <input
+                    maxLength="20"
+                    placeholder="+56912345678"
+                    value={saleDelivery.phone}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, phone: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Comuna
+                  <input value={DELIVERY_COMMUNE} readOnly aria-readonly="true" />
+                </label>
+                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Direccion
+                  <input
+                    maxLength="300"
+                    value={saleDelivery.address}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, address: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia <span className="font-normal text-slate-400">(opcional)</span>
+                  <textarea
+                    className="min-h-18 resize-y"
+                    maxLength="500"
+                    value={saleDelivery.reference}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, reference: event.target.value }))}
+                  />
+                </label>
+              </div>
+            )}
+          </fieldset>
 
           <div className={formActionsClass}>
             <button className={secondaryButtonClass} type="button" onClick={closePaymentModal} disabled={submitting}>

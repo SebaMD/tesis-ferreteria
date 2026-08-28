@@ -11,6 +11,7 @@ import {
   createCheckoutService,
   findOrderIdByPaymentReturnService,
   getClientOrderByIdService,
+  getClientDeliveryAddressService,
   getClientOrdersService,
   OnlineOrderError,
   retryOnlineOrderPaymentService,
@@ -116,6 +117,22 @@ export async function getMyOrdersController(req: AuthenticatedRequest, res: Resp
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudieron obtener los pedidos", message(error));
+  }
+}
+
+export async function getDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho obtenida exitosamente",
+      await getClientDeliveryAddressService(requireClient(req)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo obtener la direccion de despacho", message(error));
   }
 }
 

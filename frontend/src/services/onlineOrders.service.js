@@ -25,6 +25,11 @@ export async function getMyOnlineOrdersRequest() {
   return response.data.data || [];
 }
 
+export async function getClientDeliveryAddressRequest() {
+  const response = await api.get("/online-orders/delivery-address");
+  return response.data.data || null;
+}
+
 export async function getMyOnlineOrderByIdRequest(orderId) {
   const response = await api.get(`/online-orders/${orderId}`);
   return response.data.data;

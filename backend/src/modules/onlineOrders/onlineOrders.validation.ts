@@ -1,3 +1,9 @@
+import {
+  canonicalizeDeliveryCommune,
+  DELIVERY_COMMUNE,
+  validateCoordinatePair,
+} from "../../utils/delivery.js";
+
 export type OnlineOrderItemInput = {
   productId: number;
   quantity: number;
@@ -12,6 +18,9 @@ export type CreateCheckoutBody = {
   deliveryAddress: string | null;
   deliveryCommune: string | null;
   deliveryReference: string | null;
+  deliveryLatitude: number | null;
+  deliveryLongitude: number | null;
+  saveDeliveryAddress: boolean;
 };
 
 type ValidationResult<T> =
@@ -55,6 +64,9 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     "deliveryAddress",
     "deliveryCommune",
     "deliveryReference",
+    "deliveryLatitude",
+    "deliveryLongitude",
+    "saveDeliveryAddress",
   ]);
 
   for (const field of Object.keys(input)) {
@@ -82,6 +94,10 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     return { success: false, error: "Debe seleccionar retiro en tienda o despacho a domicilio" };
   }
 
+  if (input.saveDeliveryAddress !== undefined && typeof input.saveDeliveryAddress !== "boolean") {
+    return { success: false, error: "La opcion de guardar la direccion no es valida" };
+  }
+
   const recipientName = optionalText(input.deliveryRecipientName, "El nombre del destinatario", 240);
   if (!recipientName.success) return recipientName;
   const phone = optionalText(input.deliveryPhone, "El telefono de contacto", 20);
@@ -92,6 +108,11 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
   if (!commune.success) return commune;
   const reference = optionalText(input.deliveryReference, "La referencia", 500);
   if (!reference.success) return reference;
+  const coordinates = validateCoordinatePair(
+    input.deliveryLatitude,
+    input.deliveryLongitude,
+  );
+  if (!coordinates.success) return coordinates;
 
   if (input.deliveryType === "DELIVERY") {
     if (!recipientName.value) {
@@ -106,8 +127,11 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     if (!address.value) {
       return { success: false, error: "La direccion es obligatoria para despacho" };
     }
-    if (!commune.value) {
-      return { success: false, error: "La comuna es obligatoria para despacho" };
+    if (!commune.value || !canonicalizeDeliveryCommune(commune.value)) {
+      return {
+        success: false,
+        error: `Por ahora los despachos solo estan disponibles en ${DELIVERY_COMMUNE}`,
+      };
     }
   }
 
@@ -149,8 +173,12 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
       deliveryRecipientName: input.deliveryType === "DELIVERY" ? recipientName.value : null,
       deliveryPhone: input.deliveryType === "DELIVERY" ? phone.value : null,
       deliveryAddress: input.deliveryType === "DELIVERY" ? address.value : null,
-      deliveryCommune: input.deliveryType === "DELIVERY" ? commune.value : null,
+      deliveryCommune: input.deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null,
       deliveryReference: input.deliveryType === "DELIVERY" ? reference.value : null,
+      deliveryLatitude: input.deliveryType === "DELIVERY" ? coordinates.latitude : null,
+      deliveryLongitude: input.deliveryType === "DELIVERY" ? coordinates.longitude : null,
+      saveDeliveryAddress: input.deliveryType === "DELIVERY"
+        && input.saveDeliveryAddress === true,
     },
   };
 }

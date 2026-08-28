@@ -1,12 +1,13 @@
-import { AlertTriangle, CheckCircle2, Clock3, ShoppingCart, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Mail, Printer, ShoppingCart, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
-import { formatClp } from "../helpers/formatters.js";
+import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
+  getOnlineOrderDeliveryType,
   getOnlineOrderStatus,
   getOnlinePaymentStatus,
   isOnlineOrderPaid,
@@ -90,6 +91,10 @@ export default function PaymentResultPage() {
   const orderStatus = order ? getOnlineOrderStatus(order.status) : null;
   const paymentStatus = order?.payment ? getOnlinePaymentStatus(order.payment.status) : null;
   const isPaid = isOnlineOrderPaid(order?.status);
+  const deliveryType = order ? getOnlineOrderDeliveryType(order.deliveryType) : null;
+  const clientName = order
+    ? `${order.clientNames || ""} ${order.clientSurnames || ""}`.trim()
+    : "";
 
   return (
     <main className="mx-auto grid min-h-120 w-full max-w-190 place-items-center px-6 py-10 max-[720px]:px-3.5">
@@ -120,13 +125,81 @@ export default function PaymentResultPage() {
             </div>
           </div>
 
+          {isPaid && (
+            <section className="purchase-receipt grid w-full gap-5 rounded-[5px] border border-slate-200 bg-white p-5 text-left">
+              <header className="border-b border-slate-200 pb-4 text-center">
+                <strong className="block text-lg text-ink-950">FERRETERIA FYF</strong>
+                <h2 className="mt-1 mb-0 text-xl font-bold text-ink-950">Comprobante de compra</h2>
+                <span className="mt-1 block text-xs text-slate-500">Pago confirmado</span>
+              </header>
+
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm max-[520px]:grid-cols-1">
+                <div><dt className="text-xs font-bold text-slate-500">Folio</dt><dd className="mt-1 ml-0 font-mono font-bold text-ink-950">{formatOnlineOrderFolio(order.id)}</dd></div>
+                <div><dt className="text-xs font-bold text-slate-500">Fecha</dt><dd className="mt-1 ml-0 text-ink-950">{formatDate(order.paidAt || order.createdAt, { dateStyle: "long", timeStyle: "short" })}</dd></div>
+                <div><dt className="text-xs font-bold text-slate-500">Cliente</dt><dd className="mt-1 ml-0 text-ink-950">{clientName || "Cliente registrado"}</dd></div>
+                <div><dt className="text-xs font-bold text-slate-500">Modalidad</dt><dd className="mt-1 ml-0 text-ink-950">{deliveryType.label}</dd></div>
+                {order.deliveryType === "DELIVERY" && (
+                  <>
+                    <div><dt className="text-xs font-bold text-slate-500">Dirección de entrega</dt><dd className="mt-1 ml-0 text-ink-950">{order.deliveryAddress}</dd></div>
+                    <div><dt className="text-xs font-bold text-slate-500">Comuna</dt><dd className="mt-1 ml-0 text-ink-950">{order.deliveryCommune}</dd></div>
+                  </>
+                )}
+              </dl>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr><th>Producto</th><th className="text-right">Cantidad</th><th className="text-right">Precio unitario</th><th className="text-right">Subtotal</th></tr>
+                  </thead>
+                  <tbody>
+                    {(order.items || []).map((item) => (
+                      <tr key={`${item.productId}-${item.productName}`}>
+                        <td>{item.productName}</td>
+                        <td className="text-right font-mono">{item.quantity}</td>
+                        <td className="text-right font-mono">{formatClp(item.unitPrice)}</td>
+                        <td className="text-right font-mono font-bold">{formatClp(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
+                <span className="font-bold text-slate-600">Total</span>
+                <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
+              </div>
+            </section>
+          )}
+
+          {isPaid && order.clientEmail && (
+            <p className="m-0 flex w-full items-start gap-2 rounded-[5px] bg-blue-50 px-4 py-3 text-left text-xs leading-5 text-blue-900">
+              <Mail className="mt-0.5 shrink-0" size={17} />
+              Te enviaremos actualizaciones sobre el estado de tu pedido al correo asociado a tu cuenta: <strong>{order.clientEmail}</strong>
+            </p>
+          )}
+
           {order.status === "PAYMENT_REVIEW" && (
             <p className="m-0 w-full max-w-125 rounded-[5px] bg-rust-50 px-3 py-3 text-xs leading-5 text-rust-700">
               Tu pago fue autorizado, pero requiere revisión. No vuelvas a pagar este pedido.
             </p>
           )}
 
+          {isPaid && (
+            <p className="m-0 w-full max-w-125 text-center text-xs leading-5 text-slate-500">
+              También puedes guardarlo como PDF desde las opciones de impresión del navegador.
+            </p>
+          )}
+
           <div className="flex w-full max-w-125 flex-wrap justify-center gap-3 max-[520px]:flex-col">
+            {isPaid && (
+              <button
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
+                type="button"
+                onClick={() => window.print()}
+              >
+                <Printer size={17} /> Imprimir comprobante
+              </button>
+            )}
             <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/orders">
               Ver mis pedidos
             </Link>

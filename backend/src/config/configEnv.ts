@@ -45,5 +45,21 @@ export const ONLINE_ORDER_RESERVATION_MINUTES = Number.isInteger(configuredReser
   ? configuredReservationMinutes
   : 20;
 
-export const EMAIL_USER = process.env.EMAIL_USER;
-export const EMAIL_PASS = process.env.EMAIL_PASS;
+function booleanEnvironmentValue(value: string | undefined, fallback = false) {
+  if (value === undefined) return fallback;
+  return value.trim().toLowerCase() === "true";
+}
+
+const configuredSmtpPort = Number.parseInt(process.env.SMTP_PORT || "587", 10);
+
+export const MAIL_ENABLED = booleanEnvironmentValue(process.env.MAIL_ENABLED);
+export const SMTP_HOST = process.env.SMTP_HOST?.trim() || undefined;
+export const SMTP_PORT = Number.isInteger(configuredSmtpPort)
+  && configuredSmtpPort >= 1
+  && configuredSmtpPort <= 65_535
+  ? configuredSmtpPort
+  : 587;
+export const SMTP_SECURE = booleanEnvironmentValue(process.env.SMTP_SECURE);
+export const SMTP_USER = process.env.SMTP_USER?.trim() || undefined;
+export const SMTP_PASS = process.env.SMTP_PASS || undefined;
+export const MAIL_FROM = process.env.MAIL_FROM?.trim() || undefined;

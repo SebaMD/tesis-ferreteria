@@ -1,4 +1,4 @@
-import { LockKeyhole, Mail, Store, UserPlus } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, Store, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const { isAuthenticated, login, user } = useAuth();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
   const [loading, setLoading] = useState(false);
 
@@ -63,10 +64,10 @@ export default function LoginPage() {
           <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
         </div>
         <div className="relative z-1 w-full max-w-120 -translate-y-20 place-self-center py-8 text-left max-[980px]:-translate-y-12">
-          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Control de inventario y ventas, con reportes</h1>
-          <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Gestión interna de productos, stock y ventas presenciales para la ferretería.</p>
+          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Ferretería FYF, todo en un solo lugar</h1>
+          <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Accede a tu cuenta para comprar, consultar pedidos o continuar con tu trabajo.</p>
         </div>
-        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · USO INTERNO</span>
+        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · ACCESO SEGURO</span>
       </section>
 
       <img
@@ -113,8 +114,8 @@ export default function LoginPage() {
             <span className="relative block">
               <LockKeyhole className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
               <input
-                className="pl-9.75"
-                type="password"
+                className="pr-12 pl-9.75"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
                   clearExpiredSessionMessage();
@@ -124,6 +125,15 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
               />
+              <button
+                className="absolute top-1/2 right-1.5 z-2 grid size-9 min-h-0 -translate-y-1/2 place-items-center border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950"
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </span>
           </label>
 

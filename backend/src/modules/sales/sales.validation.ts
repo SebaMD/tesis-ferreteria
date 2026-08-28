@@ -1,3 +1,11 @@
+import { isValidRut, normalizeName, normalizeRut } from "../auth/auth.validation.js";
+import { normalizePhone } from "../users/users.validation.js";
+import {
+  canonicalizeDeliveryCommune,
+  DELIVERY_COMMUNE,
+  validateCoordinatePair,
+} from "../../utils/delivery.js";
+
 export type SaleDetailInput = {
   productId: number;
   quantity: number;
@@ -6,6 +14,17 @@ export type SaleDetailInput = {
 export type SaleBody = {
   paymentMethod: string;
   details: SaleDetailInput[];
+  deliveryType: "IMMEDIATE" | "DELIVERY";
+  delivery: {
+    recipientName: string;
+    recipientRut: string;
+    phone: string;
+    address: string;
+    commune: string;
+    reference: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
 };
 
 export type CancellationRequestBody = {
@@ -29,7 +48,19 @@ export function validateCreateSaleBody(body: unknown): ValidationResult<SaleBody
   if (!body || typeof body !== "object" || Array.isArray(body)) return { success: false, error: "Debe enviar datos validos" };
 
   const input = body as Record<string, unknown>;
-  const allowed = ["paymentMethod", "details"];
+  const allowed = [
+    "paymentMethod",
+    "details",
+    "deliveryType",
+    "deliveryRecipientName",
+    "deliveryRecipientRut",
+    "deliveryPhone",
+    "deliveryAddress",
+    "deliveryCommune",
+    "deliveryReference",
+    "deliveryLatitude",
+    "deliveryLongitude",
+  ];
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -41,6 +72,73 @@ export function validateCreateSaleBody(body: unknown): ValidationResult<SaleBody
 
   if (!Array.isArray(input.details) || input.details.length < 1) {
     return { success: false, error: "Debe agregar al menos 1 detalle de venta" };
+  }
+
+  const deliveryType = input.deliveryType === undefined
+    ? "IMMEDIATE"
+    : input.deliveryType;
+  if (deliveryType !== "IMMEDIATE" && deliveryType !== "DELIVERY") {
+    return { success: false, error: "El tipo de entrega no es valido" };
+  }
+
+  let delivery: SaleBody["delivery"] = null;
+  if (deliveryType === "DELIVERY") {
+    const recipientName = typeof input.deliveryRecipientName === "string"
+      ? normalizeName(input.deliveryRecipientName)
+      : "";
+    const recipientRut = typeof input.deliveryRecipientRut === "string"
+      ? normalizeRut(input.deliveryRecipientRut)
+      : "";
+    const phone = typeof input.deliveryPhone === "string"
+      ? normalizePhone(input.deliveryPhone)
+      : null;
+    const address = typeof input.deliveryAddress === "string"
+      ? input.deliveryAddress.trim().replace(/\s+/g, " ")
+      : "";
+    const commune = canonicalizeDeliveryCommune(input.deliveryCommune);
+    const reference = typeof input.deliveryReference === "string"
+      ? input.deliveryReference.trim().replace(/\s+/g, " ") || null
+      : input.deliveryReference === undefined || input.deliveryReference === null
+        ? null
+        : undefined;
+    const coordinates = validateCoordinatePair(
+      input.deliveryLatitude,
+      input.deliveryLongitude,
+    );
+
+    if (recipientName.length < 3 || recipientName.length > 240) {
+      return { success: false, error: "El nombre del destinatario debe tener entre 3 y 240 caracteres" };
+    }
+    if (!isValidRut(recipientRut)) {
+      return { success: false, error: "El RUT del destinatario no es valido" };
+    }
+    if (!phone) {
+      return { success: false, error: "El telefono debe ser un movil chileno valido" };
+    }
+    if (!address || address.length > 300) {
+      return { success: false, error: "La direccion es obligatoria y no puede superar 300 caracteres" };
+    }
+    if (!commune) {
+      return {
+        success: false,
+        error: `Por ahora los despachos solo estan disponibles en ${DELIVERY_COMMUNE}`,
+      };
+    }
+    if (reference === undefined || (reference && reference.length > 500)) {
+      return { success: false, error: "La referencia no puede superar 500 caracteres" };
+    }
+    if (!coordinates.success) return coordinates;
+
+    delivery = {
+      recipientName,
+      recipientRut,
+      phone,
+      address,
+      commune: DELIVERY_COMMUNE,
+      reference,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+    };
   }
 
   const details: SaleDetailInput[] = [];
@@ -82,6 +180,8 @@ export function validateCreateSaleBody(body: unknown): ValidationResult<SaleBody
     value: {
       paymentMethod: input.paymentMethod.trim(),
       details,
+      deliveryType,
+      delivery,
     },
   };
 }

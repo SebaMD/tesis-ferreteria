@@ -1,4 +1,4 @@
-import { LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -23,6 +23,8 @@ export default function RegisterPage() {
     confirmPassword: "",
   });
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const requestedPath = typeof location.state?.from === "string"
     && location.state.from.startsWith("/")
@@ -81,8 +83,8 @@ export default function RegisterPage() {
 
         <form className="grid gap-5 rounded-lg border border-slate-200 bg-white p-7 shadow-[0_12px_36px_rgba(16,21,31,0.08)] max-[620px]:p-5" onSubmit={handleSubmit}>
           <div>
-            <h1 className="m-0 text-2xl font-bold text-ink-950">Crear cuenta de cliente</h1>
-            <p className="mt-1.5 mb-0 text-sm text-slate-500">Solo solicitamos datos de identidad, contacto y acceso.</p>
+            <h1 className="m-0 text-2xl font-bold text-ink-950">Crear cuenta</h1>
+            <p className="mt-1.5 mb-0 text-sm text-slate-500">Regístrate para comprar y consultar tus pedidos.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
@@ -126,12 +128,33 @@ export default function RegisterPage() {
               Contraseña
               <span className="relative block">
                 <LockKeyhole className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-500" size={17} />
-                <input className="pl-9.75" type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} autoComplete="new-password" required />
+                <input className="pr-12 pl-9.75" type={showPassword ? "text" : "password"} value={form.password} onChange={(event) => updateField("password", event.target.value)} autoComplete="new-password" required />
+                <button
+                  className="absolute top-1/2 right-1.5 grid size-9 min-h-0 -translate-y-1/2 place-items-center border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </span>
             </label>
             <label>
               Confirmar contraseña
-              <input type="password" value={form.confirmPassword} onChange={(event) => updateField("confirmPassword", event.target.value)} autoComplete="new-password" required />
+              <span className="relative block">
+                <LockKeyhole className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-500" size={17} />
+                <input className="pr-12 pl-9.75" type={showConfirmPassword ? "text" : "password"} value={form.confirmPassword} onChange={(event) => updateField("confirmPassword", event.target.value)} autoComplete="new-password" required />
+                <button
+                  className="absolute top-1/2 right-1.5 grid size-9 min-h-0 -translate-y-1/2 place-items-center border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950"
+                  type="button"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  aria-label={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  title={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </span>
             </label>
           </div>
 

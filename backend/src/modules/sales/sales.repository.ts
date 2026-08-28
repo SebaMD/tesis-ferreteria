@@ -6,10 +6,12 @@ import {
   saleCancellationRequestItemsTable,
   saleCancellationRequestsTable,
   saleDetailsTable,
+  saleDeliveriesTable,
   salesTable,
   usersTable,
   type NewSaleCancellationRequestItem,
   type NewSaleDetail,
+  type NewSaleDelivery,
 } from "../../db/schema/index.js";
 
 const requestingUsers = alias(usersTable, "requesting_users");
@@ -131,6 +133,18 @@ export async function createSale(
 
 export async function createSaleDetails(tx: DbTransaction, details: NewSaleDetail[]) {
   return tx.insert(saleDetailsTable).values(details);
+}
+
+export async function createSaleDelivery(
+  tx: DbTransaction,
+  delivery: NewSaleDelivery,
+) {
+  const [created] = await tx
+    .insert(saleDeliveriesTable)
+    .values(delivery)
+    .returning({ saleId: saleDeliveriesTable.saleId });
+
+  return created;
 }
 
 export async function findSaleForCancellation(tx: DbTransaction, id: number) {

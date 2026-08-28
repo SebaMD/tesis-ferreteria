@@ -127,7 +127,7 @@ export default function ClientOrdersPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-2xl font-bold text-ink-950">Mis pedidos</h1>
-          <p className="mt-1.5 mb-0 text-sm text-slate-500">Consulta tus pedidos online y el estado de sus pagos.</p>
+          <p className="mt-1.5 mb-0 text-sm text-slate-500">Consulta el pago, la preparación y la entrega de tus pedidos.</p>
         </div>
         <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-rust-600 no-underline" to="/catalog">
           <ShoppingCart size={17} /> Volver al catálogo

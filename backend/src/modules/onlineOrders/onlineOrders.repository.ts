@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import {
+  clientDeliveryAddressesTable,
   onlineOrderItemsTable,
   onlineOrdersTable,
   onlinePaymentsTable,
@@ -10,6 +11,60 @@ import {
   type NewOnlineOrderItem,
   type OnlineOrderStatus,
 } from "../../db/schema/index.js";
+
+export async function findClientDeliveryAddress(clientId: number) {
+  const [address] = await db
+    .select({
+      recipientName: clientDeliveryAddressesTable.recipientName,
+      phone: clientDeliveryAddressesTable.phone,
+      address: clientDeliveryAddressesTable.address,
+      commune: clientDeliveryAddressesTable.commune,
+      reference: clientDeliveryAddressesTable.reference,
+      latitude: clientDeliveryAddressesTable.latitude,
+      longitude: clientDeliveryAddressesTable.longitude,
+      updatedAt: clientDeliveryAddressesTable.updatedAt,
+    })
+    .from(clientDeliveryAddressesTable)
+    .where(eq(clientDeliveryAddressesTable.clientId, clientId))
+    .limit(1);
+
+  return address ?? null;
+}
+
+export async function upsertClientDeliveryAddress(
+  tx: DbTransaction,
+  data: {
+    clientId: number;
+    recipientName: string;
+    phone: string;
+    address: string;
+    commune: string;
+    reference: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  },
+) {
+  const updatedAt = new Date();
+  const [savedAddress] = await tx
+    .insert(clientDeliveryAddressesTable)
+    .values({ ...data, updatedAt })
+    .onConflictDoUpdate({
+      target: clientDeliveryAddressesTable.clientId,
+      set: {
+        recipientName: data.recipientName,
+        phone: data.phone,
+        address: data.address,
+        commune: data.commune,
+        reference: data.reference,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        updatedAt,
+      },
+    })
+    .returning({ clientId: clientDeliveryAddressesTable.clientId });
+
+  return savedAddress;
+}
 
 const orderColumns = {
   id: onlineOrdersTable.id,
@@ -27,6 +82,8 @@ const orderColumns = {
   deliveryAddress: onlineOrdersTable.deliveryAddress,
   deliveryCommune: onlineOrdersTable.deliveryCommune,
   deliveryReference: onlineOrdersTable.deliveryReference,
+  deliveryLatitude: onlineOrdersTable.deliveryLatitude,
+  deliveryLongitude: onlineOrdersTable.deliveryLongitude,
   reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
   paidAt: onlineOrdersTable.paidAt,
   clientArchivedAt: onlineOrdersTable.clientArchivedAt,
@@ -163,6 +220,8 @@ export async function createOnlineOrder(
     deliveryAddress: string | null;
     deliveryCommune: string | null;
     deliveryReference: string | null;
+    deliveryLatitude: number | null;
+    deliveryLongitude: number | null;
   },
 ) {
   const [order] = await tx

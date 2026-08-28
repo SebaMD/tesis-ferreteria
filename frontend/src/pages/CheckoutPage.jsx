@@ -1,9 +1,11 @@
-import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
+import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Trash2, Truck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
+import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
 import useAuth from "../hooks/useAuth.js";
@@ -12,6 +14,7 @@ import { getCatalogProductsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
   createOnlineOrderCheckoutRequest,
+  getClientDeliveryAddressRequest,
   getMyOnlineOrdersRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -29,24 +32,28 @@ function createCheckoutKey() {
 
 export default function CheckoutPage() {
   const { user } = useAuth();
-  const { items } = useCart();
+  const { items, removeItem } = useCart();
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingOrderLoading, setPendingOrderLoading] = useState(true);
+  const [savedAddressLoading, setSavedAddressLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [pendingOrder, setPendingOrder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [deliveryType, setDeliveryType] = useState("PICKUP");
+  const [saveDeliveryAddress, setSaveDeliveryAddress] = useState(false);
   const [deliveryData, setDeliveryData] = useState(() => ({
     recipientName: `${user?.names || ""} ${user?.surnames || ""}`.trim(),
     phone: user?.phone || "",
     address: "",
-    commune: "",
     reference: "",
+    latitude: null,
+    longitude: null,
   }));
   const submittingRef = useRef(false);
+  const deliveryTouchedRef = useRef(false);
 
   const loadAvailability = useCallback(async (notifyError = false) => {
     try {
@@ -75,10 +82,30 @@ export default function CheckoutPage() {
     }
   }, []);
 
+  const loadSavedDeliveryAddress = useCallback(async () => {
+    try {
+      const savedAddress = await getClientDeliveryAddressRequest();
+      if (!savedAddress || deliveryTouchedRef.current) return;
+      setDeliveryData({
+        recipientName: savedAddress.recipientName || "",
+        phone: savedAddress.phone || "",
+        address: savedAddress.address || "",
+        reference: savedAddress.reference || "",
+        latitude: savedAddress.latitude ?? null,
+        longitude: savedAddress.longitude ?? null,
+      });
+    } catch (error) {
+      toast.error(getApiError(error, "No se pudo cargar tu dirección guardada"));
+    } finally {
+      setSavedAddressLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAvailability(true);
     loadPendingOrder(true);
+    loadSavedDeliveryAddress();
     const refreshCheckout = () => {
       loadAvailability(false);
       loadPendingOrder(false);
@@ -90,7 +117,7 @@ export default function CheckoutPage() {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshCheckout);
     };
-  }, [loadAvailability, loadPendingOrder]);
+  }, [loadAvailability, loadPendingOrder, loadSavedDeliveryAddress]);
 
   const liveProductById = useMemo(
     () => new Map(catalogProducts.map((product) => [Number(product.id), product])),
@@ -122,10 +149,10 @@ export default function CheckoutPage() {
     deliveryData.recipientName.trim()
     && /^[+0-9()\s-]{7,20}$/.test(deliveryData.phone.trim())
     && deliveryData.address.trim()
-    && deliveryData.commune.trim()
   );
   const canStartPayment = !loading
     && !pendingOrderLoading
+    && !savedAddressLoading
     && !submitting
     && !pendingOrder
     && rows.length > 0
@@ -133,7 +160,19 @@ export default function CheckoutPage() {
     && Boolean(deliveryDataIsValid);
 
   const updateDeliveryData = (field, value) => {
+    deliveryTouchedRef.current = true;
     setDeliveryData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleRemoveProduct = (productId) => {
+    if (pendingOrder) {
+      toast.warning("Finaliza o revisa el pago pendiente antes de modificar el carrito");
+      return;
+    }
+    if (submitting) return;
+
+    removeItem(productId);
+    toast.success("Producto eliminado del carrito");
   };
 
   const handleContinuePayment = async () => {
@@ -175,8 +214,11 @@ export default function CheckoutPage() {
         deliveryRecipientName: deliveryType === "DELIVERY" ? deliveryData.recipientName : null,
         deliveryPhone: deliveryType === "DELIVERY" ? deliveryData.phone : null,
         deliveryAddress: deliveryType === "DELIVERY" ? deliveryData.address : null,
-        deliveryCommune: deliveryType === "DELIVERY" ? deliveryData.commune : null,
+        deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null,
         deliveryReference: deliveryType === "DELIVERY" ? deliveryData.reference : null,
+        deliveryLatitude: deliveryType === "DELIVERY" ? deliveryData.latitude : null,
+        deliveryLongitude: deliveryType === "DELIVERY" ? deliveryData.longitude : null,
+        saveDeliveryAddress: deliveryType === "DELIVERY" && saveDeliveryAddress,
       });
 
       submitWebpayForm(payment);
@@ -194,7 +236,7 @@ export default function CheckoutPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-300 gap-5 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
-      <LoadingOverlay active={loading} />
+      <LoadingOverlay active={loading || savedAddressLoading} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -236,7 +278,7 @@ export default function CheckoutPage() {
           <div className="grid justify-items-center gap-3">
             <ShoppingCart className="text-slate-400" size={45} />
             <strong className="text-lg text-ink-950">Tu carrito está vacío</strong>
-            <Link className="font-bold text-rust-600" to="/catalog">Explorar catálogo</Link>
+            <Link className="font-bold text-rust-600" to="/catalog">Volver al catálogo</Link>
           </div>
         </section>
       ) : (
@@ -274,9 +316,23 @@ export default function CheckoutPage() {
                           </span>
                         )}
                       </div>
-                      <strong className="font-mono text-sm text-ink-950 max-[620px]:col-span-2 max-[620px]:justify-self-end">
-                        {formatClp(row.subtotal)}
-                      </strong>
+                      <div className="flex items-center justify-end gap-3 max-[620px]:col-span-2 max-[620px]:w-full max-[620px]:justify-between">
+                        <strong className="font-mono text-sm text-ink-950">
+                          {formatClp(row.subtotal)}
+                        </strong>
+                        <button
+                          className="size-9 min-h-9 shrink-0 border-critical-200 bg-critical-50 p-0 text-critical-600 hover:bg-critical-100"
+                          type="button"
+                          onClick={() => handleRemoveProduct(row.product.id)}
+                          disabled={Boolean(pendingOrder) || submitting}
+                          aria-label={`Eliminar ${row.product.name} del carrito`}
+                          title={pendingOrder
+                            ? "No puedes modificar el carrito mientras exista un pago pendiente"
+                            : `Eliminar ${row.product.name}`}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
                     </article>
                   );
                 })}
@@ -322,10 +378,35 @@ export default function CheckoutPage() {
                     <div className="relative"><MapPin className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={16} /><input className="w-full pl-9" maxLength="300" required value={deliveryData.address} onChange={(event) => updateDeliveryData("address", event.target.value)} placeholder="Calle, número, casa o departamento" /></div>
                   </label>
                   <label className="grid gap-1.5 text-xs font-bold text-slate-600">Comuna
-                    <input maxLength="120" required value={deliveryData.commune} onChange={(event) => updateDeliveryData("commune", event.target.value)} placeholder="Comuna de entrega" />
+                    <input readOnly value={DELIVERY_COMMUNE} aria-readonly="true" />
                   </label>
                   <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia / indicaciones <span className="font-normal text-slate-400">(opcional)</span>
                     <textarea className="min-h-20 resize-y" maxLength="500" value={deliveryData.reference} onChange={(event) => updateDeliveryData("reference", event.target.value)} placeholder="Ej: portón azul, llamar al llegar" />
+                  </label>
+                  <DeliveryLocationPicker
+                    latitude={deliveryData.latitude}
+                    longitude={deliveryData.longitude}
+                    address={deliveryData.address}
+                    commune={DELIVERY_COMMUNE}
+                    onChange={({ latitude, longitude }) => {
+                      deliveryTouchedRef.current = true;
+                      setDeliveryData((current) => ({ ...current, latitude, longitude }));
+                    }}
+                    disabled={submitting}
+                  />
+                  <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-ink-950 max-[620px]:col-span-1">
+                    <input
+                      className="mt-0.5 size-4 shrink-0"
+                      type="checkbox"
+                      checked={saveDeliveryAddress}
+                      onChange={(event) => setSaveDeliveryAddress(event.target.checked)}
+                    />
+                    <span>
+                      Guardar esta dirección para próximas compras
+                      <small className="mt-0.5 block font-normal leading-5 text-slate-500">
+                        Solo se actualizará tu dirección guardada si mantienes esta opción seleccionada.
+                      </small>
+                    </span>
                   </label>
                 </div>
               )}

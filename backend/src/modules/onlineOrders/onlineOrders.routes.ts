@@ -5,6 +5,7 @@ import {
   archiveOrderController,
   continuePaymentController,
   createCheckoutController,
+  getDeliveryAddressController,
   getMyOrderByIdController,
   getMyOrdersController,
   retryPaymentController,
@@ -20,6 +21,7 @@ router.use(authenticateJwt);
 router.use(verifyRoles(["CLIENT"]));
 
 router.get("/", getMyOrdersController);
+router.get("/delivery-address", getDeliveryAddressController);
 router.post("/checkout", createCheckoutController);
 router.post("/:id/continue-payment", continuePaymentController);
 router.post("/:id/retry-payment", retryPaymentController);

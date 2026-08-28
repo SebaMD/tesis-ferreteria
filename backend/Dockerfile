@@ -33,7 +33,7 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
-RUN mkdir -p /app/uploads/products && chown -R node:node /app/uploads
+RUN mkdir -p /app/uploads/products /app/uploads/deliveries && chown -R node:node /app/uploads
 
 USER node
 

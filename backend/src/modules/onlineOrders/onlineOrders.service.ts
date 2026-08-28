@@ -5,6 +5,7 @@ import {
   WEBPAY_TIMEOUT_MS,
 } from "../../config/configEnv.js";
 import { applyInventoryMovement } from "../inventory/inventory.service.js";
+import { notifyWarehousesBestEffort } from "../notifications/notifications.service.js";
 import {
   calculateAvailableStock,
   findActiveReservedQuantities,
@@ -27,6 +28,7 @@ import {
   deferSupersededProcessingPayment,
   expirePendingOrdersForClient,
   findActiveClientForUpdate,
+  findClientDeliveryAddress,
   findLatestPaymentForOrder,
   findOtherAuthorizedPayment,
   findPaymentsNeedingReconciliation,
@@ -47,6 +49,7 @@ import {
   saveWebpayLaunch,
   updateOrderStatus,
   updatePaymentResult,
+  upsertClientDeliveryAddress,
 } from "./onlineOrders.repository.js";
 import type { CreateCheckoutBody } from "./onlineOrders.validation.js";
 
@@ -311,6 +314,8 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         deliveryAddress: data.deliveryAddress,
         deliveryCommune: data.deliveryCommune,
         deliveryReference: data.deliveryReference,
+        deliveryLatitude: data.deliveryLatitude,
+        deliveryLongitude: data.deliveryLongitude,
         reservationExpiresAt: reservationExpiration(),
       });
 
@@ -321,6 +326,19 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         unitPrice: item.unitPrice,
         subtotal: item.subtotal,
       })));
+
+      if (data.deliveryType === "DELIVERY" && data.saveDeliveryAddress) {
+        await upsertClientDeliveryAddress(tx, {
+          clientId,
+          recipientName: data.deliveryRecipientName!,
+          phone: data.deliveryPhone!,
+          address: data.deliveryAddress!,
+          commune: data.deliveryCommune!,
+          reference: data.deliveryReference,
+          latitude: data.deliveryLatitude,
+          longitude: data.deliveryLongitude,
+        });
+      }
 
       prepared = await preparePaymentAttempt(tx, {
         orderId: order.id,
@@ -347,6 +365,10 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
   if (existingLaunch) return existingLaunch;
   if (!prepared) throw new OnlineOrderError("No se pudo preparar el pago", 500);
   return startWebpayPayment(prepared);
+}
+
+export async function getClientDeliveryAddressService(clientId: number) {
+  return findClientDeliveryAddress(clientId);
 }
 
 export async function retryOnlineOrderPaymentService(clientId: number, orderId: number) {
@@ -524,7 +546,7 @@ async function finishProviderResponse(data: {
   response: WebpayTransactionResult;
   source: ProviderResponseSource;
 }) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Todos los flujos usan el mismo orden de locks: pedido -> pago -> productos.
     const order = await findOrderForUpdate(tx, data.locatedPayment.orderId);
     if (!order) throw new OnlineOrderError("Pedido no encontrado", 404);
@@ -535,13 +557,13 @@ async function finishProviderResponse(data: {
     }
 
     if (payment.status === "AUTHORIZED" && hasSettledPayment(order.status)) {
-      return { orderId: order.id, orderStatus: order.status };
+      return { orderId: order.id, orderStatus: order.status, becamePaid: false };
     }
 
     const authorized = isAuthorizedResponse(data.response);
     if (!authorized) {
       if (!isDefinitiveFailureResponse(data.response, data.source)) {
-        return { orderId: order.id, orderStatus: order.status };
+        return { orderId: order.id, orderStatus: order.status, becamePaid: false };
       }
 
       if (!["AUTHORIZED", "FAILED", "CANCELLED", "EXPIRED"].includes(payment.status)) {
@@ -559,10 +581,14 @@ async function finishProviderResponse(data: {
           "PAYMENT_FAILED",
           ["PENDING_PAYMENT"],
         );
-        return { orderId: order.id, orderStatus: updated?.status || order.status };
+        return {
+          orderId: order.id,
+          orderStatus: updated?.status || order.status,
+          becamePaid: false,
+        };
       }
 
-      return { orderId: order.id, orderStatus: order.status };
+      return { orderId: order.id, orderStatus: order.status, becamePaid: false };
     }
 
     const validProviderData = responseMatchesPayment(data.response, payment);
@@ -582,7 +608,7 @@ async function finishProviderResponse(data: {
       if (order.status !== "PAYMENT_REVIEW") {
         await updateOrderStatus(tx, order.id, "PAYMENT_REVIEW");
       }
-      return { orderId: order.id, orderStatus: "PAYMENT_REVIEW" };
+      return { orderId: order.id, orderStatus: "PAYMENT_REVIEW", becamePaid: false };
     }
 
     const items = await findOrderItems(tx, order.id);
@@ -604,7 +630,7 @@ async function finishProviderResponse(data: {
     if (!canFulfill) {
       await cancelOtherOpenPayments(tx, order.id, payment.id);
       await updateOrderStatus(tx, order.id, "PAYMENT_REVIEW");
-      return { orderId: order.id, orderStatus: "PAYMENT_REVIEW" };
+      return { orderId: order.id, orderStatus: "PAYMENT_REVIEW", becamePaid: false };
     }
 
     await cancelOtherOpenPayments(tx, order.id, payment.id);
@@ -628,8 +654,17 @@ async function finishProviderResponse(data: {
       ["PENDING_PAYMENT", "PAYMENT_FAILED", "CANCELLED", "EXPIRED"],
     );
     if (!updated) throw new OnlineOrderError("El pedido ya fue procesado", 409);
-    return { orderId: order.id, orderStatus: "PAID" };
+    return { orderId: order.id, orderStatus: "PAID", becamePaid: true };
   });
+
+  if (result.becamePaid) {
+    void notifyWarehousesBestEffort({
+      folio: `P-${String(result.orderId).padStart(6, "0")}`,
+      event: "NEW_ONLINE_ORDER_PAID",
+    });
+  }
+
+  return { orderId: result.orderId, orderStatus: result.orderStatus };
 }
 
 async function claimWebpayConfirmation(token: string) {

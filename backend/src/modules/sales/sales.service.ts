@@ -8,6 +8,7 @@ import {
 import {
   createSale,
   createSaleDetails,
+  createSaleDelivery,
   createCancellationRequest,
   createCancellationRequestItems,
   decreaseReturnedQuantity,
@@ -27,6 +28,7 @@ import {
   type SaleReturnStatus,
 } from "./sales.repository.js";
 import type { CancellationRequestBody, CancellationReviewBody, SaleBody } from "./sales.validation.js";
+import { notifyWarehousesBestEffort } from "../notifications/notifications.service.js";
 
 export type CreateSaleData = SaleBody & {
   userId: number;
@@ -127,6 +129,21 @@ export async function createSaleService(data: CreateSaleData) {
       })),
     );
 
+    if (data.delivery) {
+      await createSaleDelivery(tx, {
+        saleId: sale.id,
+        status: "PAID",
+        recipientName: data.delivery.recipientName,
+        recipientRut: data.delivery.recipientRut,
+        phone: data.delivery.phone,
+        address: data.delivery.address,
+        commune: data.delivery.commune,
+        reference: data.delivery.reference,
+        latitude: data.delivery.latitude,
+        longitude: data.delivery.longitude,
+      });
+    }
+
     for (const detail of saleDetails) {
       await applyInventoryMovement(tx, {
         productId: detail.productId,
@@ -137,8 +154,15 @@ export async function createSaleService(data: CreateSaleData) {
       });
     }
 
-    return sale;
+    return { ...sale, hasDelivery: Boolean(data.delivery) };
   });
+
+  if (createdSale.hasDelivery) {
+    void notifyWarehousesBestEffort({
+      folio: formatSaleFolio(createdSale.id),
+      event: "NEW_SALE_DELIVERY",
+    });
+  }
 
   return findSaleById(createdSale.id);
 }

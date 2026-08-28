@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  doublePrecision,
   index,
   integer,
   numeric,
@@ -27,6 +28,8 @@ export const onlineOrdersTable = pgTable(
     deliveryAddress: varchar("delivery_address", { length: 300 }),
     deliveryCommune: varchar("delivery_commune", { length: 120 }),
     deliveryReference: varchar("delivery_reference", { length: 500 }),
+    deliveryLatitude: doublePrecision("delivery_latitude"),
+    deliveryLongitude: doublePrecision("delivery_longitude"),
     reservationExpiresAt: timestamp("reservation_expires_at").notNull(),
     paidAt: timestamp("paid_at"),
     clientArchivedAt: timestamp("client_archived_at"),
@@ -42,6 +45,9 @@ export const onlineOrdersTable = pgTable(
     deliveredBy: integer("delivered_by")
       .references(() => usersTable.id),
     deliveredAt: timestamp("delivered_at"),
+    receivedByName: varchar("received_by_name", { length: 240 }),
+    receivedByRut: varchar("received_by_rut", { length: 12 }),
+    deliveryProofImagePath: varchar("delivery_proof_image_path", { length: 500 }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -49,6 +55,8 @@ export const onlineOrdersTable = pgTable(
     index("online_orders_client_id_idx").on(table.clientId),
     index("online_orders_status_idx").on(table.status),
     index("online_orders_delivery_type_idx").on(table.deliveryType),
+    index("online_orders_preparation_started_by_idx").on(table.preparationStartedBy),
+    index("online_orders_delivery_started_by_idx").on(table.deliveryStartedBy),
     index("online_orders_reservation_expires_at_idx").on(table.reservationExpiresAt),
     uniqueIndex("online_orders_client_checkout_key_unique").on(
       table.clientId,
@@ -76,6 +84,17 @@ export const onlineOrdersTable = pgTable(
         and length(btrim(${table.deliveryAddress})) > 0
         and ${table.deliveryCommune} is not null
         and length(btrim(${table.deliveryCommune})) > 0
+      )`,
+    ),
+    check(
+      "online_orders_delivery_coordinates_check",
+      sql`(
+        ${table.deliveryLatitude} is null and ${table.deliveryLongitude} is null
+      ) or (
+        ${table.deliveryLatitude} is not null
+        and ${table.deliveryLongitude} is not null
+        and ${table.deliveryLatitude} between -90 and 90
+        and ${table.deliveryLongitude} between -180 and 180
       )`,
     ),
     check("online_orders_total_positive", sql`${table.total} > 0`),

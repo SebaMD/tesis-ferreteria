@@ -21,7 +21,8 @@ export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
 
 export type ApplyInventoryMovementData = Omit<InventoryMovementBody, "movementType"> & {
   movementType: InventoryMovementType;
-  userId: number;
+  userId: number | null;
+  onlineOrderId?: number | null;
   allowInactive?: boolean;
   excludedReservationOrderId?: number;
 };
@@ -48,6 +49,29 @@ export async function getInventoryMovementByIdService(id: number) {
 
 export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInventoryMovementData) {
   const allowsZero = data.movementType === "ADJUSTMENT";
+  const onlineOrderId = data.onlineOrderId ?? null;
+
+  if (data.userId !== null && (!Number.isInteger(data.userId) || data.userId < 1)) {
+    throw new InventoryMovementError("El usuario responsable no es valido", 400);
+  }
+
+  if (onlineOrderId !== null && (!Number.isInteger(onlineOrderId) || onlineOrderId < 1)) {
+    throw new InventoryMovementError("El pedido online de origen no es valido", 400);
+  }
+
+  if (onlineOrderId !== null && data.movementType !== "EXIT") {
+    throw new InventoryMovementError(
+      "Un pedido online solo puede originar movimientos EXIT",
+      400,
+    );
+  }
+
+  if (data.userId === null && (data.movementType !== "EXIT" || onlineOrderId === null)) {
+    throw new InventoryMovementError(
+      "El movimiento debe identificar un usuario o un pedido online de origen",
+      400,
+    );
+  }
 
   if (!Number.isInteger(data.quantity) || (allowsZero ? data.quantity < 0 : data.quantity < 1)) {
     throw new InventoryMovementError("La cantidad del movimiento no es valida", 400);
@@ -134,6 +158,7 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
   const movementData: NewInventoryMovement = {
     productId: data.productId,
     userId: data.userId,
+    onlineOrderId,
     movementType: data.movementType,
     quantity: data.quantity,
     reason: data.reason,

@@ -1,4 +1,5 @@
 import api from "../api/httpClient.js";
+import { getOrCreateGuestSessionId } from "../helpers/guestCheckout.js";
 
 export async function createOnlineOrderCheckoutRequest(data) {
   const response = await api.post("/online-orders/checkout", data);
@@ -32,6 +33,49 @@ export async function getClientDeliveryAddressRequest() {
 
 export async function getMyOnlineOrderByIdRequest(orderId) {
   const response = await api.get(`/online-orders/${orderId}`);
+  return response.data.data;
+}
+
+function guestSessionHeaders() {
+  return { "X-Guest-Session": getOrCreateGuestSessionId() };
+}
+
+function guestOrderHeaders(accessToken) {
+  return { "X-Guest-Order-Token": accessToken };
+}
+
+export async function createGuestOnlineOrderCheckoutRequest(data) {
+  const response = await api.post("/online-orders/guest/checkout", data, {
+    headers: guestSessionHeaders(),
+  });
+  return response.data.data;
+}
+
+export async function getGuestPendingOrderRequest() {
+  const response = await api.get("/online-orders/guest/pending", {
+    headers: guestSessionHeaders(),
+  });
+  return response.data.data || null;
+}
+
+export async function continueGuestOnlineOrderPaymentRequest() {
+  const response = await api.post("/online-orders/guest/continue-payment", null, {
+    headers: guestSessionHeaders(),
+  });
+  return response.data.data;
+}
+
+export async function getGuestOnlineOrderRequest(accessToken) {
+  const response = await api.get("/online-orders/guest/order", {
+    headers: guestOrderHeaders(accessToken),
+  });
+  return response.data.data;
+}
+
+export async function retryGuestOnlineOrderPaymentRequest(accessToken) {
+  const response = await api.post("/online-orders/guest/retry-payment", null, {
+    headers: guestOrderHeaders(accessToken),
+  });
   return response.data.data;
 }
 

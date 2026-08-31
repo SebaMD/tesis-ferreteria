@@ -432,7 +432,13 @@ export default function OnlineOrdersManagementPage() {
                     <td className="font-mono font-bold text-ink-950">{formatFolio(order)}</td>
                     <td><span className={badgeClass(origin.tone)}>{origin.label}</span></td>
                     <td className={dateCellClass}>{formatDate(order.paidAt || order.createdAt, DATE_OPTIONS)}</td>
-                    <td><strong className="block text-ink-950">{customerName(order)}</strong>{order.customerEmail && <span className="text-xs text-slate-500">{order.customerEmail}</span>}</td>
+                    <td>
+                      <span className="flex flex-wrap items-center gap-2">
+                        <strong className="text-ink-950">{customerName(order)}</strong>
+                        {order.customerType === "GUEST" && <span className={badgeClass("neutral")}>Invitado</span>}
+                      </span>
+                      {order.customerEmail && <span className="text-xs text-slate-500">{order.customerEmail}</span>}
+                    </td>
                     <td>{delivery.shortLabel}</td>
                     <td><span className={badgeClass(orderStatus.tone)}>{orderStatus.label}</span></td>
                     <td className="text-sm text-slate-600">{currentResponsible(order)}</td>
@@ -485,8 +491,12 @@ export default function OnlineOrdersManagementPage() {
             </div>
 
             <dl className="grid grid-cols-3 gap-3 max-[800px]:grid-cols-2 max-[520px]:grid-cols-1">
-              <DetailField label={selectedOrder.origin === "ONLINE" ? "Cliente" : "Destinatario"}>{customerName(selectedOrder)}</DetailField>
-              <DetailField label="RUT">{selectedOrder.customerRut || selectedOrder.clientRut}</DetailField>
+              <DetailField label={selectedOrder.origin === "ONLINE" ? "Comprador" : "Destinatario"}>
+                {customerName(selectedOrder)}{selectedOrder.customerType === "GUEST" ? " · Invitado" : ""}
+              </DetailField>
+              {selectedOrder.customerType !== "GUEST" && (
+                <DetailField label="RUT">{selectedOrder.customerRut || selectedOrder.clientRut}</DetailField>
+              )}
               <DetailField label="Fecha de compra">{formatDate(selectedOrder.paidAt || selectedOrder.createdAt, DATE_OPTIONS)}</DetailField>
               {selectedOrder.deliveryType === "DELIVERY" ? (
                 <>

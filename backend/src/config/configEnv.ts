@@ -45,6 +45,17 @@ export const ONLINE_ORDER_RESERVATION_MINUTES = Number.isInteger(configuredReser
   ? configuredReservationMinutes
   : 20;
 
+const configuredGuestAccessDays = Number.parseInt(
+  process.env.GUEST_ORDER_ACCESS_DAYS || "180",
+  10,
+);
+
+export const GUEST_ORDER_ACCESS_DAYS = Number.isInteger(configuredGuestAccessDays)
+  && configuredGuestAccessDays >= 30
+  && configuredGuestAccessDays <= 365
+  ? configuredGuestAccessDays
+  : 180;
+
 function booleanEnvironmentValue(value: string | undefined, fallback = false) {
   if (value === undefined) return fallback;
   return value.trim().toLowerCase() === "true";

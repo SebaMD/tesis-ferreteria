@@ -8,13 +8,17 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
+import { readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
+  continueGuestOnlineOrderPaymentRequest,
+  createGuestOnlineOrderCheckoutRequest,
   createOnlineOrderCheckoutRequest,
   getClientDeliveryAddressRequest,
+  getGuestPendingOrderRequest,
   getMyOnlineOrdersRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -31,19 +35,26 @@ function createCheckoutKey() {
 }
 
 export default function CheckoutPage() {
-  const { user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { items, removeItem } = useCart();
+  const isClient = isAuthenticated && user?.role === "CLIENT";
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingOrderLoading, setPendingOrderLoading] = useState(true);
-  const [savedAddressLoading, setSavedAddressLoading] = useState(true);
+  const [savedAddressLoading, setSavedAddressLoading] = useState(isClient);
   const [catalogError, setCatalogError] = useState("");
   const [pendingOrder, setPendingOrder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [deliveryType, setDeliveryType] = useState("PICKUP");
   const [saveDeliveryAddress, setSaveDeliveryAddress] = useState(false);
+  const [guestData, setGuestData] = useState({
+    name: "",
+    email: "",
+    emailConfirmation: "",
+    phone: "",
+  });
   const [deliveryData, setDeliveryData] = useState(() => ({
     recipientName: `${user?.names || ""} ${user?.surnames || ""}`.trim(),
     phone: user?.phone || "",
@@ -73,16 +84,24 @@ export default function CheckoutPage() {
 
   const loadPendingOrder = useCallback(async (notifyError = false) => {
     try {
-      const orders = await getMyOnlineOrdersRequest();
-      setPendingOrder(orders.find((order) => order.status === "PENDING_PAYMENT") || null);
+      if (isClient) {
+        const orders = await getMyOnlineOrdersRequest();
+        setPendingOrder(orders.find((order) => order.status === "PENDING_PAYMENT") || null);
+      } else {
+        setPendingOrder(await getGuestPendingOrderRequest());
+      }
     } catch (error) {
       if (notifyError) toast.error(getApiError(error, "No se pudo consultar si existe un pago pendiente"));
     } finally {
       setPendingOrderLoading(false);
     }
-  }, []);
+  }, [isClient]);
 
   const loadSavedDeliveryAddress = useCallback(async () => {
+    if (!isClient) {
+      setSavedAddressLoading(false);
+      return;
+    }
     try {
       const savedAddress = await getClientDeliveryAddressRequest();
       if (!savedAddress || deliveryTouchedRef.current) return;
@@ -99,7 +118,7 @@ export default function CheckoutPage() {
     } finally {
       setSavedAddressLoading(false);
     }
-  }, []);
+  }, [isClient]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -145,6 +164,13 @@ export default function CheckoutPage() {
 
   const total = rows.reduce((sum, row) => sum + row.subtotal, 0);
   const hasAvailabilityIssues = Boolean(catalogError) || rows.some((row) => !row.isValid);
+  const normalizedGuestEmail = guestData.email.trim().toLowerCase();
+  const guestDataIsValid = isClient || (
+    guestData.name.trim().length >= 3
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedGuestEmail)
+    && normalizedGuestEmail === guestData.emailConfirmation.trim().toLowerCase()
+    && /^[+0-9()\s-]{7,20}$/.test(guestData.phone.trim())
+  );
   const deliveryDataIsValid = deliveryType === "PICKUP" || (
     deliveryData.recipientName.trim()
     && /^[+0-9()\s-]{7,20}$/.test(deliveryData.phone.trim())
@@ -157,7 +183,11 @@ export default function CheckoutPage() {
     && !pendingOrder
     && rows.length > 0
     && !hasAvailabilityIssues
+    && guestDataIsValid
     && Boolean(deliveryDataIsValid);
+  const pendingGuestAccessToken = !isClient && pendingOrder
+    ? readGuestOrderAccessToken(pendingOrder.id)
+    : null;
 
   const updateDeliveryData = (field, value) => {
     deliveryTouchedRef.current = true;
@@ -181,7 +211,9 @@ export default function CheckoutPage() {
     setContinuingPayment(true);
     let redirectStarted = false;
     try {
-      const payment = await continueOnlineOrderPaymentRequest(pendingOrder.id);
+      const payment = isClient
+        ? await continueOnlineOrderPaymentRequest(pendingOrder.id)
+        : await continueGuestOnlineOrderPaymentRequest();
       submitWebpayForm(payment);
       redirectStarted = true;
     } catch (error) {
@@ -204,7 +236,7 @@ export default function CheckoutPage() {
     let redirectStarted = false;
 
     try {
-      const payment = await createOnlineOrderCheckoutRequest({
+      const checkoutData = {
         checkoutKey,
         items: rows.map((row) => ({
           productId: Number(row.product.id),
@@ -218,8 +250,22 @@ export default function CheckoutPage() {
         deliveryReference: deliveryType === "DELIVERY" ? deliveryData.reference : null,
         deliveryLatitude: deliveryType === "DELIVERY" ? deliveryData.latitude : null,
         deliveryLongitude: deliveryType === "DELIVERY" ? deliveryData.longitude : null,
-        saveDeliveryAddress: deliveryType === "DELIVERY" && saveDeliveryAddress,
-      });
+        saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveDeliveryAddress,
+      };
+      const payment = isClient
+        ? await createOnlineOrderCheckoutRequest(checkoutData)
+        : await createGuestOnlineOrderCheckoutRequest({
+          ...checkoutData,
+          guestName: guestData.name,
+          guestEmail: guestData.email,
+          guestEmailConfirmation: guestData.emailConfirmation,
+          guestPhone: guestData.phone,
+          saveDeliveryAddress: false,
+        });
+
+      if (!isClient && payment.guestAccessToken) {
+        saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
+      }
 
       submitWebpayForm(payment);
       redirectStarted = true;
@@ -263,12 +309,16 @@ export default function CheckoutPage() {
                 {continuingPayment ? "Abriendo..." : "Continuar pago"}
               </button>
             )}
-            <Link
-              className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-white px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100"
-              to={`/orders#order-${pendingOrder.id}`}
-            >
-              Ver pedido
-            </Link>
+            {(isClient || pendingGuestAccessToken) && (
+              <Link
+                className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-white px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100"
+                to={isClient
+                  ? `/orders#order-${pendingOrder.id}`
+                  : `/order-tracking#token=${encodeURIComponent(pendingGuestAccessToken)}`}
+              >
+                Ver pedido
+              </Link>
+            )}
           </div>
         </section>
       )}
@@ -340,13 +390,70 @@ export default function CheckoutPage() {
             </section>
 
             <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="m-0 flex items-center gap-2 text-base font-bold text-ink-950"><UserRound size={18} /> Datos del cliente</h2>
-              <dl className="grid grid-cols-2 gap-3 text-sm max-[620px]:grid-cols-1">
-                <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Nombre</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.names} {user.surnames}</dd></div>
-                <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">RUT</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.rut}</dd></div>
-                <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Correo</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.correo}</dd></div>
-                <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Teléfono</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.phone || "No registrado"}</dd></div>
-              </dl>
+              <h2 className="m-0 flex items-center gap-2 text-base font-bold text-ink-950">
+                <UserRound size={18} /> {isClient ? "Datos del cliente" : "Datos del comprador"}
+              </h2>
+              {isClient ? (
+                <dl className="grid grid-cols-2 gap-3 text-sm max-[620px]:grid-cols-1">
+                  <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Nombre</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.names} {user.surnames}</dd></div>
+                  <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">RUT</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.rut}</dd></div>
+                  <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Correo</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.correo}</dd></div>
+                  <div className="rounded-[5px] bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Teléfono</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{user.phone || "No registrado"}</dd></div>
+                </dl>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
+                  <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">
+                    Nombre y apellido
+                    <input
+                      autoComplete="name"
+                      maxLength="240"
+                      required
+                      value={guestData.name}
+                      onChange={(event) => setGuestData((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Nombre de quien realiza la compra"
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+                    Correo electrónico
+                    <input
+                      autoComplete="email"
+                      maxLength="254"
+                      required
+                      type="email"
+                      value={guestData.email}
+                      onChange={(event) => setGuestData((current) => ({ ...current, email: event.target.value }))}
+                      placeholder="correo@ejemplo.cl"
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">
+                    Confirmar correo
+                    <input
+                      autoComplete="email"
+                      maxLength="254"
+                      required
+                      type="email"
+                      value={guestData.emailConfirmation}
+                      onChange={(event) => setGuestData((current) => ({ ...current, emailConfirmation: event.target.value }))}
+                      placeholder="Repite tu correo"
+                    />
+                  </label>
+                  <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">
+                    Teléfono
+                    <input
+                      autoComplete="tel"
+                      maxLength="20"
+                      required
+                      type="tel"
+                      value={guestData.phone}
+                      onChange={(event) => setGuestData((current) => ({ ...current, phone: event.target.value }))}
+                      placeholder="Ej: +56 9 1234 5678"
+                    />
+                  </label>
+                  <p className="col-span-2 m-0 text-xs leading-5 text-slate-500 max-[620px]:col-span-1">
+                    Usaremos este correo para enviarte el comprobante y las actualizaciones de tu pedido.
+                  </p>
+                </div>
+              )}
             </section>
 
             <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -394,20 +501,22 @@ export default function CheckoutPage() {
                     }}
                     disabled={submitting}
                   />
-                  <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-ink-950 max-[620px]:col-span-1">
-                    <input
-                      className="mt-0.5 size-4 shrink-0"
-                      type="checkbox"
-                      checked={saveDeliveryAddress}
-                      onChange={(event) => setSaveDeliveryAddress(event.target.checked)}
-                    />
-                    <span>
-                      Guardar esta dirección para próximas compras
-                      <small className="mt-0.5 block font-normal leading-5 text-slate-500">
-                        Solo se actualizará tu dirección guardada si mantienes esta opción seleccionada.
-                      </small>
-                    </span>
-                  </label>
+                  {isClient && (
+                    <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-ink-950 max-[620px]:col-span-1">
+                      <input
+                        className="mt-0.5 size-4 shrink-0"
+                        type="checkbox"
+                        checked={saveDeliveryAddress}
+                        onChange={(event) => setSaveDeliveryAddress(event.target.checked)}
+                      />
+                      <span>
+                        Guardar esta dirección para próximas compras
+                        <small className="mt-0.5 block font-normal leading-5 text-slate-500">
+                          Solo se actualizará tu dirección guardada si mantienes esta opción seleccionada.
+                        </small>
+                      </span>
+                    </label>
+                  )}
                 </div>
               )}
             </section>

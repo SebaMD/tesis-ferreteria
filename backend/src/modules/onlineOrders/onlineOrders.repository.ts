@@ -73,6 +73,10 @@ const orderColumns = {
   clientSurnames: usersTable.surnames,
   clientEmail: usersTable.correo,
   clientPhone: usersTable.phone,
+  buyerType: sql<"CLIENT" | "GUEST">`case when ${onlineOrdersTable.clientId} is null then 'GUEST' else 'CLIENT' end`,
+  buyerName: sql<string>`coalesce(nullif(btrim(concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})), ''), ${onlineOrdersTable.guestName})`,
+  buyerEmail: sql<string>`coalesce(${usersTable.correo}, ${onlineOrdersTable.guestEmail})`,
+  buyerPhone: sql<string | null>`coalesce(${usersTable.phone}, ${onlineOrdersTable.guestPhone})`,
   checkoutKey: onlineOrdersTable.checkoutKey,
   status: onlineOrdersTable.status,
   total: onlineOrdersTable.total,
@@ -162,6 +166,40 @@ export async function expirePendingOrdersForClient(tx: DbTransaction, clientId?:
   return expiredOrders;
 }
 
+export async function expirePendingOrdersForGuestSession(
+  tx: DbTransaction,
+  guestSessionHash: string,
+) {
+  const expiredOrders = await tx
+    .update(onlineOrdersTable)
+    .set({ status: "EXPIRED", updatedAt: new Date() })
+    .where(and(
+      eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
+      eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
+      lte(onlineOrdersTable.reservationExpiresAt, sql`now()`),
+      sql`not exists (
+        select 1
+        from ${onlinePaymentsTable}
+        where ${onlinePaymentsTable.orderId} = ${onlineOrdersTable.id}
+          and ${onlinePaymentsTable.token} is not null
+          and ${onlinePaymentsTable.status} in ('CREATED', 'PROCESSING')
+      )`,
+    ))
+    .returning({ id: onlineOrdersTable.id });
+
+  if (expiredOrders.length > 0) {
+    await tx
+      .update(onlinePaymentsTable)
+      .set({ status: "EXPIRED", updatedAt: new Date() })
+      .where(and(
+        inArray(onlinePaymentsTable.orderId, expiredOrders.map((order) => order.id)),
+        eq(onlinePaymentsTable.status, "CREATED"),
+      ));
+  }
+
+  return expiredOrders;
+}
+
 export async function findOrderByCheckoutKey(
   tx: DbTransaction,
   clientId: number,
@@ -178,6 +216,30 @@ export async function findOrderByCheckoutKey(
     .where(and(
       eq(onlineOrdersTable.clientId, clientId),
       eq(onlineOrdersTable.checkoutKey, checkoutKey),
+    ))
+    .limit(1)
+    .for("update");
+
+  return order ?? null;
+}
+
+export async function findOrderByGuestCheckoutKey(
+  tx: DbTransaction,
+  guestSessionHash: string,
+  checkoutKey: string,
+) {
+  const [order] = await tx
+    .select({
+      id: onlineOrdersTable.id,
+      status: onlineOrdersTable.status,
+      total: onlineOrdersTable.total,
+      reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
+    })
+    .from(onlineOrdersTable)
+    .where(and(
+      eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
+      eq(onlineOrdersTable.checkoutKey, checkoutKey),
+      isNull(onlineOrdersTable.clientId),
     ))
     .limit(1)
     .for("update");
@@ -207,10 +269,37 @@ export async function findPendingOrderForClient(
   return order ?? null;
 }
 
+export async function findPendingOrderForGuestSession(
+  tx: DbTransaction,
+  guestSessionHash: string,
+  excludedOrderId?: number,
+) {
+  const conditions = [
+    eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
+    isNull(onlineOrdersTable.clientId),
+    eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
+    sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+  ];
+
+  if (excludedOrderId !== undefined) conditions.push(ne(onlineOrdersTable.id, excludedOrderId));
+
+  const [order] = await tx
+    .select({ id: onlineOrdersTable.id })
+    .from(onlineOrdersTable)
+    .where(and(...conditions))
+    .limit(1);
+
+  return order ?? null;
+}
+
 export async function createOnlineOrder(
   tx: DbTransaction,
   data: {
-    clientId: number;
+    clientId: number | null;
+    guestName?: string | null;
+    guestEmail?: string | null;
+    guestPhone?: string | null;
+    guestSessionHash?: string | null;
     checkoutKey: string;
     total: string;
     reservationExpiresAt: Date;
@@ -358,11 +447,37 @@ export async function findOrderForClientUpdate(
   return order ?? null;
 }
 
+export async function findOrderForGuestUpdate(
+  tx: DbTransaction,
+  orderId: number,
+) {
+  const [order] = await tx
+    .select({
+      id: onlineOrdersTable.id,
+      clientId: onlineOrdersTable.clientId,
+      guestSessionHash: onlineOrdersTable.guestSessionHash,
+      status: onlineOrdersTable.status,
+      total: onlineOrdersTable.total,
+      reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
+    })
+    .from(onlineOrdersTable)
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      isNull(onlineOrdersTable.clientId),
+      isNotNull(onlineOrdersTable.guestSessionHash),
+    ))
+    .limit(1)
+    .for("update");
+
+  return order ?? null;
+}
+
 export async function findOrderForUpdate(tx: DbTransaction, orderId: number) {
   const [order] = await tx
     .select({
       id: onlineOrdersTable.id,
       clientId: onlineOrdersTable.clientId,
+      guestEmail: onlineOrdersTable.guestEmail,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
@@ -477,7 +592,11 @@ export async function findOtherAuthorizedPayment(
 
 export async function findPaymentsNeedingReconciliation(
   processingStaleBefore: Date,
-  clientId?: number,
+  scope: {
+    clientId?: number;
+    guestSessionHash?: string;
+    orderId?: number;
+  } = {},
 ) {
   const conditions = [
     isNotNull(onlinePaymentsTable.token),
@@ -494,7 +613,15 @@ export async function findPaymentsNeedingReconciliation(
     )`,
   ];
 
-  if (clientId !== undefined) conditions.push(eq(onlineOrdersTable.clientId, clientId));
+  if (scope.clientId !== undefined) {
+    conditions.push(eq(onlineOrdersTable.clientId, scope.clientId));
+  }
+  if (scope.guestSessionHash !== undefined) {
+    conditions.push(eq(onlineOrdersTable.guestSessionHash, scope.guestSessionHash));
+  }
+  if (scope.orderId !== undefined) {
+    conditions.push(eq(onlineOrdersTable.id, scope.orderId));
+  }
 
   const rows = await db
     .select({
@@ -753,6 +880,53 @@ export async function findOrderByIdAndClient(orderId: number, clientId: number) 
 
   const [order] = await attachOrderData(orders);
   return order ?? null;
+}
+
+export async function findOrderByIdForGuest(orderId: number) {
+  const orders = await db
+    .select(orderColumns)
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      isNull(onlineOrdersTable.clientId),
+    ))
+    .limit(1);
+
+  const [order] = await attachOrderData(orders);
+  return order ?? null;
+}
+
+export async function findPendingOrderDetailsForGuestSession(guestSessionHash: string) {
+  const orders = await db
+    .select(orderColumns)
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(and(
+      eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
+      isNull(onlineOrdersTable.clientId),
+      eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
+      sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+    ))
+    .limit(1);
+
+  const [order] = await attachOrderData(orders);
+  return order ?? null;
+}
+
+export async function findOrderBuyerContact(orderId: number) {
+  const [buyer] = await db
+    .select({
+      buyerType: sql<"CLIENT" | "GUEST">`case when ${onlineOrdersTable.clientId} is null then 'GUEST' else 'CLIENT' end`,
+      name: sql<string>`coalesce(nullif(btrim(concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})), ''), ${onlineOrdersTable.guestName})`,
+      email: sql<string>`coalesce(${usersTable.correo}, ${onlineOrdersTable.guestEmail})`,
+    })
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(eq(onlineOrdersTable.id, orderId))
+    .limit(1);
+
+  return buyer ?? null;
 }
 
 export async function archiveOrderForClient(

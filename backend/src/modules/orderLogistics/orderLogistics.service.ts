@@ -5,6 +5,7 @@ import {
   notifyWarehousesBestEffort,
   type ClientOrderMailEvent,
 } from "../notifications/notifications.service.js";
+import { issueGuestOrderTrackingAccessService } from "../onlineOrders/onlineOrders.service.js";
 import {
   getStoredImageMimeType,
   removeStoredImageFile,
@@ -305,10 +306,23 @@ export async function transitionLogisticsOrderService(
     const nextStatus = transitionResult.status as LogisticsStatus;
     const event = notificationEvent(action, nextStatus);
     if (origin === "ONLINE" && event && updatedTask.customerEmail) {
+      let trackingUrl: string | undefined;
+      if (updatedTask.customerType === "GUEST") {
+        try {
+          trackingUrl = (await issueGuestOrderTrackingAccessService(
+            updatedTask.id,
+            nextStatus,
+          ))?.url;
+        } catch (error) {
+          console.error("No se pudo generar el enlace de seguimiento invitado:", error);
+        }
+      }
       void notifyClientOrderBestEffort({
         email: updatedTask.customerEmail,
         folio: updatedTask.folio,
         event: event as ClientOrderMailEvent,
+        trackingUrl,
+        recipientType: updatedTask.customerType === "GUEST" ? "GUEST" : "CLIENT",
       });
     }
     if (nextStatus === "READY_FOR_DELIVERY") {

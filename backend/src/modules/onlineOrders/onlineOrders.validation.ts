@@ -23,6 +23,12 @@ export type CreateCheckoutBody = {
   saveDeliveryAddress: boolean;
 };
 
+export type CreateGuestCheckoutBody = CreateCheckoutBody & {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+};
+
 type ValidationResult<T> =
   | { success: true; value: T }
   | { success: false; error: string };
@@ -179,6 +185,91 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
       deliveryLongitude: input.deliveryType === "DELIVERY" ? coordinates.longitude : null,
       saveDeliveryAddress: input.deliveryType === "DELIVERY"
         && input.saveDeliveryAddress === true,
+    },
+  };
+}
+
+export function validateCreateGuestCheckoutBody(
+  body: unknown,
+): ValidationResult<CreateGuestCheckoutBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe enviar datos validos" };
+  }
+
+  const input = body as Record<string, unknown>;
+  const guestFields = new Set([
+    "guestName",
+    "guestEmail",
+    "guestEmailConfirmation",
+    "guestPhone",
+  ]);
+  const checkoutFields = new Set([
+    "checkoutKey",
+    "items",
+    "deliveryType",
+    "deliveryRecipientName",
+    "deliveryPhone",
+    "deliveryAddress",
+    "deliveryCommune",
+    "deliveryReference",
+    "deliveryLatitude",
+    "deliveryLongitude",
+    "saveDeliveryAddress",
+  ]);
+
+  for (const field of Object.keys(input)) {
+    if (!guestFields.has(field) && !checkoutFields.has(field)) {
+      return { success: false, error: `El campo ${field} no esta permitido` };
+    }
+  }
+
+  if (input.saveDeliveryAddress === true) {
+    return { success: false, error: "Una compra como invitado no puede guardar direcciones" };
+  }
+
+  const guestName = optionalText(input.guestName, "El nombre del comprador", 240);
+  if (!guestName.success) return guestName;
+  const guestEmail = optionalText(input.guestEmail, "El correo electronico", 254);
+  if (!guestEmail.success) return guestEmail;
+  const guestEmailConfirmation = optionalText(
+    input.guestEmailConfirmation,
+    "La confirmacion del correo",
+    254,
+  );
+  if (!guestEmailConfirmation.success) return guestEmailConfirmation;
+  const guestPhone = optionalText(input.guestPhone, "El telefono", 20);
+  if (!guestPhone.success) return guestPhone;
+
+  if (!guestName.value || guestName.value.length < 3) {
+    return { success: false, error: "El nombre del comprador debe tener al menos 3 caracteres" };
+  }
+  const normalizedEmail = guestEmail.value?.toLowerCase() || "";
+  const normalizedEmailConfirmation = guestEmailConfirmation.value?.toLowerCase() || "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return { success: false, error: "El correo electronico no es valido" };
+  }
+  if (normalizedEmail !== normalizedEmailConfirmation) {
+    return { success: false, error: "Los correos electronicos no coinciden" };
+  }
+  if (!guestPhone.value || !/^[+0-9()\s-]{7,20}$/.test(guestPhone.value)) {
+    return { success: false, error: "El telefono del comprador no es valido" };
+  }
+
+  const checkoutInput = Object.fromEntries(
+    [...checkoutFields].map((field) => [field, input[field]]),
+  );
+  checkoutInput.saveDeliveryAddress = false;
+  const checkout = validateCreateCheckoutBody(checkoutInput);
+  if (!checkout.success) return checkout;
+
+  return {
+    success: true,
+    value: {
+      ...checkout.value,
+      saveDeliveryAddress: false,
+      guestName: guestName.value,
+      guestEmail: normalizedEmail,
+      guestPhone: guestPhone.value,
     },
   };
 }

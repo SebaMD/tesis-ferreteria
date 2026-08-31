@@ -144,8 +144,8 @@ export default function ClientCartPage() {
               </p>
             )}
             {!isAuthenticated && !hasAvailabilityConflicts && (
-              <Link className="inline-flex min-h-11 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/login" state={{ from: "/checkout" }}>
-                Iniciar sesión para pagar
+              <Link className="inline-flex min-h-11 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/checkout-options">
+                Continuar compra
               </Link>
             )}
             {isClient && !hasAvailabilityConflicts && (

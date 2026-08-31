@@ -32,10 +32,11 @@ const onlineColumns = {
   status: onlineOrdersTable.status,
   total: onlineOrdersTable.total,
   deliveryType: onlineOrdersTable.deliveryType,
-  customerName: sql<string>`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`,
-  customerRut: usersTable.rut,
-  customerEmail: usersTable.correo,
-  customerPhone: usersTable.phone,
+  customerType: sql<"CLIENT" | "GUEST">`case when ${onlineOrdersTable.clientId} is null then 'GUEST' else 'CLIENT' end`,
+  customerName: sql<string>`coalesce(nullif(btrim(concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})), ''), ${onlineOrdersTable.guestName})`,
+  customerRut: sql<string | null>`case when ${onlineOrdersTable.clientId} is null then null else ${usersTable.rut} end`,
+  customerEmail: sql<string>`coalesce(${usersTable.correo}, ${onlineOrdersTable.guestEmail})`,
+  customerPhone: sql<string | null>`coalesce(${usersTable.phone}, ${onlineOrdersTable.guestPhone})`,
   deliveryRecipientName: onlineOrdersTable.deliveryRecipientName,
   deliveryRecipientRut: sql<string | null>`null`,
   deliveryPhone: onlineOrdersTable.deliveryPhone,
@@ -112,8 +113,9 @@ export type LogisticsTask = {
   status: LogisticsStatus;
   total: string;
   deliveryType: "PICKUP" | "DELIVERY";
+  customerType: "CLIENT" | "GUEST" | "POS";
   customerName: string;
-  customerRut: string;
+  customerRut: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
   deliveryRecipientName: string | null;
@@ -165,6 +167,9 @@ async function findOnlineTasks(filters: {
       ilike(usersTable.surnames, pattern),
       ilike(usersTable.rut, pattern),
       ilike(usersTable.correo, pattern),
+      ilike(onlineOrdersTable.guestName, pattern),
+      ilike(onlineOrdersTable.guestEmail, pattern),
+      ilike(onlineOrdersTable.guestPhone, pattern),
       ilike(sql`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`, pattern),
     )!);
   }
@@ -184,7 +189,7 @@ async function findOnlineTasks(filters: {
   return db
     .select(onlineColumns)
     .from(onlineOrdersTable)
-    .innerJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
     .where(and(...conditions));
 }
 
@@ -330,6 +335,7 @@ export async function findLogisticsTasks(filters: {
     return {
       ...publicRow,
       origin: "POS",
+      customerType: "POS",
       folio: `V-${String(row.id).padStart(6, "0")}`,
       status: row.status as LogisticsStatus,
       deliveryType: "DELIVERY",

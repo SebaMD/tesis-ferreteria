@@ -5,7 +5,10 @@ import {
   WEBPAY_TIMEOUT_MS,
 } from "../../config/configEnv.js";
 import { applyInventoryMovement } from "../inventory/inventory.service.js";
-import { notifyWarehousesBestEffort } from "../notifications/notifications.service.js";
+import {
+  notifyClientOrderBestEffort,
+  notifyWarehousesBestEffort,
+} from "../notifications/notifications.service.js";
 import {
   calculateAvailableStock,
   findActiveReservedQuantities,
@@ -27,14 +30,19 @@ import {
   claimPaymentReconciliationLease,
   deferSupersededProcessingPayment,
   expirePendingOrdersForClient,
+  expirePendingOrdersForGuestSession,
   findActiveClientForUpdate,
   findClientDeliveryAddress,
   findLatestPaymentForOrder,
   findOtherAuthorizedPayment,
   findPaymentsNeedingReconciliation,
   findOrderByCheckoutKey,
+  findOrderByGuestCheckoutKey,
   findOrderByIdAndClient,
+  findOrderByIdForGuest,
+  findOrderBuyerContact,
   findOrderForClientUpdate,
+  findOrderForGuestUpdate,
   findOrderForUpdate,
   findOrderItems,
   findOrdersByClient,
@@ -43,6 +51,8 @@ import {
   findPaymentForUpdateById,
   findPaymentLaunchByOrder,
   findPendingOrderForClient,
+  findPendingOrderForGuestSession,
+  findPendingOrderDetailsForGuestSession,
   markPaymentProcessing,
   markPaymentLaunchFailed,
   resetOrderReservation,
@@ -51,7 +61,21 @@ import {
   updatePaymentResult,
   upsertClientDeliveryAddress,
 } from "./onlineOrders.repository.js";
-import type { CreateCheckoutBody } from "./onlineOrders.validation.js";
+import {
+  createGuestOrderAccessRecord,
+  findGuestOrderIdByAccessTokenHash,
+  issueGuestOrderAccessRecord,
+} from "./guestOrderAccess.repository.js";
+import {
+  createGuestOrderAccessToken,
+  guestOrderTrackingUrl,
+  hashGuestOrderAccessToken,
+  hashGuestSessionId,
+} from "./guestOrderAccess.js";
+import type {
+  CreateCheckoutBody,
+  CreateGuestCheckoutBody,
+} from "./onlineOrders.validation.js";
 
 export class OnlineOrderError extends Error {
   constructor(
@@ -69,7 +93,18 @@ type PreparedPayment = {
   buyOrder: string;
   sessionId: string;
   amount: number;
+  guestAccessToken?: string;
 };
+
+type CheckoutOwner =
+  | { type: "CLIENT"; clientId: number }
+  | {
+    type: "GUEST";
+    guestSessionHash: string;
+    guestName: string;
+    guestEmail: string;
+    guestPhone: string;
+  };
 
 const WEBPAY_LAUNCH_REUSE_MILLISECONDS = 4 * 60_000;
 const WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS = WEBPAY_TIMEOUT_MS + 15_000;
@@ -111,8 +146,8 @@ function createBuyOrder(orderId: number) {
   return `FYF${orderId}-${Date.now().toString(36)}-${suffix}`.slice(0, 26);
 }
 
-function createSessionId(clientId: number, orderId: number) {
-  return `client-${clientId}-order-${orderId}-${randomUUID()}`.slice(0, 61);
+function createSessionId(ownerReference: string, orderId: number) {
+  return `${ownerReference}-order-${orderId}-${randomUUID()}`.slice(0, 61);
 }
 
 function assertActiveClient(client: Awaited<ReturnType<typeof findActiveClientForUpdate>>) {
@@ -123,12 +158,17 @@ function assertActiveClient(client: Awaited<ReturnType<typeof findActiveClientFo
 
 async function preparePaymentAttempt(
   tx: DbTransaction,
-  data: { orderId: number; clientId: number; total: string },
+  data: {
+    orderId: number;
+    ownerReference: string;
+    total: string;
+    guestAccessToken?: string;
+  },
 ) {
   const payment = await createOnlinePayment(tx, {
     orderId: data.orderId,
     buyOrder: createBuyOrder(data.orderId),
-    sessionId: createSessionId(data.clientId, data.orderId),
+    sessionId: createSessionId(data.ownerReference, data.orderId),
     amount: data.total,
   });
 
@@ -138,6 +178,7 @@ async function preparePaymentAttempt(
     buyOrder: payment.buyOrder,
     sessionId: payment.sessionId,
     amount: Number(payment.amount),
+    guestAccessToken: data.guestAccessToken,
   } satisfies PreparedPayment;
 }
 
@@ -164,6 +205,9 @@ async function startWebpayPayment(prepared: PreparedPayment) {
       token: webpay.token,
       url: webpay.url,
       total: prepared.amount,
+      ...(prepared.guestAccessToken
+        ? { guestAccessToken: prepared.guestAccessToken }
+        : {}),
     };
   } catch (error) {
     await markPaymentLaunchFailed(prepared.paymentId, prepared.orderId);
@@ -176,8 +220,20 @@ async function startWebpayPayment(prepared: PreparedPayment) {
   }
 }
 
-export async function createCheckoutService(clientId: number, data: CreateCheckoutBody) {
-  await reconcileDueOnlinePaymentsService(clientId);
+async function issueGuestAccessInTransaction(tx: DbTransaction, orderId: number) {
+  const access = createGuestOrderAccessToken();
+  await createGuestOrderAccessRecord(tx, {
+    orderId,
+    tokenHash: access.tokenHash,
+    expiresAt: access.expiresAt,
+  });
+  return access.token;
+}
+
+async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckoutBody) {
+  await reconcileDueOnlinePaymentsService(owner.type === "CLIENT"
+    ? { clientId: owner.clientId }
+    : { guestSessionHash: owner.guestSessionHash });
 
   let prepared: PreparedPayment | null = null;
   let existingLaunch: {
@@ -186,16 +242,24 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
     token: string;
     url: string;
     total: number;
+    guestAccessToken?: string;
   } | null = null;
   let expiredLaunch = false;
+  const orderHistoryLabel = owner.type === "CLIENT" ? "Mis pedidos" : "el seguimiento del pedido";
 
   try {
     await db.transaction(async (tx) => {
-      const client = await findActiveClientForUpdate(tx, clientId);
-      assertActiveClient(client);
-      await expirePendingOrdersForClient(tx, clientId);
+      if (owner.type === "CLIENT") {
+        const client = await findActiveClientForUpdate(tx, owner.clientId);
+        assertActiveClient(client);
+        await expirePendingOrdersForClient(tx, owner.clientId);
+      } else {
+        await expirePendingOrdersForGuestSession(tx, owner.guestSessionHash);
+      }
 
-      const existingOrder = await findOrderByCheckoutKey(tx, clientId, data.checkoutKey);
+      const existingOrder = owner.type === "CLIENT"
+        ? await findOrderByCheckoutKey(tx, owner.clientId, data.checkoutKey)
+        : await findOrderByGuestCheckoutKey(tx, owner.guestSessionHash, data.checkoutKey);
       if (existingOrder) {
         const payment = await findPaymentLaunchByOrder(tx, existingOrder.id);
         if (
@@ -205,12 +269,16 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
           && payment.redirectUrl
           && Date.now() - payment.createdAt.getTime() < WEBPAY_LAUNCH_REUSE_MILLISECONDS
         ) {
+          const guestAccessToken = owner.type === "GUEST"
+            ? await issueGuestAccessInTransaction(tx, existingOrder.id)
+            : undefined;
           existingLaunch = {
             orderId: existingOrder.id,
             paymentId: payment.id,
             token: payment.token,
             url: payment.redirectUrl,
             total: Number(existingOrder.total),
+            ...(guestAccessToken ? { guestAccessToken } : {}),
           };
           return;
         }
@@ -241,17 +309,20 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         }
         if (existingOrder.status === "PENDING_PAYMENT" && payment?.status === "CREATED") {
           throw new OnlineOrderError(
-            "La sesion anterior de Webpay ya no puede reutilizarse. Revisa Mis pedidos.",
+            `La sesion anterior de Webpay ya no puede reutilizarse. Revisa ${orderHistoryLabel}.`,
             409,
           );
         }
         throw new OnlineOrderError(
-          "Este intento de checkout ya fue procesado. Revisa Mis pedidos.",
+          `Este intento de checkout ya fue procesado. Revisa ${orderHistoryLabel}.`,
           409,
         );
       }
 
-      if (await findPendingOrderForClient(tx, clientId)) {
+      const pendingOrder = owner.type === "CLIENT"
+        ? await findPendingOrderForClient(tx, owner.clientId)
+        : await findPendingOrderForGuestSession(tx, owner.guestSessionHash);
+      if (pendingOrder) {
         throw new OnlineOrderError(
           "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
           409,
@@ -305,7 +376,11 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         0,
       );
       const order = await createOnlineOrder(tx, {
-        clientId,
+        clientId: owner.type === "CLIENT" ? owner.clientId : null,
+        guestName: owner.type === "GUEST" ? owner.guestName : null,
+        guestEmail: owner.type === "GUEST" ? owner.guestEmail : null,
+        guestPhone: owner.type === "GUEST" ? owner.guestPhone : null,
+        guestSessionHash: owner.type === "GUEST" ? owner.guestSessionHash : null,
         checkoutKey: data.checkoutKey,
         total: (totalInCents / 100).toFixed(2),
         deliveryType: data.deliveryType,
@@ -327,9 +402,13 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         subtotal: item.subtotal,
       })));
 
-      if (data.deliveryType === "DELIVERY" && data.saveDeliveryAddress) {
+      if (
+        owner.type === "CLIENT"
+        && data.deliveryType === "DELIVERY"
+        && data.saveDeliveryAddress
+      ) {
         await upsertClientDeliveryAddress(tx, {
-          clientId,
+          clientId: owner.clientId,
           recipientName: data.deliveryRecipientName!,
           phone: data.deliveryPhone!,
           address: data.deliveryAddress!,
@@ -340,10 +419,16 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
         });
       }
 
+      const guestAccessToken = owner.type === "GUEST"
+        ? await issueGuestAccessInTransaction(tx, order.id)
+        : undefined;
       prepared = await preparePaymentAttempt(tx, {
         orderId: order.id,
-        clientId,
+        ownerReference: owner.type === "CLIENT"
+          ? `client-${owner.clientId}`
+          : `guest-${owner.guestSessionHash.slice(0, 12)}`,
         total: order.total,
+        guestAccessToken,
       });
     });
   } catch (error) {
@@ -358,7 +443,7 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
 
   if (expiredLaunch) {
     throw new OnlineOrderError(
-      "La sesion de Webpay vencio. Reintenta el pago desde Mis pedidos.",
+      `La sesion de Webpay vencio. Reintenta el pago desde ${orderHistoryLabel}.`,
       409,
     );
   }
@@ -367,12 +452,36 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
   return startWebpayPayment(prepared);
 }
 
+export async function createCheckoutService(clientId: number, data: CreateCheckoutBody) {
+  return createCheckoutForOwner({ type: "CLIENT", clientId }, data);
+}
+
+export async function createGuestCheckoutService(
+  guestSessionId: string,
+  data: CreateGuestCheckoutBody,
+) {
+  let guestSessionHash: string;
+  try {
+    guestSessionHash = hashGuestSessionId(guestSessionId);
+  } catch {
+    throw new OnlineOrderError("La sesion de invitado no es valida", 400);
+  }
+
+  return createCheckoutForOwner({
+    type: "GUEST",
+    guestSessionHash,
+    guestName: data.guestName,
+    guestEmail: data.guestEmail,
+    guestPhone: data.guestPhone,
+  }, data);
+}
+
 export async function getClientDeliveryAddressService(clientId: number) {
   return findClientDeliveryAddress(clientId);
 }
 
 export async function retryOnlineOrderPaymentService(clientId: number, orderId: number) {
-  await reconcileDueOnlinePaymentsService(clientId);
+  await reconcileDueOnlinePaymentsService({ clientId });
 
   const prepared = await db.transaction(async (tx) => {
     const client = await findActiveClientForUpdate(tx, clientId);
@@ -417,7 +526,7 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
     await resetOrderReservation(tx, order.id, reservationExpiration());
     return preparePaymentAttempt(tx, {
       orderId: order.id,
-      clientId,
+      ownerReference: `client-${clientId}`,
       total: order.total,
     });
   });
@@ -426,7 +535,7 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
 }
 
 export async function continueOnlineOrderPaymentService(clientId: number, orderId: number) {
-  await reconcileDueOnlinePaymentsService(clientId);
+  await reconcileDueOnlinePaymentsService({ clientId });
 
   return db.transaction(async (tx) => {
     const client = await findActiveClientForUpdate(tx, clientId);
@@ -470,8 +579,197 @@ export async function continueOnlineOrderPaymentService(clientId: number, orderI
   });
 }
 
+async function guestOrderIdFromAccessToken(accessToken: string) {
+  let tokenHash: string;
+  try {
+    tokenHash = hashGuestOrderAccessToken(accessToken);
+  } catch {
+    throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
+  }
+
+  const orderId = await findGuestOrderIdByAccessTokenHash(tokenHash);
+  if (!orderId) throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
+  return orderId;
+}
+
+function guestSessionHashOrError(guestSessionId: string) {
+  try {
+    return hashGuestSessionId(guestSessionId);
+  } catch {
+    throw new OnlineOrderError("La sesion de invitado no es valida", 400);
+  }
+}
+
+export async function getGuestPendingOrderService(guestSessionId: string) {
+  const guestSessionHash = guestSessionHashOrError(guestSessionId);
+  await reconcileDueOnlinePaymentsService({ guestSessionHash });
+  await db.transaction((tx) => expirePendingOrdersForGuestSession(tx, guestSessionHash));
+  const order = await findPendingOrderDetailsForGuestSession(guestSessionHash);
+  if (!order) return null;
+  const {
+    checkoutKey: _checkoutKey,
+    clientArchivedAt: _clientArchivedAt,
+    clientId: _clientId,
+    clientNames: _clientNames,
+    clientSurnames: _clientSurnames,
+    clientEmail: _clientEmail,
+    clientPhone: _clientPhone,
+    payment,
+    ...safeOrder
+  } = order;
+  const guestPayment = payment as null | {
+    status: string;
+    amount: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  return {
+    ...safeOrder,
+    payment: guestPayment ? {
+      status: guestPayment.status,
+      amount: guestPayment.amount,
+      createdAt: guestPayment.createdAt,
+      updatedAt: guestPayment.updatedAt,
+    } : null,
+    canArchive: false,
+  };
+}
+
+export async function continueGuestOnlineOrderPaymentService(guestSessionId: string) {
+  const guestSessionHash = guestSessionHashOrError(guestSessionId);
+  await reconcileDueOnlinePaymentsService({ guestSessionHash });
+
+  return db.transaction(async (tx) => {
+    await expirePendingOrdersForGuestSession(tx, guestSessionHash);
+    const pending = await findPendingOrderForGuestSession(tx, guestSessionHash);
+    if (!pending) throw new OnlineOrderError("No existe un pago pendiente para esta sesion", 404);
+
+    const order = await findOrderForGuestUpdate(tx, pending.id);
+    if (!order || order.guestSessionHash !== guestSessionHash) {
+      throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
+    }
+    if (order.status !== "PENDING_PAYMENT") {
+      throw new OnlineOrderError("Este pedido ya no tiene un pago pendiente", 409);
+    }
+    if (order.reservationExpiresAt.getTime() <= Date.now()) {
+      throw new OnlineOrderError("La reserva del pedido ya vencio", 409);
+    }
+
+    const payment = await findPaymentLaunchByOrder(tx, order.id);
+    if (payment?.status === "PROCESSING") {
+      throw new OnlineOrderError(
+        "El pago se esta confirmando. Revisa el seguimiento antes de volver a intentarlo.",
+        409,
+      );
+    }
+    if (payment?.status !== "CREATED" || !payment.token || !payment.redirectUrl) {
+      throw new OnlineOrderError(
+        "La sesion Webpay ya no se puede continuar. Revisa el seguimiento del pedido.",
+        409,
+      );
+    }
+
+    return {
+      orderId: order.id,
+      paymentId: payment.id,
+      token: payment.token,
+      url: payment.redirectUrl,
+      total: Number(payment.amount),
+    };
+  });
+}
+
+export async function getGuestOrderByAccessTokenService(accessToken: string) {
+  const orderId = await guestOrderIdFromAccessToken(accessToken);
+  await reconcileDueOnlinePaymentsService({ orderId });
+  const order = await findOrderByIdForGuest(orderId);
+  if (!order) throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
+  const {
+    checkoutKey: _checkoutKey,
+    clientArchivedAt: _clientArchivedAt,
+    clientId: _clientId,
+    clientNames: _clientNames,
+    clientSurnames: _clientSurnames,
+    clientEmail: _clientEmail,
+    clientPhone: _clientPhone,
+    payment,
+    ...safeOrder
+  } = order;
+  const guestPayment = payment as null | {
+    status: string;
+    amount: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  return {
+    ...safeOrder,
+    payment: guestPayment ? {
+      status: guestPayment.status,
+      amount: guestPayment.amount,
+      createdAt: guestPayment.createdAt,
+      updatedAt: guestPayment.updatedAt,
+    } : null,
+    canArchive: false,
+  };
+}
+
+export async function retryGuestOnlineOrderPaymentService(accessToken: string) {
+  const orderId = await guestOrderIdFromAccessToken(accessToken);
+  await reconcileDueOnlinePaymentsService({ orderId });
+
+  const prepared = await db.transaction(async (tx) => {
+    const order = await findOrderForGuestUpdate(tx, orderId);
+    if (!order || !order.guestSessionHash) {
+      throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
+    }
+    await expirePendingOrdersForGuestSession(tx, order.guestSessionHash);
+    if (!["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(order.status)) {
+      throw new OnlineOrderError("Este pedido no permite reintentar el pago", 409);
+    }
+    if (await findPendingOrderForGuestSession(tx, order.guestSessionHash, order.id)) {
+      throw new OnlineOrderError(
+        "Tienes un pago pendiente. Finaliza la compra anterior antes de reintentar.",
+        409,
+      );
+    }
+
+    const items = await findOrderItems(tx, order.id);
+    const productIds = items.map((item) => item.productId);
+    const products = await lockProductsForAvailability(tx, productIds);
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const reservedByProduct = await findActiveReservedQuantities(tx, productIds, order.id);
+
+    for (const item of items) {
+      const product = productById.get(item.productId);
+      if (!product || !product.status) {
+        throw new OnlineOrderError("Uno de los productos ya no esta disponible", 409);
+      }
+      const availableStock = calculateAvailableStock(
+        product.currentStock,
+        reservedByProduct.get(product.id) || 0,
+      );
+      if (item.quantity > availableStock) {
+        throw new OnlineOrderError(
+          `El stock disponible de ${product.name} cambio. Solo quedan ${availableStock} unidades.`,
+          409,
+        );
+      }
+    }
+
+    await resetOrderReservation(tx, order.id, reservationExpiration());
+    return preparePaymentAttempt(tx, {
+      orderId: order.id,
+      ownerReference: `guest-${order.guestSessionHash.slice(0, 12)}`,
+      total: order.total,
+      guestAccessToken: accessToken,
+    });
+  });
+
+  return startWebpayPayment(prepared);
+}
+
 export async function archiveClientOrderService(clientId: number, orderId: number) {
-  await reconcileDueOnlinePaymentsService(clientId);
+  await reconcileDueOnlinePaymentsService({ clientId });
   await expireClientOrders(clientId);
 
   return db.transaction(async (tx) => {
@@ -639,6 +937,7 @@ async function finishProviderResponse(data: {
       await applyInventoryMovement(tx, {
         productId: item.productId,
         userId: order.clientId,
+        onlineOrderId: order.id,
         movementType: "EXIT",
         quantity: item.quantity,
         reason: `Pedido online P-${String(order.id).padStart(6, "0")}`,
@@ -658,6 +957,24 @@ async function finishProviderResponse(data: {
   });
 
   if (result.becamePaid) {
+    void (async () => {
+      try {
+        const buyer = await findOrderBuyerContact(result.orderId);
+        if (!buyer?.email) return;
+        const guestAccess = buyer.buyerType === "GUEST"
+          ? await issueGuestOrderTrackingAccessService(result.orderId, "PAID")
+          : null;
+        await notifyClientOrderBestEffort({
+          email: buyer.email,
+          folio: `P-${String(result.orderId).padStart(6, "0")}`,
+          event: "PURCHASE_CONFIRMED",
+          trackingUrl: guestAccess?.url,
+          recipientType: buyer.buyerType,
+        });
+      } catch (error) {
+        console.error("No se pudo enviar la confirmacion del pedido:", error);
+      }
+    })();
     void notifyWarehousesBestEffort({
       folio: `P-${String(result.orderId).padStart(6, "0")}`,
       event: "NEW_ONLINE_ORDER_PAID",
@@ -1021,11 +1338,15 @@ async function reconcilePaymentCandidate(
   }
 }
 
-export async function reconcileDueOnlinePaymentsService(clientId?: number) {
+export async function reconcileDueOnlinePaymentsService(scope: {
+  clientId?: number;
+  guestSessionHash?: string;
+  orderId?: number;
+} = {}) {
   const processingStaleBefore = new Date(
     Date.now() - WEBPAY_TIMEOUT_MS - RECONCILIATION_STALE_MARGIN_MILLISECONDS,
   );
-  const candidates = await findPaymentsNeedingReconciliation(processingStaleBefore, clientId);
+  const candidates = await findPaymentsNeedingReconciliation(processingStaleBefore, scope);
 
   for (let index = 0; index < candidates.length; index += 5) {
     const batch = candidates.slice(index, index + 5);
@@ -1037,19 +1358,48 @@ export async function reconcileDueOnlinePaymentsService(clientId?: number) {
     }
   }
 
-  await db.transaction((tx) => expirePendingOrdersForClient(tx, clientId));
+  if (scope.guestSessionHash !== undefined) {
+    await db.transaction((tx) => expirePendingOrdersForGuestSession(tx, scope.guestSessionHash!));
+  } else if (scope.orderId === undefined) {
+    await db.transaction((tx) => expirePendingOrdersForClient(tx, scope.clientId));
+  }
 }
 
 export async function getClientOrdersService(clientId: number) {
-  await reconcileDueOnlinePaymentsService(clientId);
+  await reconcileDueOnlinePaymentsService({ clientId });
   await expireClientOrders(clientId);
   return findOrdersByClient(clientId);
 }
 
 export async function getClientOrderByIdService(clientId: number, orderId: number) {
-  await reconcileDueOnlinePaymentsService(clientId);
+  await reconcileDueOnlinePaymentsService({ clientId });
   await expireClientOrders(clientId);
   const order = await findOrderByIdAndClient(orderId, clientId);
   if (!order) throw new OnlineOrderError("Pedido no encontrado", 404);
   return order;
+}
+
+export async function issueGuestOrderTrackingAccessService(
+  orderId: number,
+  status?: string,
+) {
+  const order = await findOrderByIdForGuest(orderId);
+  if (!order) return null;
+
+  const access = createGuestOrderAccessToken();
+  await issueGuestOrderAccessRecord({
+    orderId,
+    tokenHash: access.tokenHash,
+    expiresAt: access.expiresAt,
+  });
+
+  return {
+    token: access.token,
+    url: guestOrderTrackingUrl(access.token, status),
+    expiresAt: access.expiresAt,
+  };
+}
+
+export async function getOrderBuyerContactService(orderId: number) {
+  return findOrderBuyerContact(orderId);
 }

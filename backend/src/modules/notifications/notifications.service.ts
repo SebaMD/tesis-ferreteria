@@ -11,6 +11,7 @@ import {
 import { findActiveWarehouseEmails } from "./notifications.repository.js";
 
 export type ClientOrderMailEvent =
+  | "PURCHASE_CONFIRMED"
   | "PREPARATION_STARTED"
   | "READY_FOR_PICKUP"
   | "READY_FOR_DELIVERY"
@@ -85,27 +86,41 @@ async function sendMailBestEffort(to: string, content: MailContent) {
   }
 }
 
-function clientOrderContent(folio: string, event: ClientOrderMailEvent): MailContent {
+function clientOrderContent(
+  folio: string,
+  event: ClientOrderMailEvent,
+  trackingUrl?: string,
+  recipientType: "CLIENT" | "GUEST" = "CLIENT",
+): MailContent {
+  const trackingText = trackingUrl
+    ? ` Puedes seguir el pedido de forma segura en: ${trackingUrl}`
+    : recipientType === "GUEST"
+      ? " Conserva el enlace seguro mostrado al finalizar la compra para consultar su estado."
+      : " Puedes revisar su estado en Mis pedidos.";
   const content: Record<ClientOrderMailEvent, MailContent> = {
+    PURCHASE_CONFIRMED: {
+      subject: `${folio}: compra confirmada`,
+      text: `El pago de tu pedido ${folio} fue confirmado.${trackingText}`,
+    },
     PREPARATION_STARTED: {
       subject: `${folio}: comenzamos a preparar tu pedido`,
-      text: `Estamos preparando tu pedido ${folio}. Puedes revisar su estado en Mis pedidos.`,
+      text: `Estamos preparando tu pedido ${folio}.${trackingText}`,
     },
     READY_FOR_PICKUP: {
       subject: `${folio}: pedido listo para retirar`,
-      text: `Tu pedido ${folio} esta listo para retirar en FERRETERIA FYF.`,
+      text: `Tu pedido ${folio} esta listo para retirar en FERRETERIA FYF.${trackingText}`,
     },
     READY_FOR_DELIVERY: {
       subject: `${folio}: pedido listo para despacho`,
-      text: `Tu pedido ${folio} esta preparado y listo para iniciar su despacho.`,
+      text: `Tu pedido ${folio} esta preparado y listo para iniciar su despacho.${trackingText}`,
     },
     OUT_FOR_DELIVERY: {
       subject: `${folio}: pedido en reparto`,
-      text: `Tu pedido ${folio} va en camino a la direccion indicada.`,
+      text: `Tu pedido ${folio} va en camino a la direccion indicada.${trackingText}`,
     },
     DELIVERED: {
       subject: `${folio}: pedido entregado`,
-      text: `Tu pedido ${folio} fue entregado. Gracias por comprar en FERRETERIA FYF.`,
+      text: `Tu pedido ${folio} fue entregado. Gracias por comprar en FERRETERIA FYF.${trackingText}`,
     },
   };
   return content[event];
@@ -133,9 +148,14 @@ export async function notifyClientOrderBestEffort(input: {
   email: string;
   folio: string;
   event: ClientOrderMailEvent;
+  trackingUrl?: string;
+  recipientType?: "CLIENT" | "GUEST";
 }) {
   if (!MAIL_ENABLED) return;
-  await sendMailBestEffort(input.email, clientOrderContent(input.folio, input.event));
+  await sendMailBestEffort(
+    input.email,
+    clientOrderContent(input.folio, input.event, input.trackingUrl, input.recipientType),
+  );
 }
 
 export async function notifyWarehousesBestEffort(input: {

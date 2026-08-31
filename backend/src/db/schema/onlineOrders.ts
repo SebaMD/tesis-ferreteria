@@ -17,8 +17,11 @@ export const onlineOrdersTable = pgTable(
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     clientId: integer("client_id")
-      .notNull()
       .references(() => usersTable.id),
+    guestName: varchar("guest_name", { length: 240 }),
+    guestEmail: varchar("guest_email", { length: 254 }),
+    guestPhone: varchar("guest_phone", { length: 20 }),
+    guestSessionHash: varchar("guest_session_hash", { length: 64 }),
     checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
     status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
     total: numeric({ precision: 12, scale: 2 }).notNull(),
@@ -58,13 +61,18 @@ export const onlineOrdersTable = pgTable(
     index("online_orders_preparation_started_by_idx").on(table.preparationStartedBy),
     index("online_orders_delivery_started_by_idx").on(table.deliveryStartedBy),
     index("online_orders_reservation_expires_at_idx").on(table.reservationExpiresAt),
-    uniqueIndex("online_orders_client_checkout_key_unique").on(
-      table.clientId,
-      table.checkoutKey,
-    ),
+    uniqueIndex("online_orders_client_checkout_key_unique")
+      .on(table.clientId, table.checkoutKey)
+      .where(sql`${table.clientId} is not null`),
+    uniqueIndex("online_orders_guest_checkout_key_unique")
+      .on(table.guestSessionHash, table.checkoutKey)
+      .where(sql`${table.guestSessionHash} is not null`),
     uniqueIndex("online_orders_pending_client_unique")
       .on(table.clientId)
-      .where(sql`${table.status} = 'PENDING_PAYMENT'`),
+      .where(sql`${table.clientId} is not null and ${table.status} = 'PENDING_PAYMENT'`),
+    uniqueIndex("online_orders_pending_guest_session_unique")
+      .on(table.guestSessionHash)
+      .where(sql`${table.guestSessionHash} is not null and ${table.status} = 'PENDING_PAYMENT'`),
     check(
       "online_orders_status_check",
       sql`${table.status} in ('PENDING_PAYMENT', 'PAID', 'PAYMENT_FAILED', 'CANCELLED', 'EXPIRED', 'PAYMENT_REVIEW', 'PREPARING', 'READY_FOR_PICKUP', 'READY_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED')`,
@@ -95,6 +103,26 @@ export const onlineOrdersTable = pgTable(
         and ${table.deliveryLongitude} is not null
         and ${table.deliveryLatitude} between -90 and 90
         and ${table.deliveryLongitude} between -180 and 180
+      )`,
+    ),
+    check(
+      "online_orders_owner_check",
+      sql`(
+        ${table.clientId} is not null
+        and ${table.guestName} is null
+        and ${table.guestEmail} is null
+        and ${table.guestPhone} is null
+        and ${table.guestSessionHash} is null
+      ) or (
+        ${table.clientId} is null
+        and ${table.guestName} is not null
+        and length(btrim(${table.guestName})) > 0
+        and ${table.guestEmail} is not null
+        and length(btrim(${table.guestEmail})) > 0
+        and ${table.guestPhone} is not null
+        and length(btrim(${table.guestPhone})) > 0
+        and ${table.guestSessionHash} is not null
+        and length(${table.guestSessionHash}) = 64
       )`,
     ),
     check("online_orders_total_positive", sql`${table.total} > 0`),

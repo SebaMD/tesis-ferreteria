@@ -8,15 +8,24 @@ import {
   cancelWebpayPaymentService,
   confirmWebpayPaymentService,
   continueOnlineOrderPaymentService,
+  continueGuestOnlineOrderPaymentService,
   createCheckoutService,
+  createGuestCheckoutService,
   findOrderIdByPaymentReturnService,
   getClientOrderByIdService,
   getClientDeliveryAddressService,
   getClientOrdersService,
+  getGuestOrderByAccessTokenService,
+  getGuestPendingOrderService,
+  issueGuestOrderTrackingAccessService,
   OnlineOrderError,
   retryOnlineOrderPaymentService,
+  retryGuestOnlineOrderPaymentService,
 } from "./onlineOrders.service.js";
-import { validateCreateCheckoutBody } from "./onlineOrders.validation.js";
+import {
+  validateCreateCheckoutBody,
+  validateCreateGuestCheckoutBody,
+} from "./onlineOrders.validation.js";
 
 function parseId(value: unknown) {
   const id = Number(value);
@@ -49,6 +58,102 @@ export async function createCheckoutController(req: AuthenticatedRequest, res: R
       return handleErrorServer(res, 503, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo iniciar el checkout", message(error));
+  }
+}
+
+function requiredHeader(req: Request, name: string) {
+  const value = req.get(name);
+  if (!value?.trim()) throw new OnlineOrderError("La sesion o acceso de invitado no fue enviado", 400);
+  return value.trim();
+}
+
+export async function createGuestCheckoutController(req: Request, res: Response) {
+  try {
+    const validation = validateCreateGuestCheckoutBody(req.body);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+    const payment = await createGuestCheckoutService(
+      requiredHeader(req, "x-guest-session"),
+      validation.value,
+    );
+    return handleSuccess(res, 201, "Pedido invitado reservado y pago Webpay iniciado", payment);
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo iniciar el checkout invitado", message(error));
+  }
+}
+
+export async function getGuestPendingOrderController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Pago pendiente de invitado consultado",
+      await getGuestPendingOrderService(requiredHeader(req, "x-guest-session")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo consultar el pago pendiente", message(error));
+  }
+}
+
+export async function continueGuestPaymentController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Sesion Webpay invitada recuperada",
+      await continueGuestOnlineOrderPaymentService(requiredHeader(req, "x-guest-session")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo continuar el pago invitado", message(error));
+  }
+}
+
+export async function getGuestOrderController(req: Request, res: Response) {
+  try {
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(
+      res,
+      200,
+      "Pedido invitado obtenido exitosamente",
+      await getGuestOrderByAccessTokenService(requiredHeader(req, "x-guest-order-token")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo obtener el pedido invitado", message(error));
+  }
+}
+
+export async function retryGuestPaymentController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Nuevo intento Webpay invitado iniciado",
+      await retryGuestOnlineOrderPaymentService(requiredHeader(req, "x-guest-order-token")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo reintentar el pago invitado", message(error));
   }
 }
 
@@ -162,7 +267,11 @@ function returnValue(req: Request, field: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function paymentResultUrl(orderId?: number, status = "PROCESSING") {
+async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
+  if (orderId) {
+    const guestAccess = await issueGuestOrderTrackingAccessService(orderId, status);
+    if (guestAccess) return guestAccess.url;
+  }
   const url = new URL("/payment-result", FRONTEND_URL);
   if (orderId) url.searchParams.set("orderId", String(orderId));
   url.searchParams.set("status", status);
@@ -183,13 +292,13 @@ export async function webpayReturnController(req: Request, res: Response) {
         sessionId,
         outcome: !tbkToken ? "expired" : tokenWs ? "failed" : "cancelled",
       });
-      return res.redirect(303, paymentResultUrl(result.orderId, result.orderStatus));
+      return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
     }
 
-    if (!tokenWs) return res.redirect(303, paymentResultUrl(undefined, "INVALID_RETURN"));
+    if (!tokenWs) return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
 
     const result = await confirmWebpayPaymentService(tokenWs);
-    return res.redirect(303, paymentResultUrl(result.orderId, result.orderStatus));
+    return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
   } catch (error) {
     console.error("Error al procesar retorno Webpay:", message(error));
     let orderId: number | null = null;
@@ -202,6 +311,6 @@ export async function webpayReturnController(req: Request, res: Response) {
     } catch {
       // El resultado queda consultable desde Mis pedidos aunque falle esta recuperación.
     }
-    return res.redirect(303, paymentResultUrl(orderId || undefined, "PROCESSING"));
+    return res.redirect(303, await paymentResultUrl(orderId || undefined, "PROCESSING"));
   }
 }

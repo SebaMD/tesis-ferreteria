@@ -16,6 +16,8 @@ import CatalogPage from "./pages/CatalogPage.jsx";
 import ClientAccountPage from "./pages/ClientAccountPage.jsx";
 import ClientCartPage from "./pages/ClientCartPage.jsx";
 import CheckoutPage from "./pages/CheckoutPage.jsx";
+import CheckoutChoicePage from "./pages/CheckoutChoicePage.jsx";
+import GuestOrderTrackingPage from "./pages/GuestOrderTrackingPage.jsx";
 import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
 import PaymentResultPage from "./pages/PaymentResultPage.jsx";
 import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
@@ -73,10 +75,12 @@ export default function App() {
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
+      <Route path="/checkout-options" element={<StorePage><CheckoutChoicePage /></StorePage>} />
       <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
-      <Route path="/checkout" element={<ProtectedClientPage><CheckoutPage /></ProtectedClientPage>} />
+      <Route path="/checkout" element={<StorePage><CheckoutPage /></StorePage>} />
       <Route path="/orders" element={<ProtectedClientPage><ClientOrdersPage /></ProtectedClientPage>} />
       <Route path="/payment-result" element={<ProtectedClientPage><PaymentResultPage /></ProtectedClientPage>} />
+      <Route path="/order-tracking" element={<StorePage><GuestOrderTrackingPage /></StorePage>} />
       <Route
         path="/dashboard"
         element={

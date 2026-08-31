@@ -23,6 +23,7 @@ import {
 } from "../payments/webpay.service.js";
 import {
   archiveOrderForClient,
+  bindGuestOrderToDevice,
   createOnlineOrder,
   createOnlineOrderItems,
   createOnlinePayment,
@@ -46,6 +47,7 @@ import {
   findOrderForUpdate,
   findOrderItems,
   findOrdersByClient,
+  findOrdersByGuestDeviceHash,
   findPaymentByReturnIdentifiers,
   findPaymentByToken,
   findPaymentForUpdateById,
@@ -70,6 +72,7 @@ import {
   createGuestOrderAccessToken,
   guestOrderTrackingUrl,
   hashGuestOrderAccessToken,
+  hashGuestDeviceId,
   hashGuestSessionId,
 } from "./guestOrderAccess.js";
 import type {
@@ -101,6 +104,7 @@ type CheckoutOwner =
   | {
     type: "GUEST";
     guestSessionHash: string;
+    guestDeviceHash: string;
     guestName: string;
     guestEmail: string;
     guestPhone: string;
@@ -261,6 +265,9 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         ? await findOrderByCheckoutKey(tx, owner.clientId, data.checkoutKey)
         : await findOrderByGuestCheckoutKey(tx, owner.guestSessionHash, data.checkoutKey);
       if (existingOrder) {
+        if (owner.type === "GUEST") {
+          await bindGuestOrderToDevice(tx, existingOrder.id, owner.guestDeviceHash);
+        }
         const payment = await findPaymentLaunchByOrder(tx, existingOrder.id);
         if (
           existingOrder.status === "PENDING_PAYMENT"
@@ -381,6 +388,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         guestEmail: owner.type === "GUEST" ? owner.guestEmail : null,
         guestPhone: owner.type === "GUEST" ? owner.guestPhone : null,
         guestSessionHash: owner.type === "GUEST" ? owner.guestSessionHash : null,
+        guestDeviceHash: owner.type === "GUEST" ? owner.guestDeviceHash : null,
         checkoutKey: data.checkoutKey,
         total: (totalInCents / 100).toFixed(2),
         deliveryType: data.deliveryType,
@@ -458,11 +466,14 @@ export async function createCheckoutService(clientId: number, data: CreateChecko
 
 export async function createGuestCheckoutService(
   guestSessionId: string,
+  guestDeviceId: string,
   data: CreateGuestCheckoutBody,
 ) {
   let guestSessionHash: string;
+  let guestDeviceHash: string;
   try {
     guestSessionHash = hashGuestSessionId(guestSessionId);
+    guestDeviceHash = hashGuestDeviceId(guestDeviceId);
   } catch {
     throw new OnlineOrderError("La sesion de invitado no es valida", 400);
   }
@@ -470,6 +481,7 @@ export async function createGuestCheckoutService(
   return createCheckoutForOwner({
     type: "GUEST",
     guestSessionHash,
+    guestDeviceHash,
     guestName: data.guestName,
     guestEmail: data.guestEmail,
     guestPhone: data.guestPhone,
@@ -679,8 +691,20 @@ export async function continueGuestOnlineOrderPaymentService(guestSessionId: str
   });
 }
 
-export async function getGuestOrderByAccessTokenService(accessToken: string) {
+export async function getGuestOrderByAccessTokenService(
+  accessToken: string,
+  guestDeviceId?: string,
+) {
   const orderId = await guestOrderIdFromAccessToken(accessToken);
+  if (guestDeviceId) {
+    let guestDeviceHash: string;
+    try {
+      guestDeviceHash = hashGuestDeviceId(guestDeviceId);
+    } catch {
+      throw new OnlineOrderError("El dispositivo invitado no es valido", 400);
+    }
+    await db.transaction((tx) => bindGuestOrderToDevice(tx, orderId, guestDeviceHash));
+  }
   await reconcileDueOnlinePaymentsService({ orderId });
   const order = await findOrderByIdForGuest(orderId);
   if (!order) throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
@@ -711,6 +735,46 @@ export async function getGuestOrderByAccessTokenService(accessToken: string) {
     } : null,
     canArchive: false,
   };
+}
+
+export async function getGuestDeviceOrdersService(guestDeviceId: string) {
+  let guestDeviceHash: string;
+  try {
+    guestDeviceHash = hashGuestDeviceId(guestDeviceId);
+  } catch {
+    throw new OnlineOrderError("El dispositivo invitado no es valido", 400);
+  }
+
+  const orders = await findOrdersByGuestDeviceHash(guestDeviceHash);
+  return orders.map((order) => {
+    const {
+      checkoutKey: _checkoutKey,
+      clientArchivedAt: _clientArchivedAt,
+      clientId: _clientId,
+      clientNames: _clientNames,
+      clientSurnames: _clientSurnames,
+      clientEmail: _clientEmail,
+      clientPhone: _clientPhone,
+      payment,
+      ...safeOrder
+    } = order;
+    const guestPayment = payment as null | {
+      status: string;
+      amount: string;
+      createdAt: Date;
+      updatedAt: Date;
+    };
+    return {
+      ...safeOrder,
+      payment: guestPayment ? {
+        status: guestPayment.status,
+        amount: guestPayment.amount,
+        createdAt: guestPayment.createdAt,
+        updatedAt: guestPayment.updatedAt,
+      } : null,
+      canArchive: false,
+    };
+  });
 }
 
 export async function retryGuestOnlineOrderPaymentService(accessToken: string) {

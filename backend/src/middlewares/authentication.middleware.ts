@@ -32,6 +32,6 @@ export function authenticateJwt(req: AuthenticatedRequest, res: Response, next: 
     req.user = jwt.verify(token, SESSION_SECRET) as AuthUser;
     return next();
   } catch {
-    return res.status(403).json({ message: "Token invalido o expirado" });
+    return res.status(401).json({ message: "Token invalido o expirado" });
   }
 }

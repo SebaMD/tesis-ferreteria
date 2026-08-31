@@ -16,6 +16,15 @@ export function hashGuestSessionId(value: string) {
   return hashSecret(value);
 }
 
+export function createGuestDeviceId() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashGuestDeviceId(value: string) {
+  if (!isValidGuestSecret(value)) throw new Error("El dispositivo invitado no es valido");
+  return hashSecret(value);
+}
+
 export function hashGuestOrderAccessToken(value: string) {
   if (!isValidGuestSecret(value)) throw new Error("El acceso al pedido no es valido");
   return hashSecret(value);

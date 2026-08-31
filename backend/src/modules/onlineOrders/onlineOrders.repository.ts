@@ -11,6 +11,8 @@ import {
   type NewOnlineOrderItem,
   type OnlineOrderStatus,
 } from "../../db/schema/index.js";
+import { findProductImagesByProductIds } from "../productImages/productImages.repository.js";
+import { presentProductImage } from "../productImages/productImages.presenter.js";
 
 export async function findClientDeliveryAddress(clientId: number) {
   const [address] = await db
@@ -300,6 +302,7 @@ export async function createOnlineOrder(
     guestEmail?: string | null;
     guestPhone?: string | null;
     guestSessionHash?: string | null;
+    guestDeviceHash?: string | null;
     checkoutKey: string;
     total: string;
     reservationExpiresAt: Date;
@@ -812,10 +815,24 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
       .orderBy(desc(onlinePaymentsTable.createdAt), desc(onlinePaymentsTable.id)),
   ]);
 
-  const itemsByOrder = new Map<number, typeof items>();
+  const productImages = await findProductImagesByProductIds(
+    [...new Set(items.map((item) => item.productId))],
+  );
+  const primaryImageByProduct = new Map<number, string>();
+  for (const image of productImages) {
+    if (!primaryImageByProduct.has(image.productId) || image.isPrimary) {
+      primaryImageByProduct.set(image.productId, presentProductImage(image).imageUrl);
+    }
+  }
+  const presentedItems = items.map((item) => ({
+    ...item,
+    productImageUrl: primaryImageByProduct.get(item.productId) ?? null,
+  }));
+
+  const itemsByOrder = new Map<number, typeof presentedItems>();
   const paymentByOrder = new Map<number, (typeof payments)[number]>();
 
-  for (const item of items) {
+  for (const item of presentedItems) {
     const current = itemsByOrder.get(item.orderId) ?? [];
     current.push(item);
     itemsByOrder.set(item.orderId, current);
@@ -895,6 +912,38 @@ export async function findOrderByIdForGuest(orderId: number) {
 
   const [order] = await attachOrderData(orders);
   return order ?? null;
+}
+
+export async function findOrdersByGuestDeviceHash(guestDeviceHash: string) {
+  const orders = await db
+    .select(orderColumns)
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(and(
+      eq(onlineOrdersTable.guestDeviceHash, guestDeviceHash),
+      isNull(onlineOrdersTable.clientId),
+    ))
+    .orderBy(desc(onlineOrdersTable.createdAt), desc(onlineOrdersTable.id));
+
+  return attachOrderData(orders);
+}
+
+export async function bindGuestOrderToDevice(
+  tx: DbTransaction,
+  orderId: number,
+  guestDeviceHash: string,
+) {
+  const [updated] = await tx
+    .update(onlineOrdersTable)
+    .set({ guestDeviceHash, updatedAt: new Date() })
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      isNull(onlineOrdersTable.clientId),
+      isNull(onlineOrdersTable.guestDeviceHash),
+    ))
+    .returning({ id: onlineOrdersTable.id });
+
+  return updated ?? null;
 }
 
 export async function findPendingOrderDetailsForGuestSession(guestSessionHash: string) {

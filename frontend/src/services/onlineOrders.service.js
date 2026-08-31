@@ -79,6 +79,11 @@ export async function retryGuestOnlineOrderPaymentRequest(accessToken) {
   return response.data.data;
 }
 
+export async function getGuestDeviceOrdersRequest() {
+  const response = await api.get("/online-orders/guest/device-orders");
+  return response.data.data || [];
+}
+
 export const createCheckoutRequest = createOnlineOrderCheckoutRequest;
 export const retryPaymentRequest = retryOnlineOrderPaymentRequest;
 export const continuePaymentRequest = continueOnlineOrderPaymentRequest;

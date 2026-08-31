@@ -22,6 +22,7 @@ export const onlineOrdersTable = pgTable(
     guestEmail: varchar("guest_email", { length: 254 }),
     guestPhone: varchar("guest_phone", { length: 20 }),
     guestSessionHash: varchar("guest_session_hash", { length: 64 }),
+    guestDeviceHash: varchar("guest_device_hash", { length: 64 }),
     checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
     status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
     total: numeric({ precision: 12, scale: 2 }).notNull(),
@@ -61,6 +62,9 @@ export const onlineOrdersTable = pgTable(
     index("online_orders_preparation_started_by_idx").on(table.preparationStartedBy),
     index("online_orders_delivery_started_by_idx").on(table.deliveryStartedBy),
     index("online_orders_reservation_expires_at_idx").on(table.reservationExpiresAt),
+    index("online_orders_guest_device_hash_idx")
+      .on(table.guestDeviceHash)
+      .where(sql`${table.guestDeviceHash} is not null`),
     uniqueIndex("online_orders_client_checkout_key_unique")
       .on(table.clientId, table.checkoutKey)
       .where(sql`${table.clientId} is not null`),
@@ -113,6 +117,7 @@ export const onlineOrdersTable = pgTable(
         and ${table.guestEmail} is null
         and ${table.guestPhone} is null
         and ${table.guestSessionHash} is null
+        and ${table.guestDeviceHash} is null
       ) or (
         ${table.clientId} is null
         and ${table.guestName} is not null
@@ -124,6 +129,10 @@ export const onlineOrdersTable = pgTable(
         and ${table.guestSessionHash} is not null
         and length(${table.guestSessionHash}) = 64
       )`,
+    ),
+    check(
+      "online_orders_guest_device_hash_length_check",
+      sql`${table.guestDeviceHash} is null or length(${table.guestDeviceHash}) = 64`,
     ),
     check("online_orders_total_positive", sql`${table.total} > 0`),
   ],

@@ -9,6 +9,7 @@ const envFilePath = path.resolve(dirname, "../../.env");
 dotenv.config({ path: envFilePath, quiet: true });
 
 export const PORT = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000;
+export const IS_PRODUCTION = process.env.NODE_ENV?.trim().toLowerCase() === "production";
 
 export const DB_HOST = process.env.DB_HOST || process.env.HOST || "localhost";
 export const DB_PORT = process.env.DB_PORT ? Number.parseInt(process.env.DB_PORT, 10) : 5432;

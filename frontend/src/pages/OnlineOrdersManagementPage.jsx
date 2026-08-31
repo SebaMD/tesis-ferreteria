@@ -15,6 +15,7 @@ import AppModal from "../components/AppModal.jsx";
 import DeliveryEvidenceForm from "../components/DeliveryEvidenceForm.jsx";
 import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import Pagination from "../components/Pagination.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
@@ -33,6 +34,7 @@ import {
   tableScrollClass,
 } from "../helpers/uiClasses.js";
 import useAuth from "../hooks/useAuth.js";
+import usePagination from "../hooks/usePagination.js";
 import {
   completeOrderDeliveryRequest,
   finishOrderPreparationRequest,
@@ -368,6 +370,9 @@ export default function OnlineOrdersManagementPage() {
   }
 
   const noResultsMessage = emptyMessage({ scope, status, search: debouncedSearch });
+  const ordersPagination = usePagination(orders, {
+    resetKey: `${debouncedSearch}|${status}|${scope}`,
+  });
 
   return (
     <main className={pageClass}>
@@ -387,7 +392,15 @@ export default function OnlineOrdersManagementPage() {
                 className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${scope === option.value ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
                 key={option.value}
                 type="button"
-                onClick={() => setScope(option.value)}
+                onClick={() => {
+                  setScope(option.value);
+                  if (
+                    option.value === "MINE"
+                    && !["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(status)
+                  ) {
+                    setStatus("ALL");
+                  }
+                }}
                 aria-pressed={scope === option.value}
               >{option.label}</button>
             ))}
@@ -401,7 +414,9 @@ export default function OnlineOrdersManagementPage() {
           <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por folio o cliente" />
         </div>
         <select className="w-60 shrink-0 max-[620px]:w-full" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por estado">
-          {STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {STATUS_FILTERS
+            .filter((option) => scope !== "MINE" || ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value))
+            .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         {(search || status !== "ALL") && (
           <button
@@ -417,13 +432,13 @@ export default function OnlineOrdersManagementPage() {
 
       <section className={tablePanelClass}>
         <div className="flex min-h-14 items-center border-b border-slate-200 px-4 py-3 text-xs text-slate-500">
-          Mostrando {orders.length} {orders.length === 1 ? "registro" : "registros"}
+          Mostrando {ordersPagination.paginatedItems.length} de {ordersPagination.totalItems} {ordersPagination.totalItems === 1 ? "registro" : "registros"}
         </div>
         <div className={tableScrollClass}>
           <table>
             <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acción</th></tr></thead>
             <tbody>
-              {orders.map((order) => {
+              {ordersPagination.paginatedItems.map((order) => {
                 const orderStatus = getOnlineOrderStatus(order.status);
                 const delivery = getOnlineOrderDeliveryType(order.deliveryType);
                 const origin = originData(order.origin);
@@ -452,6 +467,13 @@ export default function OnlineOrdersManagementPage() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={ordersPagination.page}
+          pageSize={ordersPagination.pageSize}
+          totalItems={ordersPagination.totalItems}
+          totalPages={ordersPagination.totalPages}
+          onPageChange={ordersPagination.setPage}
+        />
       </section>
 
       <AppModal

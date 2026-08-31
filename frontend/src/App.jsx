@@ -18,6 +18,7 @@ import ClientCartPage from "./pages/ClientCartPage.jsx";
 import CheckoutPage from "./pages/CheckoutPage.jsx";
 import CheckoutChoicePage from "./pages/CheckoutChoicePage.jsx";
 import GuestOrderTrackingPage from "./pages/GuestOrderTrackingPage.jsx";
+import GuestDeviceOrdersPage from "./pages/GuestDeviceOrdersPage.jsx";
 import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
 import PaymentResultPage from "./pages/PaymentResultPage.jsx";
 import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
@@ -65,6 +66,14 @@ function ProtectedClientPage({ children }) {
   );
 }
 
+function GuestStorePage({ children }) {
+  const { isAuthenticated, user } = useAuth();
+  if (isAuthenticated) {
+    return <Navigate to={user?.role === "CLIENT" ? "/orders" : "/dashboard"} replace />;
+  }
+  return <ClientLayout>{children}</ClientLayout>;
+}
+
 export default function App() {
   const { isAuthenticated, user } = useAuth();
 
@@ -81,6 +90,7 @@ export default function App() {
       <Route path="/orders" element={<ProtectedClientPage><ClientOrdersPage /></ProtectedClientPage>} />
       <Route path="/payment-result" element={<ProtectedClientPage><PaymentResultPage /></ProtectedClientPage>} />
       <Route path="/order-tracking" element={<StorePage><GuestOrderTrackingPage /></StorePage>} />
+      <Route path="/guest-orders" element={<GuestStorePage><GuestDeviceOrdersPage /></GuestStorePage>} />
       <Route
         path="/dashboard"
         element={

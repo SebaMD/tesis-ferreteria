@@ -16,6 +16,7 @@ import {
   getClientDeliveryAddressService,
   getClientOrdersService,
   getGuestOrderByAccessTokenService,
+  getGuestDeviceOrdersService,
   getGuestPendingOrderService,
   issueGuestOrderTrackingAccessService,
   OnlineOrderError,
@@ -26,6 +27,7 @@ import {
   validateCreateCheckoutBody,
   validateCreateGuestCheckoutBody,
 } from "./onlineOrders.validation.js";
+import { ensureGuestDeviceCookie } from "./guestDeviceCookie.js";
 
 function parseId(value: unknown) {
   const id = Number(value);
@@ -75,6 +77,7 @@ export async function createGuestCheckoutController(req: Request, res: Response)
     }
     const payment = await createGuestCheckoutService(
       requiredHeader(req, "x-guest-session"),
+      ensureGuestDeviceCookie(req, res),
       validation.value,
     );
     return handleSuccess(res, 201, "Pedido invitado reservado y pago Webpay iniciado", payment);
@@ -128,13 +131,33 @@ export async function getGuestOrderController(req: Request, res: Response) {
       res,
       200,
       "Pedido invitado obtenido exitosamente",
-      await getGuestOrderByAccessTokenService(requiredHeader(req, "x-guest-order-token")),
+      await getGuestOrderByAccessTokenService(
+        requiredHeader(req, "x-guest-order-token"),
+        ensureGuestDeviceCookie(req, res),
+      ),
     );
   } catch (error) {
     if (error instanceof OnlineOrderError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo obtener el pedido invitado", message(error));
+  }
+}
+
+export async function getGuestDeviceOrdersController(req: Request, res: Response) {
+  try {
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(
+      res,
+      200,
+      "Compras del dispositivo obtenidas exitosamente",
+      await getGuestDeviceOrdersService(ensureGuestDeviceCookie(req, res)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudieron obtener las compras del dispositivo", message(error));
   }
 }
 

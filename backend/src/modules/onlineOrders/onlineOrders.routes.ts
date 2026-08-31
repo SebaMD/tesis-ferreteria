@@ -9,6 +9,7 @@ import {
   createGuestCheckoutController,
   getDeliveryAddressController,
   getGuestOrderController,
+  getGuestDeviceOrdersController,
   getGuestPendingOrderController,
   getMyOrderByIdController,
   getMyOrdersController,
@@ -25,6 +26,7 @@ router.get("/guest/pending", getGuestPendingOrderController);
 router.post("/guest/checkout", createGuestCheckoutController);
 router.post("/guest/continue-payment", continueGuestPaymentController);
 router.get("/guest/order", getGuestOrderController);
+router.get("/guest/device-orders", getGuestDeviceOrdersController);
 router.post("/guest/retry-payment", retryGuestPaymentController);
 
 router.use(authenticateJwt);

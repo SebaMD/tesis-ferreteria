@@ -35,6 +35,7 @@ export default function ClientNavbar() {
         <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
           {isClient && <NavLink className={navClass} to="/orders"><ClipboardList className="inline" size={15} /> Mis pedidos</NavLink>}
+          {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">

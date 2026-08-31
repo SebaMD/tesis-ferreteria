@@ -1,5 +1,5 @@
-import { Search, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -13,24 +13,34 @@ export default function CatalogPage() {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const loadCatalog = useCallback(async ({ showLoading = false, notifyError = false } = {}) => {
+    if (showLoading) setLoading(true);
+    try {
+      const data = await getCatalogProductsRequest();
+      setProducts(data);
+      setLoadError("");
+    } catch (error) {
+      const message = getApiError(error, "No se pudo cargar el catálogo");
+      setLoadError(message);
+      if (notifyError) toast.error(message);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadCatalog = (notifyError = false) => getCatalogProductsRequest()
-      .then(setProducts)
-      .catch((error) => {
-        if (notifyError) toast.error(getApiError(error, "No se pudo cargar el catálogo"));
-      })
-      .finally(() => setLoading(false));
-
-    loadCatalog(true);
-    const refreshCatalog = () => loadCatalog(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadCatalog({ showLoading: true, notifyError: true });
+    const refreshCatalog = () => loadCatalog();
     const refreshTimer = window.setInterval(refreshCatalog, 30_000);
     window.addEventListener("focus", refreshCatalog);
     return () => {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshCatalog);
     };
-  }, []);
+  }, [loadCatalog]);
 
   const categories = useMemo(() => (
     [...new Map(products.map((product) => [product.categoryId, {
@@ -83,6 +93,15 @@ export default function CatalogPage() {
         </label>
       </section>
 
+      {loadError && (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <span className="flex items-center gap-2"><AlertTriangle size={18} />{loadError}</span>
+          <button className="border-amber-400 bg-white text-amber-950 hover:bg-amber-100" type="button" onClick={() => loadCatalog({ showLoading: true })} disabled={loading}>
+            <RefreshCw className={loading ? "animate-spin" : ""} size={17} /> Reintentar
+          </button>
+        </section>
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
         <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>
@@ -94,7 +113,7 @@ export default function CatalogPage() {
         ))}
       </section>
 
-      {!loading && filteredProducts.length === 0 && (
+      {!loading && !loadError && filteredProducts.length === 0 && (
         <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-sm text-slate-500">
           No encontramos productos con esos filtros.
         </p>

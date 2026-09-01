@@ -15,7 +15,7 @@ import { usersTable } from "./users.js";
 export const saleCancellationRequestsTable = pgTable(
   "sale_cancellation_requests",
   {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     saleId: integer("sale_id")
       .notNull()
       .references(() => salesTable.id),

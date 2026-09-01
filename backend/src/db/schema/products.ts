@@ -13,7 +13,7 @@ import { categoriesTable } from "./categories.js";
 
 export const productsTable = pgTable(
   "products", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     categoryId: integer("category_id")
       .notNull()
       .references(() => categoriesTable.id),

@@ -3,7 +3,7 @@ import { rolesTable } from "./roles.js";
 
 export const usersTable = pgTable(
   "users", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     roleId: integer("role_id")
       .notNull()
       .references(() => rolesTable.id),

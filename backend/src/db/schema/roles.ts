@@ -2,7 +2,7 @@ import { integer, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core"
 
 export const rolesTable = pgTable(
   "roles", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     name: varchar({ length: 100 }).notNull().unique(),
     description: text(),
     createdAt: timestamp("created_at").notNull().defaultNow(),

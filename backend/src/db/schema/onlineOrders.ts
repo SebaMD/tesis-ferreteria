@@ -15,7 +15,7 @@ import { usersTable } from "./users.js";
 export const onlineOrdersTable = pgTable(
   "online_orders",
   {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .references(() => usersTable.id),
     guestName: varchar("guest_name", { length: 240 }),

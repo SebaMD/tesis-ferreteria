@@ -14,7 +14,7 @@ import { onlineOrdersTable } from "./onlineOrders.js";
 export const onlinePaymentsTable = pgTable(
   "online_payments",
   {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     orderId: integer("order_id")
       .notNull()
       .references(() => onlineOrdersTable.id),

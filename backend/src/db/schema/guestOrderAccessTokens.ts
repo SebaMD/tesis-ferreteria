@@ -13,7 +13,7 @@ import { onlineOrdersTable } from "./onlineOrders.js";
 export const guestOrderAccessTokensTable = pgTable(
   "guest_order_access_tokens",
   {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     orderId: integer("order_id")
       .notNull()
       .references(() => onlineOrdersTable.id, { onDelete: "cascade" }),

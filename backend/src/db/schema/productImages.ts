@@ -13,7 +13,7 @@ import { productsTable } from "./products.js";
 export const productImagesTable = pgTable(
   "product_images",
   {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     productId: integer("product_id")
       .notNull()
       .references(() => productsTable.id, { onDelete: "cascade" }),

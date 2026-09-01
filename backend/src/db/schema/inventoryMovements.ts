@@ -6,7 +6,7 @@ import { usersTable } from "./users.js";
 
 export const inventoryMovementsTable = pgTable(
   "inventory_movements", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     productId: integer("product_id")
       .notNull()
       .references(() => productsTable.id),

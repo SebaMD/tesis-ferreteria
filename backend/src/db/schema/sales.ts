@@ -4,7 +4,7 @@ import { usersTable } from "./users.js";
 
 export const salesTable = pgTable(
   "sales", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     userId: integer("user_id")
       .notNull()
       .references(() => usersTable.id),

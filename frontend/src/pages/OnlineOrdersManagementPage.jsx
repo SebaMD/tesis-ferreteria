@@ -8,7 +8,7 @@ import {
   Search,
   Truck,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
@@ -167,12 +167,26 @@ function currentResponsible(order) {
   return "Sin asignar";
 }
 
-function emptyMessage({ scope, status, search }) {
+function emptyMessage({ scope, status, search, view }) {
   if (scope === "MINE") return "No tienes tareas asignadas actualmente.";
   if (search) return "No se encontraron pedidos con esos filtros.";
+  if (view === "DELIVERED") return "No hay pedidos entregados con esos filtros.";
   if (status === "PAID") return "No hay pedidos pendientes de preparación.";
   if (status !== "ALL") return "No se encontraron pedidos con ese estado.";
   return "No hay pedidos ni repartos operacionales.";
+}
+
+function taskTimestamp(order, deliveredView) {
+  const value = deliveredView
+    ? order.deliveredAt || order.updatedAt || order.paidAt || order.createdAt
+    : order.paidAt || order.createdAt;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareTaskIdentity(left, right) {
+  const originComparison = String(left.origin).localeCompare(String(right.origin));
+  return originComparison || Number(left.id) - Number(right.id);
 }
 
 function DetailField({ label, children }) {
@@ -193,6 +207,7 @@ export default function OnlineOrdersManagementPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [scope, setScope] = useState("ALL");
+  const [view, setView] = useState("ACTIVE");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [confirmationAction, setConfirmationAction] = useState(null);
@@ -201,6 +216,8 @@ export default function OnlineOrdersManagementPage() {
   const [proofUrl, setProofUrl] = useState("");
   const [proofLoading, setProofLoading] = useState(false);
   const requestSequence = useRef(0);
+  const deliveredView = scope === "ALL" && view === "DELIVERED";
+  const requestedStatus = deliveredView ? "DELIVERED" : status;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -217,7 +234,7 @@ export default function OnlineOrdersManagementPage() {
     setLoading(true);
     try {
       const data = await getOperationalOrdersRequest({
-        status,
+        status: requestedStatus,
         search: debouncedSearch || undefined,
         scope: canManage ? scope : "ALL",
       });
@@ -229,7 +246,7 @@ export default function OnlineOrdersManagementPage() {
     } finally {
       if (requestSequence.current === sequence) setLoading(false);
     }
-  }, [canManage, debouncedSearch, scope, status]);
+  }, [canManage, debouncedSearch, requestedStatus, scope]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -369,9 +386,21 @@ export default function OnlineOrdersManagementPage() {
     modalFooter = <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeModal}>Cerrar</button>;
   }
 
-  const noResultsMessage = emptyMessage({ scope, status, search: debouncedSearch });
-  const ordersPagination = usePagination(orders, {
-    resetKey: `${debouncedSearch}|${status}|${scope}`,
+  const displayedOrders = useMemo(() => {
+    const relevantOrders = scope === "ALL" && !deliveredView
+      ? orders.filter((order) => order.status !== "DELIVERED")
+      : orders;
+
+    return [...relevantOrders].sort((left, right) => {
+      const dateComparison = deliveredView
+        ? taskTimestamp(right, true) - taskTimestamp(left, true)
+        : taskTimestamp(left, false) - taskTimestamp(right, false);
+      return dateComparison || compareTaskIdentity(left, right);
+    });
+  }, [deliveredView, orders, scope]);
+  const noResultsMessage = emptyMessage({ scope, status, search: debouncedSearch, view });
+  const ordersPagination = usePagination(displayedOrders, {
+    resetKey: `${debouncedSearch}|${status}|${scope}|${view}`,
   });
 
   return (
@@ -394,6 +423,7 @@ export default function OnlineOrdersManagementPage() {
                 type="button"
                 onClick={() => {
                   setScope(option.value);
+                  if (option.value === "MINE") setView("ACTIVE");
                   if (
                     option.value === "MINE"
                     && !["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(status)
@@ -413,9 +443,19 @@ export default function OnlineOrdersManagementPage() {
           <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
           <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por folio o cliente" />
         </div>
-        <select className="w-60 shrink-0 max-[620px]:w-full" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por estado">
+        <select
+          className="w-60 shrink-0 max-[620px]:w-full"
+          value={deliveredView ? "DELIVERED" : status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filtrar por estado"
+          disabled={deliveredView}
+        >
           {STATUS_FILTERS
-            .filter((option) => scope !== "MINE" || ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value))
+            .filter((option) => {
+              if (deliveredView) return option.value === "DELIVERED";
+              if (scope === "MINE") return ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value);
+              return option.value !== "DELIVERED";
+            })
             .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         {(search || status !== "ALL") && (
@@ -431,8 +471,29 @@ export default function OnlineOrdersManagementPage() {
       </section>
 
       <section className={tablePanelClass}>
-        <div className="flex min-h-14 items-center border-b border-slate-200 px-4 py-3 text-xs text-slate-500">
-          Mostrando {ordersPagination.paginatedItems.length} de {ordersPagination.totalItems} {ordersPagination.totalItems === 1 ? "registro" : "registros"}
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-xs text-slate-500">
+          <span>Mostrando {ordersPagination.paginatedItems.length} de {ordersPagination.totalItems} {ordersPagination.totalItems === 1 ? "registro" : "registros"}</span>
+          {scope === "ALL" && (
+            <div className="flex items-center gap-2" aria-label="Tipo de pedidos">
+              {[
+                { value: "ACTIVE", label: "En curso" },
+                { value: "DELIVERED", label: "Entregados" },
+              ].map((option) => (
+                <button
+                  className={`min-h-8 px-3 py-1 text-xs font-bold ${view === option.value ? "border-rust-500 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-rust-500 hover:bg-rust-50"}`}
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setView(option.value);
+                    setStatus("ALL");
+                  }}
+                  aria-pressed={view === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className={tableScrollClass}>
           <table>
@@ -463,7 +524,7 @@ export default function OnlineOrdersManagementPage() {
                   </tr>
                 );
               })}
-              {!loading && orders.length === 0 && <tr><td className="h-24 text-center text-slate-500" colSpan="10">{noResultsMessage}</td></tr>}
+              {!loading && displayedOrders.length === 0 && <tr><td className="h-24 text-center text-slate-500" colSpan="10">{noResultsMessage}</td></tr>}
             </tbody>
           </table>
         </div>

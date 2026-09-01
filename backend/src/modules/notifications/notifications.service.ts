@@ -35,22 +35,28 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
 }
 
-function hasValidMailConfiguration() {
-  const credentialsAreComplete = Boolean(SMTP_USER) === Boolean(SMTP_PASS);
-  return Boolean(SMTP_HOST && MAIL_FROM && credentialsAreComplete);
+function mailConfigurationIssues() {
+  const issues: string[] = [];
+  if (!SMTP_HOST) issues.push("falta SMTP_HOST");
+  if (!MAIL_FROM) issues.push("falta MAIL_FROM");
+  if (Boolean(SMTP_USER) !== Boolean(SMTP_PASS)) {
+    issues.push("SMTP_USER y SMTP_PASS deben configurarse juntos");
+  }
+  return issues;
 }
 
 function warnInvalidConfigurationOnce() {
   if (configurationWarningPrinted) return;
   configurationWarningPrinted = true;
+  const issues = mailConfigurationIssues();
   console.warn(
-    "MAIL_ENABLED esta activo, pero faltan variables SMTP o las credenciales estan incompletas.",
+    `Configuracion SMTP incompleta: ${issues.join("; ")}. Los correos se omitiran sin afectar la operacion principal.`,
   );
 }
 
 function getTransporter() {
   if (!MAIL_ENABLED) return null;
-  if (!hasValidMailConfiguration()) {
+  if (mailConfigurationIssues().length > 0) {
     warnInvalidConfigurationOnce();
     return null;
   }

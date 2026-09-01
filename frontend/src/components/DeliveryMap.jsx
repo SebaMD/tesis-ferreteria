@@ -218,6 +218,10 @@ export default function DeliveryMap({
         </p>
       )}
 
+      {showRouteButton && destinationAddress && (
+        <span className="text-xs text-slate-500">Destino: {destinationAddress}</span>
+      )}
+
       {showRouteButton && fallbackRouteUrl && (
         <button
           className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
@@ -228,10 +232,6 @@ export default function DeliveryMap({
           {openingRoute ? <Truck className="animate-bounce" size={17} /> : <ExternalLink size={17} />}
           {openingRoute ? "Preparando ruta..." : "Abrir ruta"}
         </button>
-      )}
-
-      {!coordinates && destinationAddress && showRouteButton && (
-        <span className="text-xs text-slate-500">Destino: {destinationAddress}</span>
       )}
     </section>
   );

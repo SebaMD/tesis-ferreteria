@@ -24,13 +24,13 @@ export default function ClientNavbar() {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex min-h-17 w-full max-w-360 flex-wrap items-center gap-3 px-6 py-2 max-[720px]:px-3.5">
-        <Link className="mr-3 flex items-center gap-2 text-ink-950 no-underline" to="/catalog">
-          <BrandLogo className="size-11" />
-          <span className="grid leading-tight">
-            <strong className="text-sm">FERRETERIA FYF</strong>
+        <div className="mr-3 flex min-w-0 items-center gap-2 text-ink-950 max-[720px]:mr-0 max-[720px]:gap-1.5">
+          <BrandLogo className="size-11 max-[720px]:size-8" />
+          <Link className="grid leading-tight text-ink-950 no-underline" to="/catalog">
+            <strong className="text-sm max-[720px]:text-xs">Ferretería FYF</strong>
             <small className="text-[10px] font-semibold text-slate-500">Catálogo online</small>
-          </span>
-        </Link>
+          </Link>
+        </div>
 
         <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
@@ -38,7 +38,7 @@ export default function ClientNavbar() {
           {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {isAuthenticated && !isClient && (
             <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/dashboard">
               <LayoutDashboard size={17} />
@@ -51,7 +51,7 @@ export default function ClientNavbar() {
               <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:hidden" to="/login">
                 <LogIn size={17} /> Ingresar
               </Link>
-              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white no-underline hover:bg-ink-700" to="/register">
+              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white no-underline hover:bg-ink-700" to="/register" aria-label="Registrarse">
                 <UserPlus size={17} /> <span className="max-[620px]:hidden">Registrarse</span>
               </Link>
             </>

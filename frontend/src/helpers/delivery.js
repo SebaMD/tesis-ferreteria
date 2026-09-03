@@ -38,20 +38,24 @@ export function normalizeDeliveryCoordinates(latitude, longitude) {
 
 export function requestCurrentLocation() {
   return new Promise((resolve, reject) => {
+    if (window.isSecureContext === false) {
+      reject(new Error("Para usar tu ubicación, abre el sitio mediante una conexión HTTPS. Puedes continuar ingresando la dirección manualmente."));
+      return;
+    }
     if (!navigator.geolocation) {
-      reject(new Error("Este navegador no permite obtener la ubicación actual."));
+      reject(new Error("La geolocalización no está disponible en este navegador. Puedes continuar usando la dirección escrita."));
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coordinates = normalizeDeliveryCoordinates(
-          position.coords.latitude,
-          position.coords.longitude,
+          position?.coords?.latitude,
+          position?.coords?.longitude,
         );
 
         if (!coordinates) {
-          reject(new Error("El navegador no entregó una ubicación válida."));
+          reject(new Error("El navegador no entregó coordenadas válidas. Puedes continuar usando la dirección escrita."));
           return;
         }
 
@@ -61,10 +65,12 @@ export function requestCurrentLocation() {
         });
       },
       (error) => {
-        const message = error.code === error.PERMISSION_DENIED
-          ? "No autorizaste el acceso a tu ubicación. Puedes continuar usando la dirección escrita."
-          : "No se pudo obtener tu ubicación. Puedes continuar usando la dirección escrita.";
-        reject(new Error(message));
+        const messages = {
+          1: "El permiso de ubicación está denegado. Revisa los permisos del sitio en tu navegador.",
+          2: "Tu ubicación no está disponible en este momento. Comprueba la señal o inténtalo nuevamente.",
+          3: "Se agotó el tiempo de espera para obtener tu ubicación. Puedes volver a intentarlo.",
+        };
+        reject(new Error(`${messages[error.code] || "Ocurrió un error al obtener tu ubicación."} Puedes continuar usando la dirección escrita.`));
       },
       GEOLOCATION_OPTIONS,
     );

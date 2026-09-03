@@ -488,7 +488,7 @@ export default function CheckoutPage() {
                     <input readOnly value={DELIVERY_COMMUNE} aria-readonly="true" />
                   </label>
                   <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia / indicaciones <span className="font-normal text-slate-400">(opcional)</span>
-                    <textarea className="min-h-20 resize-y" maxLength="500" value={deliveryData.reference} onChange={(event) => updateDeliveryData("reference", event.target.value)} placeholder="Ej: portón azul, llamar al llegar" />
+                    <textarea className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500" maxLength="500" value={deliveryData.reference} onChange={(event) => updateDeliveryData("reference", event.target.value)} placeholder="Ej: portón azul, llamar al llegar" />
                   </label>
                   <DeliveryLocationPicker
                     latitude={deliveryData.latitude}

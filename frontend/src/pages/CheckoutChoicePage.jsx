@@ -35,7 +35,7 @@ export default function CheckoutChoicePage() {
 
         <article className="grid content-start gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="m-0 text-xl font-bold text-ink-950">Usar una cuenta CLIENT</h2>
+            <h2 className="m-0 text-xl font-bold text-ink-950">Usar una cuenta de cliente</h2>
             <ul className="mt-3 mb-0 grid list-none gap-2 p-0 text-sm text-slate-600">
               <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Guardar tu dirección.</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Consultar todos tus pedidos.</li>

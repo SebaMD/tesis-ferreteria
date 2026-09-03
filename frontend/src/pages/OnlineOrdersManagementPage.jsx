@@ -541,7 +541,7 @@ export default function OnlineOrdersManagementPage() {
         open={Boolean(selectedOrder)}
         onClose={closeModal}
         size="xlarge"
-        title={confirmationConfig?.title || (selectedOrder ? `${formatFolio(selectedOrder)} · ${selectedOrigin.label}` : "Detalle")}
+        title={confirmationConfig?.title || (selectedOrder ? `Folio ${formatFolio(selectedOrder)} · ${selectedOrder.origin === "ONLINE" ? "Pedido online" : selectedOrigin.label}` : "Detalle")}
         description={confirmationConfig?.description || "Detalle operacional, destino y trazabilidad de la tarea."}
         footer={modalFooter}
       >
@@ -566,7 +566,7 @@ export default function OnlineOrdersManagementPage() {
           <div className="grid gap-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={badgeClass(selectedOrigin.tone)}>{selectedOrigin.label}</span>
+                {selectedOrder.origin !== "ONLINE" && <span className={badgeClass(selectedOrigin.tone)}>{selectedOrigin.label}</span>}
                 <span className={badgeClass(selectedStatus.tone)}>{selectedStatus.label}</span>
                 <span className="text-sm font-bold text-slate-600">{selectedDelivery.label}</span>
               </div>

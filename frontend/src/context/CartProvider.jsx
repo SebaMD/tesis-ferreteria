@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useAuth from "../hooks/useAuth.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import { validateCartQuantity } from "../helpers/cartQuantity.js";
 import CartContext from "./CartContext.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
@@ -99,15 +100,11 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
   };
 
   const updateQuantity = (productId, quantity, stock) => {
-    const nextQuantity = Number(quantity);
-    const availableStock = Number(stock || 0);
-
-    if (!Number.isInteger(nextQuantity) || nextQuantity < 1 || nextQuantity > availableStock) {
-      return false;
-    }
+    const result = validateCartQuantity(quantity, stock);
+    if (!result.valid) return false;
 
     saveItems((current) => current.map((item) => Number(item.product.id) === Number(productId)
-      ? { ...item, quantity: nextQuantity }
+      ? { ...item, quantity: result.quantity }
       : item));
     return true;
   };

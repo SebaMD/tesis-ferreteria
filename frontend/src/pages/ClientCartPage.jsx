@@ -1,9 +1,10 @@
-import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import CartQuantityControl from "../components/CartQuantityControl.jsx";
 import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
@@ -54,17 +55,6 @@ export default function ClientCartPage() {
     (sum, row) => sum + Number(row.product.price || 0) * Number(row.quantity || 0),
     0,
   );
-
-  const changeQuantity = (row, quantity) => {
-    if (!row.available) return;
-    if (quantity < 1) {
-      removeItem(row.product.id);
-      return;
-    }
-    if (!updateQuantity(row.product.id, quantity, row.availableStock)) {
-      toast.error(`Solo hay ${row.availableStock} unidades disponibles`);
-    }
-  };
 
   const hasAvailabilityConflicts = rows.some(
     (row) => !row.available || row.requestedQuantity > row.availableStock,
@@ -117,11 +107,13 @@ export default function ClientCartPage() {
                     )}
                   </div>
                   <div className="grid justify-items-end gap-3 max-[620px]:col-span-2 max-[620px]:w-full max-[620px]:grid-cols-[1fr_auto] max-[620px]:items-center">
-                    <div className="flex items-center gap-1">
-                      <button className="size-9 min-h-9 border-slate-300 bg-white p-0 text-ink-700" type="button" onClick={() => changeQuantity(row, Math.min(row.quantity - 1, row.availableStock))} disabled={!row.available} aria-label="Disminuir cantidad"><Minus size={16} /></button>
-                      <input className="w-16 text-center" type="number" min="1" max={row.availableStock} value={row.quantity} onChange={(event) => changeQuantity(row, Number(event.target.value))} disabled={!row.available} aria-label={`Cantidad de ${row.product.name}`} />
-                      <button className="size-9 min-h-9 border-slate-300 bg-white p-0 text-ink-700" type="button" onClick={() => changeQuantity(row, row.quantity + 1)} disabled={!row.available || row.quantity >= row.availableStock} aria-label="Aumentar cantidad"><Plus size={16} /></button>
-                    </div>
+                    <CartQuantityControl
+                      quantity={row.quantity}
+                      availableStock={row.availableStock}
+                      disabled={!row.available}
+                      productName={row.product.name}
+                      onQuantityChange={(quantity) => updateQuantity(row.product.id, quantity, row.availableStock)}
+                    />
                     <div className="flex items-center gap-2">
                       <strong className="font-mono text-ink-950">{formatClp(Number(row.product.price) * row.quantity)}</strong>
                       <button className="size-9 min-h-9 border-critical-600 bg-critical-600 p-0" type="button" onClick={() => removeItem(row.product.id)} aria-label={`Eliminar ${row.product.name}`}><Trash2 size={16} /></button>

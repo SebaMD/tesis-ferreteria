@@ -1,13 +1,15 @@
-import { ImageOff, ShoppingCart } from "lucide-react";
+import { ImageOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import { formatQuantityWithUnit } from "../helpers/units.js";
+import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
 }
 
-export default function ProductCard({ product, onAdd }) {
+export default function ProductCard({ product }) {
   const primaryImage = getPrimaryImage(product);
   const availableStock = getOnlineAvailableStock(product);
   const hasStock = availableStock > 0;
@@ -31,16 +33,14 @@ export default function ProductCard({ product, onAdd }) {
           </Link>
           <strong className="font-mono text-xl text-ink-950">{formatClp(product.price)}</strong>
           <span className={`text-xs font-extrabold ${hasStock ? "text-positive-600" : "text-critical-600"}`}>
-            {hasStock ? `Disponible · ${availableStock} ${product.unitMeasure}` : "SIN STOCK"}
+            {hasStock ? `Disponible · ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
+        <div className="grid gap-2">
+          <ProductPurchaseControls product={product} />
           <Link className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to={`/catalog/products/${product.id}`}>
             Ver producto
           </Link>
-          <button className="min-h-10 px-3 text-xs" type="button" onClick={() => onAdd(product)} disabled={!hasStock}>
-            <ShoppingCart size={16} /> Agregar
-          </button>
         </div>
       </div>
     </article>

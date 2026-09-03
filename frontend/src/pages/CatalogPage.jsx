@@ -4,11 +4,9 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductCard from "../components/ProductCard.jsx";
-import useCart from "../hooks/useCart.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 export default function CatalogPage() {
-  const { addItem } = useCart();
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -62,12 +60,6 @@ export default function CatalogPage() {
     });
   }, [categoryId, products, search]);
 
-  const handleAdd = (product) => {
-    const result = addItem(product, 1);
-    if (result.success) toast.success(`${product.name} agregado al carrito`);
-    else toast.error(result.message);
-  };
-
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
@@ -109,7 +101,7 @@ export default function CatalogPage() {
 
       <section className="grid grid-cols-4 gap-4 max-[1180px]:grid-cols-3 max-[880px]:grid-cols-2 max-[540px]:grid-cols-1">
         {filteredProducts.map((product) => (
-          <ProductCard key={product.id} product={product} onAdd={handleAdd} />
+          <ProductCard key={product.id} product={product} />
         ))}
       </section>
 

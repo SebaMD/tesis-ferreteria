@@ -12,6 +12,7 @@ import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "
 import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
+import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
@@ -54,24 +55,6 @@ const INVENTORY_DATE_OPTIONS = {
 const suggestionListClass = "mt-2 grid max-h-36 overflow-auto rounded-[5px] border border-slate-200 bg-white p-1 shadow-[0_8px_18px_rgba(16,21,31,0.08)]";
 const suggestionButtonClass = "flex min-h-8 w-full items-center justify-between rounded-[4px] border-0 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-ink-700 hover:bg-rust-50 hover:text-rust-700";
 const suggestionEmptyClass = "rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500";
-const UNIT_PLURALS = {
-  unidad: "unidades",
-  litro: "litros",
-  metro: "metros",
-  caja: "cajas",
-  paquete: "paquetes",
-  saco: "sacos",
-  bolsa: "bolsas",
-  par: "pares",
-  rollo: "rollos",
-  plancha: "planchas",
-  barra: "barras",
-  tubo: "tubos",
-  pieza: "piezas",
-  docena: "docenas",
-  set: "sets",
-  galón: "galones",
-};
 
 function normalizeEntityName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
@@ -104,12 +87,6 @@ function compareCategoriesByNewest(left, right) {
   }
 
   return Number(right.id) - Number(left.id);
-}
-
-function getDisplayUnit(quantity, unitMeasure) {
-  const normalizedUnit = String(unitMeasure || "unidad").trim();
-  if (Number(quantity) === 1) return normalizedUnit;
-  return UNIT_PLURALS[normalizedUnit.toLocaleLowerCase("es")] || normalizedUnit;
 }
 
 const emptyForm = {
@@ -213,7 +190,7 @@ export default function ProductsPage() {
       setShowInactiveProducts(Boolean(product.status === false && canViewInactiveProducts));
 
       toast.success(
-        `${product.name} · stock ${product.currentStock} ${product.unitMeasure}`,
+        `${product.name} · stock ${formatQuantityWithUnit(product.currentStock, product.unitMeasure)}`,
       );
     },
   });

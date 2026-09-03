@@ -7,10 +7,12 @@ import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { formatClp } from "../helpers/formatters.js";
+import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
 import { readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
+import useCartActions from "../hooks/useCartActions.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
@@ -36,7 +38,8 @@ function createCheckoutKey() {
 
 export default function CheckoutPage() {
   const { isAuthenticated, user } = useAuth();
-  const { items, removeItem } = useCart();
+  const { items } = useCart();
+  const { removeProduct } = useCartActions();
   const isClient = isAuthenticated && user?.role === "CLIENT";
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
@@ -201,8 +204,7 @@ export default function CheckoutPage() {
     }
     if (submitting) return;
 
-    removeItem(productId);
-    toast.success("Producto eliminado del carrito");
+    removeProduct(productId);
   };
 
   const handleContinuePayment = async () => {
@@ -354,10 +356,10 @@ export default function CheckoutPage() {
                       <div className="grid min-w-0 gap-1">
                         <strong className="truncate text-sm text-ink-950">{row.product.name}</strong>
                         <span className="text-xs text-slate-500">
-                          {formatClp(row.product.price)} × {row.quantity}
+                          {formatClp(row.product.price)} × {formatQuantityWithUnit(row.quantity, row.product.unitMeasure)}
                         </span>
                         {row.isValid ? (
-                          <span className="text-xs font-bold text-positive-600">{row.availableStock} disponibles</span>
+                          <span className="text-xs font-bold text-positive-600">{formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles</span>
                         ) : (
                           <span className="text-xs font-bold text-critical-600">
                             {row.isAvailable

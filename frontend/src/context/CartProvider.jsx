@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useAuth from "../hooks/useAuth.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
-import { validateCartQuantity } from "../helpers/cartQuantity.js";
+import { getRemainingCartCapacity, validateCartQuantity } from "../helpers/cartQuantity.js";
+import { createCartRemovalUndo } from "../helpers/cartUndo.js";
+import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import CartContext from "./CartContext.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
@@ -49,40 +51,42 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     return mergedItems;
   });
 
+  const itemsRef = useRef(items);
+  const active = useRef(false);
+  const contextVersion = useRef(0);
+
   useEffect(() => {
+    active.current = true;
     const syncCart = (event) => {
-      if (event.key === storageKey) setItems(readCart(storageKey));
+      if (event.key === storageKey) {
+        itemsRef.current = readCart(storageKey);
+        setItems(itemsRef.current);
+      }
+      if (event.key === null || event.key === "token" || event.key === "user" || event.key === storageKey) contextVersion.current += 1;
     };
 
     window.addEventListener("storage", syncCart);
-    return () => window.removeEventListener("storage", syncCart);
+    return () => {
+      active.current = false;
+      window.removeEventListener("storage", syncCart);
+    };
   }, [storageKey]);
 
   const saveItems = (updater) => {
-    setItems((current) => {
-      const nextItems = typeof updater === "function" ? updater(current) : updater;
-      localStorage.setItem(storageKey, JSON.stringify(nextItems));
-      return nextItems;
-    });
+    const nextItems = typeof updater === "function" ? updater(itemsRef.current) : updater;
+    localStorage.setItem(storageKey, JSON.stringify(nextItems));
+    itemsRef.current = nextItems;
+    setItems(nextItems);
   };
 
   const addItem = (product, quantity = 1) => {
-    const requestedQuantity = Number(quantity);
     const stock = getOnlineAvailableStock(product);
-    const currentItem = items.find((item) => Number(item.product.id) === Number(product?.id));
+    const currentItem = itemsRef.current.find((item) => Number(item.product.id) === Number(product?.id));
     const currentQuantity = Number(currentItem?.quantity || 0);
 
-    if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1) {
-      return { success: false, message: "La cantidad debe ser un numero entero mayor que cero" };
-    }
-
-    if (stock < 1) {
-      return { success: false, message: "Este producto no tiene stock disponible" };
-    }
-
-    if (currentQuantity + requestedQuantity > stock) {
-      return { success: false, message: `Solo hay ${stock} unidades disponibles` };
-    }
+    const validation = validateCartQuantity(quantity, getRemainingCartCapacity(stock, currentQuantity));
+    if (!validation.valid) return { success: false, message: validation.message };
+    const requestedQuantity = validation.quantity;
 
     saveItems((current) => {
       const existing = current.find((item) => Number(item.product.id) === Number(product.id));
@@ -110,12 +114,26 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
   };
 
   const removeItem = (productId) => {
+    const item = itemsRef.current.find((entry) => Number(entry.product.id) === Number(productId));
+    if (!item) return null;
+    const version = contextVersion.current;
     saveItems((current) => current.filter((item) => Number(item.product.id) !== Number(productId)));
+    return createCartRemovalUndo({
+      item: { product: item.product, quantity: Number(item.quantity) },
+      isCurrentContext: () => active.current && contextVersion.current === version,
+      loadProduct: getCatalogProductByIdRequest,
+      hasProduct: (id) => itemsRef.current.some((entry) => Number(entry.product.id) === Number(id)),
+      addItem,
+    });
   };
 
-  const clearCart = () => saveItems([]);
+  const clearCart = () => {
+    contextVersion.current += 1;
+    saveItems([]);
+  };
 
   const removePurchasedItems = (purchasedItems = []) => {
+    contextVersion.current += 1;
     const purchasedByProduct = new Map(
       purchasedItems.map((item) => [Number(item.productId), Number(item.quantity || 0)]),
     );
@@ -153,7 +171,7 @@ export default function CartProvider({ children }) {
 
   return (
     <CartStore
-      key={storageKey}
+      key={`${storageKey}:${user?.role || "anonymous"}:${user?.id || "anonymous"}`}
       storageKey={storageKey}
       guestStorageKey={guestStorageKey}
       mergeGuestCart={user?.role === "CLIENT"}

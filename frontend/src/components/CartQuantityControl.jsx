@@ -2,13 +2,14 @@ import { Minus, Plus } from "lucide-react";
 import { useId, useState } from "react";
 import { validateCartQuantity } from "../helpers/cartQuantity.js";
 
-export default function CartQuantityControl({ quantity, availableStock, disabled, productName, onQuantityChange }) {
+export default function CartQuantityControl({ quantity, availableStock, disabled, productName, onQuantityChange, onValidationChange }) {
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState("");
   const errorId = useId();
 
   const confirmQuantity = (value) => {
     const result = validateCartQuantity(value, availableStock);
+    onValidationChange?.(result.valid);
     if (!result.valid) {
       setError(result.message);
     } else if (!disabled && !onQuantityChange(result.quantity)) {
@@ -28,7 +29,11 @@ export default function CartQuantityControl({ quantity, availableStock, disabled
           type="text"
           inputMode="numeric"
           value={draft ?? String(quantity)}
-          onChange={(event) => { setDraft(event.target.value); setError(""); }}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setError("");
+            onValidationChange?.(validateCartQuantity(event.target.value, availableStock).valid);
+          }}
           onBlur={() => confirmQuantity(draft ?? quantity)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {

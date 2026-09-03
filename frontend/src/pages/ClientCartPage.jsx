@@ -9,6 +9,8 @@ import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
+import useCartActions from "../hooks/useCartActions.js";
+import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 function getPrimaryImage(product) {
@@ -16,7 +18,8 @@ function getPrimaryImage(product) {
 }
 
 export default function ClientCartPage() {
-  const { items, removeItem, updateQuantity, clearCart } = useCart();
+  const { items, updateQuantity, clearCart } = useCart();
+  const { removeProduct } = useCartActions();
   const { isAuthenticated, user } = useAuth();
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -96,9 +99,9 @@ export default function ClientCartPage() {
                   </Link>
                   <div className="grid gap-1.5">
                     <Link className="font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`}>{row.product.name}</Link>
-                    <span className="font-mono text-sm text-ink-700">{formatClp(row.product.price)} por {row.product.unitMeasure}</span>
+                    <span className="font-mono text-sm text-ink-700">{formatClp(row.product.price)} por {getDisplayUnit(1, row.product.unitMeasure)}</span>
                     <span className={`text-xs font-bold ${row.available ? "text-positive-600" : "text-critical-600"}`}>
-                      {row.available ? `${row.availableStock} disponibles` : "Producto no disponible actualmente"}
+                      {row.available ? `${formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles` : "Producto no disponible actualmente"}
                     </span>
                     {invalidQuantity && (
                       <span className="text-xs text-critical-600">
@@ -116,7 +119,7 @@ export default function ClientCartPage() {
                     />
                     <div className="flex items-center gap-2">
                       <strong className="font-mono text-ink-950">{formatClp(Number(row.product.price) * row.quantity)}</strong>
-                      <button className="size-9 min-h-9 border-critical-600 bg-critical-600 p-0" type="button" onClick={() => removeItem(row.product.id)} aria-label={`Eliminar ${row.product.name}`}><Trash2 size={16} /></button>
+                      <button className="size-9 min-h-9 border-critical-600 bg-critical-600 p-0" type="button" onClick={() => removeProduct(row.product.id)} aria-label={`Eliminar ${row.product.name}`}><Trash2 size={16} /></button>
                     </div>
                   </div>
                 </article>

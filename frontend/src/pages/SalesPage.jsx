@@ -2,6 +2,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -1794,7 +1795,7 @@ export default function SalesPage() {
                       </div>
                       <div className="rounded bg-white px-2 py-1.5">
                         <span className="block text-slate-500">Stock</span>
-                        <strong className="font-mono text-ink-950">{availableStock} {product.unitMeasure}</strong>
+                        <strong className="font-mono text-ink-950">{formatQuantityWithUnit(availableStock, product.unitMeasure)}</strong>
                       </div>
                     </div>
                     <button
@@ -1854,7 +1855,7 @@ export default function SalesPage() {
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="truncate text-[13px] text-ink-950">{row.product.name}</strong>
                         <span className="text-[11px] text-slate-500">
-                          {formatClp(row.product.price)} · stock {getRemainingPosStock(row.product, row.quantity)} {row.product.unitMeasure}
+                          {formatClp(row.product.price)} · stock {formatQuantityWithUnit(getRemainingPosStock(row.product, row.quantity), row.product.unitMeasure)}
                         </span>
                       </div>
                       <button
@@ -1893,10 +1894,10 @@ export default function SalesPage() {
               <div className="rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 py-2 text-xs text-positive-600">
                 <span className="font-semibold">Último escaneado:</span>{" "}
                 <strong>{lastScannedProduct.name}</strong>
-                {" · "}stock disponible {getRemainingPosStock(
+                {" · "}stock disponible {formatQuantityWithUnit(getRemainingPosStock(
                   lastScannedProduct,
                   cartQuantityByProduct.get(String(lastScannedProduct.id)) || 0,
-                )} {lastScannedProduct.unitMeasure}
+                ), lastScannedProduct.unitMeasure)}
               </div>
             )}
 

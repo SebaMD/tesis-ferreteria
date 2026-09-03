@@ -1,4 +1,12 @@
 // Validate a confirmed quantity, not the temporary text while an input is edited.
+export function getRemainingCartCapacity(availableStock, quantityInCart = 0) {
+  const stock = Number(availableStock);
+  const current = Number(quantityInCart);
+  return Number.isFinite(stock) && Number.isSafeInteger(current) && current >= 0
+    ? Math.max(0, stock - current)
+    : 0;
+}
+
 export function validateCartQuantity(value, availableStock) {
   const text = typeof value === "string" ? value.trim() : String(value);
   const quantity = Number(text);

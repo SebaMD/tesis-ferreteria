@@ -24,6 +24,7 @@ import PaymentResultPage from "./pages/PaymentResultPage.jsx";
 import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
 import ProductDetailPage from "./pages/ProductDetailPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
+import FavoritesPage from "./pages/FavoritesPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
       <Route path="/checkout" element={<StorePage><CheckoutPage /></StorePage>} />
       <Route path="/orders" element={<ProtectedClientPage><ClientOrdersPage /></ProtectedClientPage>} />
+      <Route path="/favorites" element={<ProtectedClientPage><FavoritesPage /></ProtectedClientPage>} />
       <Route path="/payment-result" element={<ProtectedClientPage><PaymentResultPage /></ProtectedClientPage>} />
       <Route path="/order-tracking" element={<StorePage><GuestOrderTrackingPage /></StorePage>} />
       <Route path="/guest-orders" element={<GuestStorePage><GuestDeviceOrdersPage /></GuestStorePage>} />

@@ -18,6 +18,7 @@ export const productsTable = pgTable(
       .notNull()
       .references(() => categoriesTable.id),
     name: varchar({ length: 150 }).notNull(),
+    brand: varchar({ length: 100 }),
     barcode: varchar({ length: 64 }),
     description: text(),
     price: numeric({ precision: 12, scale: 2 }).notNull(),

@@ -2,7 +2,7 @@ import type { NewProduct } from "../../db/schema/index.js";
 
 export type ProductBody = Pick<
   NewProduct,
-  "categoryId" | "name" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "status"
+  "categoryId" | "name" | "brand" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "status"
 >;
 export type EditProductBody = Partial<ProductBody>;
 
@@ -44,7 +44,7 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
 
   const input = body as Record<string, unknown>;
   const value: EditProductBody = {};
-  const allowed = ["categoryId", "name", "barcode", "description", "price", "unitMeasure", "minimumStock", "status"];
+  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "status"];
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -61,6 +61,15 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
     const name = text(input.name);
     if (name.length < 2 || name.length > 150) return { success: false, error: "El nombre debe tener entre 2 y 150 caracteres" };
     value.name = name;
+  }
+
+  if (input.brand !== undefined) {
+    if (input.brand !== null && typeof input.brand !== "string") {
+      return { success: false, error: "La marca debe ser texto" };
+    }
+    const brand = input.brand === null ? "" : text(input.brand as string);
+    if (brand.length > 100) return { success: false, error: "La marca admite hasta 100 caracteres" };
+    value.brand = brand || null;
   }
 
   if (input.barcode !== undefined) {

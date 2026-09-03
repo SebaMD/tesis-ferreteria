@@ -92,6 +92,7 @@ function compareCategoriesByNewest(left, right) {
 const emptyForm = {
   categoryId: "",
   name: "",
+  brand: "",
   barcode: "",
   description: "",
   price: "",
@@ -454,6 +455,7 @@ export default function ProductsPage() {
     pendingProductImages.length > 0 ||
     Number(form.categoryId) !== Number(linkedRegistration.product.categoryId) ||
     normalizeSearchValue(form.name) !== normalizeSearchValue(linkedRegistration.product.name) ||
+    normalizeSearchValue(form.brand) !== normalizeSearchValue(linkedRegistration.product.brand) ||
     normalizedProductBarcode !== String(linkedRegistration.product.barcode || "") ||
     normalizeSearchValue(form.description) !== normalizeSearchValue(linkedRegistration.product.description) ||
     normalizeSearchValue(unitSearch) !== normalizeSearchValue(linkedRegistration.product.unitMeasure) ||
@@ -670,6 +672,7 @@ export default function ProductsPage() {
       const productData = {
         ...form,
         barcode: normalizedProductBarcode || null,
+        brand: String(form.brand || "").trim().replace(/\s+/g, " ") || null,
         categoryId: Number(form.categoryId),
         price: Number(form.price),
         unitMeasure: finalUnitMeasure,
@@ -719,6 +722,7 @@ export default function ProductsPage() {
         setForm({
           categoryId: String(product.categoryId),
           name: product.name,
+          brand: product.brand || "",
           barcode: product.barcode || "",
           description: product.description || "",
           price: product.price,
@@ -900,6 +904,7 @@ export default function ProductsPage() {
     setForm(product ? {
       categoryId: String(product.categoryId),
       name: product.name,
+      brand: product.brand || "",
       barcode: product.barcode || "",
       description: product.description || "",
       price: product.price,
@@ -968,6 +973,7 @@ export default function ProductsPage() {
     setForm({
       categoryId: String(product.categoryId),
       name: product.name,
+      brand: product.brand || "",
       barcode: product.barcode || "",
       description: product.description || "",
       price: product.price,
@@ -1602,6 +1608,10 @@ export default function ProductsPage() {
               <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
             </label>
             <label>
+              Marca (opcional)
+              <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />
+            </label>
+            <label>
               Código de barra (opcional)
               <div className="relative">
                 <ScanBarcode className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={18} />
@@ -2037,7 +2047,7 @@ export default function ProductsPage() {
               return (
                 <tr key={product.id}>
                   <td className={codeCellClass}>#{product.id}</td>
-                  <td>{product.name}</td>
+                  <td>{product.name}{product.brand && <small className="block text-xs text-slate-500">{product.brand}</small>}</td>
                   <td className={codeCellClass}>{product.barcode || "Sin código"}</td>
                   <td>{product.categoryName}</td>
                   <td className={numericCellClass}>{formatClp(product.price)}</td>

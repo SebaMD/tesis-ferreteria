@@ -9,6 +9,7 @@ const productColumns = {
     categoryId: productsTable.categoryId,
     categoryName: categoriesTable.name,
     name: productsTable.name,
+    brand: productsTable.brand,
     barcode: productsTable.barcode,
     description: productsTable.description,
     price: productsTable.price,

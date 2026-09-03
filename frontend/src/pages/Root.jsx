@@ -2,6 +2,7 @@ import { Toaster } from "sonner";
 import App from "../App.jsx";
 import AuthProvider from "../context/AuthProvider.jsx";
 import CartProvider from "../context/CartProvider.jsx";
+import FavoritesProvider from "../context/FavoritesProvider.jsx";
 
 export default function Root() {
   return (
@@ -19,7 +20,7 @@ export default function Root() {
             },
           }}
         />
-        <App />
+        <FavoritesProvider><App /></FavoritesProvider>
       </CartProvider>
     </AuthProvider>
   );

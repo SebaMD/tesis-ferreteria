@@ -1,4 +1,4 @@
-import { ClipboardList, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
@@ -35,6 +35,7 @@ export default function ClientNavbar() {
         <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
           {isClient && <NavLink className={navClass} to="/orders"><ClipboardList className="inline" size={15} /> Mis pedidos</NavLink>}
+          {isClient && <NavLink className={navClass} to="/favorites"><Heart className="inline" size={15} /> Favoritos</NavLink>}
           {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
         </nav>
 

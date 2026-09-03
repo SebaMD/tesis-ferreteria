@@ -14,6 +14,7 @@ function toCatalogProduct(
     categoryId: product.categoryId,
     categoryName: product.categoryName,
     name: product.name,
+    brand: product.brand,
     description: product.description,
     price: product.price,
     unitMeasure: product.unitMeasure,

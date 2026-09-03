@@ -4,6 +4,7 @@ import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
+import FavoriteButton from "./FavoriteButton.jsx";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
@@ -15,7 +16,8 @@ export default function ProductCard({ product }) {
   const hasStock = availableStock > 0;
 
   return (
-    <article className="group grid min-h-full grid-rows-[220px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_12px_rgba(16,21,31,0.05)] transition hover:-translate-y-0.5 hover:border-rust-200 hover:shadow-[0_8px_24px_rgba(16,21,31,0.09)]">
+    <article className="group relative grid min-h-full min-w-0 grid-rows-[220px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_12px_rgba(16,21,31,0.05)] transition hover:-translate-y-0.5 hover:border-rust-200 hover:shadow-[0_8px_24px_rgba(16,21,31,0.09)]">
+      <FavoriteButton product={product} className="absolute top-3 right-3 z-10" />
       <Link className="grid place-items-center overflow-hidden bg-slate-100 text-slate-500" to={`/catalog/products/${product.id}`} aria-label={`Ver ${product.name}`}>
         {primaryImage ? (
           <img className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" src={primaryImage.imageUrl} alt={product.name} loading="lazy" />
@@ -32,6 +34,7 @@ export default function ProductCard({ product }) {
             {product.name}
           </Link>
           <strong className="font-mono text-xl text-ink-950">{formatClp(product.price)}</strong>
+          {product.brand && <span className="truncate text-xs text-slate-500" title={product.brand}>{product.brand}</span>}
           <span className={`text-xs font-extrabold ${hasStock ? "text-positive-600" : "text-critical-600"}`}>
             {hasStock ? `Disponible · ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}
           </span>

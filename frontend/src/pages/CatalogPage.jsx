@@ -1,15 +1,21 @@
-import { AlertTriangle, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductCard from "../components/ProductCard.jsx";
+import AppModal from "../components/AppModal.jsx";
+import CatalogFilters from "../components/CatalogFilters.jsx";
+import BackToTop from "../components/BackToTop.jsx";
+import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, filterAndSortCatalog, getCatalogBrands } from "../helpers/catalogFilters.js";
+import { CATALOG_BACKGROUND_IMAGE } from "../helpers/catalogAppearance.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 export default function CatalogPage() {
   const [products, setProducts] = useState([]);
-  const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [filters, setFilters] = useState(EMPTY_CATALOG_FILTERS);
+  const [order, setOrder] = useState("name-asc");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -47,18 +53,10 @@ export default function CatalogPage() {
     }])).values()].sort((a, b) => a.name.localeCompare(b.name, "es"))
   ), [products]);
 
-  const filteredProducts = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase("es");
-
-    return products.filter((product) => {
-      const matchesCategory = !categoryId || String(product.categoryId) === categoryId;
-      const matchesSearch = !normalizedSearch
-        || product.name.toLocaleLowerCase("es").includes(normalizedSearch)
-        || product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
-        || String(product.description || "").toLocaleLowerCase("es").includes(normalizedSearch);
-      return matchesCategory && matchesSearch;
-    });
-  }, [categoryId, products, search]);
+  const brands = useMemo(() => getCatalogBrands(products), [products]);
+  const filteredProducts = useMemo(() => filterAndSortCatalog(products, filters, order), [products, filters, order]);
+  const activeCount = Object.entries(filters).filter(([key, value]) => value !== EMPTY_CATALOG_FILTERS[key]).length;
+  const filterProps = { filters, onChange: setFilters, onClear: () => setFilters(EMPTY_CATALOG_FILTERS), categories, brands };
 
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
@@ -67,22 +65,6 @@ export default function CatalogPage() {
         <span className="text-xs font-extrabold text-rust-500 uppercase">Catálogo Ferretería FYF</span>
         <h1 className="mt-2 mb-2 max-w-180 text-3xl font-bold max-[620px]:text-2xl">Encuentra materiales y herramientas para tu próximo proyecto</h1>
         <p className="m-0 max-w-180 text-sm leading-6 text-slate-300">Consulta precios y disponibilidad para comprar de forma segura mediante Webpay Plus.</p>
-      </section>
-
-      <section className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4">
-        <label className="relative min-w-65 flex-1 max-[620px]:min-w-0">
-          <span className="sr-only">Buscar productos</span>
-          <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-500" size={18} />
-          <input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar productos..." />
-        </label>
-        <label className="relative w-full max-w-70 max-[620px]:max-w-none">
-          <span className="sr-only">Filtrar por categoría</span>
-          <SlidersHorizontal className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-500" size={17} />
-          <select className="pl-10" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-            <option value="">Todas las categorías</option>
-            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-          </select>
-        </label>
       </section>
 
       {loadError && (
@@ -94,22 +76,45 @@ export default function CatalogPage() {
         </section>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
-        <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>
-      </div>
-
-      <section className="grid grid-cols-4 gap-4 max-[1180px]:grid-cols-3 max-[880px]:grid-cols-2 max-[540px]:grid-cols-1">
-        {filteredProducts.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
+      <section className="rounded-lg bg-slate-100 bg-cover bg-center bg-no-repeat" style={CATALOG_BACKGROUND_IMAGE ? { backgroundImage: `url(${CATALOG_BACKGROUND_IMAGE})` } : undefined}>
+        <div className="grid gap-4 rounded-lg bg-white/85 p-4 max-[720px]:p-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
+              <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>
+              {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
+            </div>
+            <div className="flex min-w-0 items-end gap-2 max-[720px]:w-full">
+              <label className="grid min-w-0 flex-1 gap-1 text-xs font-semibold">
+                Ordenar por
+                <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
+                  {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal size={17} /> Filtrar{activeCount > 0 ? ` (${activeCount})` : ""}
+              </button>
+            </div>
+          </div>
+          <div className="grid min-w-0 grid-cols-[240px_minmax(0,1fr)] items-start gap-5 max-[1023px]:grid-cols-1">
+            <aside className="rounded-lg border border-slate-200 bg-white p-4 max-[1023px]:hidden" aria-label="Filtros del catálogo">
+              <CatalogFilters {...filterProps} />
+            </aside>
+            <div className="min-w-0">
+              <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:grid-cols-1" aria-label="Productos del catálogo">
+                {filteredProducts.map((product) => <ProductCard key={product.id} product={product} />)}
+              </section>
+              {!loading && !loadError && filteredProducts.length === 0 && (
+                <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-sm text-slate-500">
+                  No encontramos productos con esos filtros.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
-
-      {!loading && !loadError && filteredProducts.length === 0 && (
-        <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-sm text-slate-500">
-          No encontramos productos con esos filtros.
-        </p>
-      )}
+      <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small" footer={<button type="button" onClick={() => setFiltersOpen(false)}>Ver {filteredProducts.length} productos</button>}><CatalogFilters {...filterProps} /></AppModal>
+      <BackToTop />
     </main>
   );
 }

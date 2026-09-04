@@ -3,14 +3,18 @@ import type { AuthenticatedRequest } from "../../middlewares/authentication.midd
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { ImageFileError } from "../../utils/imageFiles.js";
 import {
+  getDispatchLabelService,
   getDeliveryProofFileService,
   getLogisticsOrderByIdService,
   getLogisticsOrdersService,
+  getPreparationLabelService,
   parseLogisticsOrigin,
   type LogisticsAction,
   OrderLogisticsError,
   transitionLogisticsOrderService,
 } from "./orderLogistics.service.js";
+import { renderDispatchLabelPdf } from "./dispatchLabelPdf.js";
+import { renderPreparationLabelPdf } from "./preparationLabelPdf.js";
 
 function parseId(value: unknown) {
   const id = Number(value);
@@ -111,12 +115,51 @@ export function transitionLogisticsOrderController(action: LogisticsAction) {
 export async function getDeliveryProofController(req: AuthenticatedRequest, res: Response) {
   try {
     const { origin, taskId } = routeTask(req);
-    const proof = await getDeliveryProofFileService(origin, taskId);
+    const proof = await getDeliveryProofFileService(origin, taskId, authenticatedUser(req));
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.type(proof.mimeType);
     return res.sendFile(proof.absolutePath);
   } catch (error) {
     return handleControllerError(res, error, "No se pudo obtener el comprobante de entrega");
+  }
+}
+
+async function sendLabelPdf(res: Response, pdf: Buffer, filename: string) {
+  res.status(200);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Length", String(pdf.length));
+  return res.send(pdf);
+}
+
+export async function getPreparationLabelController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { origin, taskId } = routeTask(req);
+    const model = await getPreparationLabelService(origin, taskId, authenticatedUser(req));
+    return await sendLabelPdf(
+      res,
+      await renderPreparationLabelPdf(model),
+      `etiqueta-preparacion-${model.folio}.pdf`,
+    );
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo generar la etiqueta de preparacion");
+  }
+}
+
+export async function getDispatchLabelController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { origin, taskId } = routeTask(req);
+    const model = await getDispatchLabelService(origin, taskId, authenticatedUser(req));
+    return await sendLabelPdf(
+      res,
+      await renderDispatchLabelPdf(model),
+      `etiqueta-despacho-${model.folio}.pdf`,
+    );
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo generar la etiqueta de despacho");
   }
 }

@@ -49,3 +49,15 @@ export async function getDeliveryProofRequest(origin, orderId) {
   );
   return response.data;
 }
+
+export function getPreparationLabelRequest(origin, orderId) {
+  return api.get(`${logisticsPath(origin, orderId)}/preparation-label`, {
+    responseType: "blob",
+  });
+}
+
+export function getDispatchLabelRequest(origin, orderId) {
+  return api.get(`${logisticsPath(origin, orderId)}/dispatch-label`, {
+    responseType: "blob",
+  });
+}

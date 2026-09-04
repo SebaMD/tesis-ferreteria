@@ -8,12 +8,15 @@ import {
   createCheckoutController,
   createGuestCheckoutController,
   getDeliveryAddressController,
+  getGuestDeviceOrderDeliveryProofController,
   getGuestOrderController,
+  getGuestOrderDeliveryProofController,
   getGuestOrderReceiptController,
   getGuestDeviceOrderReceiptController,
   getGuestDeviceOrdersController,
   getGuestPendingOrderController,
   getMyOrderByIdController,
+  getMyOrderDeliveryProofController,
   getMyOrderReceiptController,
   getMyOrdersController,
   retryPaymentController,
@@ -29,8 +32,10 @@ router.get("/guest/pending", getGuestPendingOrderController);
 router.post("/guest/checkout", createGuestCheckoutController);
 router.post("/guest/continue-payment", continueGuestPaymentController);
 router.get("/guest/order", getGuestOrderController);
+router.get("/guest/order/delivery-proof", getGuestOrderDeliveryProofController);
 router.get("/guest/order/receipt", getGuestOrderReceiptController);
 router.get("/guest/device-orders", getGuestDeviceOrdersController);
+router.get("/guest/device-orders/:id/delivery-proof", getGuestDeviceOrderDeliveryProofController);
 router.get("/guest/device-orders/:id/receipt", getGuestDeviceOrderReceiptController);
 router.post("/guest/retry-payment", retryGuestPaymentController);
 
@@ -43,6 +48,7 @@ router.post("/checkout", createCheckoutController);
 router.post("/:id/continue-payment", continuePaymentController);
 router.post("/:id/retry-payment", retryPaymentController);
 router.patch("/:id/archive", archiveOrderController);
+router.get("/:id/delivery-proof", getMyOrderDeliveryProofController);
 router.get("/:id/receipt", getMyOrderReceiptController);
 router.get("/:id", getMyOrderByIdController);
 

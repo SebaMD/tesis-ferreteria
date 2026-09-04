@@ -1,9 +1,9 @@
-function receiptFilename(response, folio) {
+function pdfFilename(response, fallbackFilename) {
   const disposition = String(response?.headers?.["content-disposition"] || "");
   const match = disposition.match(/filename="?([^";]+)"?/i);
   const serverFilename = match?.[1]?.trim();
   if (serverFilename && /^[a-zA-Z0-9._-]+\.pdf$/i.test(serverFilename)) return serverFilename;
-  return `comprobante-${folio}.pdf`;
+  return fallbackFilename;
 }
 
 async function normalizeBlobError(error) {
@@ -18,7 +18,7 @@ async function normalizeBlobError(error) {
   }
 }
 
-export async function downloadReceipt(request, folio) {
+export async function downloadPdf(request, fallbackFilename) {
   let response;
   try {
     response = await request();
@@ -33,10 +33,14 @@ export async function downloadReceipt(request, folio) {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = receiptFilename(response, folio);
+  anchor.download = pdfFilename(response, fallbackFilename);
   anchor.hidden = true;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   window.requestAnimationFrame(() => URL.revokeObjectURL(objectUrl));
+}
+
+export function downloadReceipt(request, folio) {
+  return downloadPdf(request, `comprobante-${folio}.pdf`);
 }

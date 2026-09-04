@@ -4,13 +4,16 @@ import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import AppModal from "../components/AppModal.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
+import { dangerButtonClass } from "../helpers/uiClasses.js";
 import {
   archiveOnlineOrderRequest,
   continueOnlineOrderPaymentRequest,
   getMyOnlineOrdersRequest,
+  getMyOnlineOrderDeliveryProofRequest,
   getMyOnlineOrderReceiptRequest,
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
@@ -46,7 +49,9 @@ export default function ClientOrdersPage() {
   const [loadError, setLoadError] = useState("");
   const [paymentActionOrderIds, setPaymentActionOrderIds] = useState(() => new Set());
   const [archivingOrderId, setArchivingOrderId] = useState(null);
+  const [archiveCandidate, setArchiveCandidate] = useState(null);
   const paymentActionRefs = useRef(new Set());
+  const archiveActionRef = useRef(null);
 
   const loadOrders = useCallback(async ({ showLoading = true, notifyError = true } = {}) => {
     if (showLoading) setLoading(true);
@@ -117,18 +122,20 @@ export default function ClientOrdersPage() {
   };
 
   const handleArchiveOrder = async (order) => {
-    if (!order.canArchive || archivingOrderId === order.id) return;
-    if (!window.confirm("Este intento dejará de aparecer en Mis pedidos, pero conservará su registro. ¿Deseas ocultarlo?")) return;
+    if (!order?.canArchive || archiveActionRef.current !== null) return;
+    archiveActionRef.current = order.id;
     setArchivingOrderId(order.id);
     try {
       await archiveOnlineOrderRequest(order.id);
       setOrders((current) => current.filter((item) => item.id !== order.id));
       setSelectedOrder((current) => current?.id === order.id ? null : current);
+      setArchiveCandidate(null);
       toast.success("El intento se ocultó de Mis pedidos");
     } catch (error) {
       toast.error(getApiError(error, "No se pudo ocultar el pedido"));
       await loadOrders({ showLoading: false, notifyError: false });
     } finally {
+      archiveActionRef.current = null;
       setArchivingOrderId(null);
     }
   };
@@ -152,7 +159,7 @@ export default function ClientOrdersPage() {
           </button>
         )}
         {order.canArchive && (
-          <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => handleArchiveOrder(order)} disabled={isArchiving || isProcessing}>
+          <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => setArchiveCandidate(order)} disabled={isArchiving || isProcessing}>
             {isArchiving ? <RefreshCw className="animate-spin" size={16} /> : <EyeOff size={16} />}
             {isArchiving ? "Ocultando..." : "Ocultar"}
           </button>
@@ -212,7 +219,43 @@ export default function ClientOrdersPage() {
           )}
         </>
       )}
-      <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+      <OrderDetailModal
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        requestDeliveryProof={({ id }) => getMyOnlineOrderDeliveryProofRequest(id)}
+      />
+      <AppModal
+        open={Boolean(archiveCandidate)}
+        title="Ocultar intento de pago"
+        description="Esta acción solo modifica su visibilidad en Mis pedidos."
+        onClose={() => {
+          if (!archivingOrderId) setArchiveCandidate(null);
+        }}
+        size="small"
+        footer={(
+          <>
+            <button
+              className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
+              type="button"
+              onClick={() => setArchiveCandidate(null)}
+              disabled={Boolean(archivingOrderId)}
+            >Cancelar</button>
+            <button
+              className={dangerButtonClass}
+              type="button"
+              onClick={() => handleArchiveOrder(archiveCandidate)}
+              disabled={Boolean(archivingOrderId)}
+            >
+              {archivingOrderId ? <RefreshCw className="animate-spin" size={16} /> : <EyeOff size={16} />}
+              {archivingOrderId ? "Ocultando..." : "Ocultar"}
+            </button>
+          </>
+        )}
+      >
+        <p className="m-0 text-sm leading-6 text-slate-600">
+          Este intento dejará de aparecer en Mis pedidos, pero conservará su registro.
+        </p>
+      </AppModal>
     </main>
   );
 }

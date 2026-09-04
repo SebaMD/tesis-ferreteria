@@ -16,6 +16,7 @@ import DeliveryEvidenceForm from "../components/DeliveryEvidenceForm.jsx";
 import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
@@ -41,6 +42,8 @@ import {
   getDeliveryProofRequest,
   getOperationalOrderByIdRequest,
   getOperationalOrdersRequest,
+  getDispatchLabelRequest,
+  getPreparationLabelRequest,
   startOrderDeliveryRequest,
   startOrderPreparationRequest,
 } from "../services/orderLogistics.service.js";
@@ -137,7 +140,7 @@ function customerName(order) {
   return order.customerName
     || `${order.clientNames || ""} ${order.clientSurnames || ""}`.trim()
     || order.deliveryRecipientName
-    || "Sin registrar";
+    || "Datos reservados";
 }
 
 function productSummary(order) {
@@ -367,6 +370,14 @@ export default function OnlineOrdersManagementPage() {
     ? getOnlineOrderDeliveryType(selectedOrder.deliveryType)
     : null;
   const selectedOrigin = selectedOrder ? originData(selectedOrder.origin) : null;
+  const availableDocuments = new Set(selectedOrder?.availableDocuments || []);
+  const hasDeliveryDetails = Boolean(
+    selectedOrder?.deliveryRecipientName
+    || selectedOrder?.deliveryPhone
+    || selectedOrder?.deliveryAddress
+    || selectedOrder?.deliveryCommune
+    || selectedOrder?.deliveryReference,
+  );
 
   let modalFooter = null;
   if (selectedOrder && confirmationConfig) {
@@ -441,7 +452,7 @@ export default function OnlineOrdersManagementPage() {
       <section className="flex items-center gap-3 max-[620px]:flex-col max-[620px]:items-stretch">
         <div className="relative min-w-64 flex-1 max-[620px]:min-w-0">
           <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
-          <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por folio o cliente" />
+          <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
         </div>
         <select
           className="w-60 shrink-0 max-[620px]:w-full"
@@ -573,26 +584,53 @@ export default function OnlineOrdersManagementPage() {
               <strong className="font-mono text-xl text-ink-950">{formatClp(selectedOrder.total)}</strong>
             </div>
 
+            {availableDocuments.size > 0 && (
+              <section className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-slate-50 p-3" aria-label="Documentos operacionales">
+                {availableDocuments.has("PREPARATION_LABEL") && (
+                  <DownloadLogisticsLabelButton
+                    order={selectedOrder}
+                    type="PREPARATION_LABEL"
+                    requestLabel={({ origin, id }) => getPreparationLabelRequest(origin, id)}
+                  />
+                )}
+                {availableDocuments.has("DISPATCH_LABEL") && (
+                  <DownloadLogisticsLabelButton
+                    order={selectedOrder}
+                    type="DISPATCH_LABEL"
+                    requestLabel={({ origin, id }) => getDispatchLabelRequest(origin, id)}
+                  />
+                )}
+              </section>
+            )}
+
             <dl className="grid grid-cols-3 gap-3 max-[800px]:grid-cols-2 max-[520px]:grid-cols-1">
-              <DetailField label={selectedOrder.origin === "ONLINE" ? "Comprador" : "Destinatario"}>
-                {customerName(selectedOrder)}{selectedOrder.customerType === "GUEST" ? " · Invitado" : ""}
-              </DetailField>
-              {selectedOrder.customerType !== "GUEST" && (
+              {selectedOrder.customerName && (
+                <DetailField label={selectedOrder.origin === "ONLINE" ? "Comprador" : "Destinatario"}>
+                  {selectedOrder.customerName}{selectedOrder.customerType === "GUEST" ? " · Invitado" : ""}
+                </DetailField>
+              )}
+              {selectedOrder.customerRut && (
                 <DetailField label="RUT">{selectedOrder.customerRut || selectedOrder.clientRut}</DetailField>
               )}
               <DetailField label="Fecha de compra">{formatDate(selectedOrder.paidAt || selectedOrder.createdAt, DATE_OPTIONS)}</DetailField>
-              {selectedOrder.deliveryType === "DELIVERY" ? (
+              {selectedOrder.deliveryType === "DELIVERY" && hasDeliveryDetails ? (
                 <>
-                  <DetailField label="Destinatario">{selectedOrder.deliveryRecipientName || customerName(selectedOrder)}</DetailField>
-                  <DetailField label="Teléfono">{selectedOrder.deliveryPhone}</DetailField>
-                  <DetailField label="Comuna">{selectedOrder.deliveryCommune}</DetailField>
-                  <DetailField label="Dirección">{selectedOrder.deliveryAddress}</DetailField>
+                  {selectedOrder.deliveryRecipientName && <DetailField label="Destinatario">{selectedOrder.deliveryRecipientName}</DetailField>}
+                  {selectedOrder.deliveryPhone && <DetailField label="Teléfono">{selectedOrder.deliveryPhone}</DetailField>}
+                  {selectedOrder.deliveryCommune && <DetailField label="Comuna">{selectedOrder.deliveryCommune}</DetailField>}
+                  {selectedOrder.deliveryAddress && <DetailField label="Dirección">{selectedOrder.deliveryAddress}</DetailField>}
                   <DetailField label="Referencia">{selectedOrder.deliveryReference || "Sin referencia"}</DetailField>
                 </>
-              ) : <DetailField label="Modalidad">Retiro en tienda</DetailField>}
+              ) : selectedOrder.deliveryType === "PICKUP" ? <DetailField label="Modalidad">Retiro en tienda</DetailField> : null}
             </dl>
 
-            {selectedOrder.deliveryType === "DELIVERY" && (
+            {canManage && selectedOrder.deliveryType === "DELIVERY" && !hasDeliveryDetails && (
+              <p className="m-0 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+                Los datos privados del destino se habilitan únicamente al bodeguero responsable cuando inicia el reparto.
+              </p>
+            )}
+
+            {selectedOrder.deliveryType === "DELIVERY" && selectedOrder.deliveryAddress && (
               <DeliveryMap
                 latitude={selectedOrder.deliveryLatitude}
                 longitude={selectedOrder.deliveryLongitude}

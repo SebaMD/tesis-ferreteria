@@ -97,6 +97,7 @@ const orderColumns = {
   preparedAt: onlineOrdersTable.preparedAt,
   deliveryStartedAt: onlineOrdersTable.deliveryStartedAt,
   deliveredAt: onlineOrdersTable.deliveredAt,
+  proofAvailable: sql<boolean>`${onlineOrdersTable.deliveryProofImagePath} is not null`,
   createdAt: onlineOrdersTable.createdAt,
   updatedAt: onlineOrdersTable.updatedAt,
 };
@@ -944,6 +945,51 @@ export async function findOrderByIdAndGuestDeviceHash(
 
   const [order] = await attachOrderData(orders);
   return order ?? null;
+}
+
+const deliveryProofColumns = {
+  id: onlineOrdersTable.id,
+  clientId: onlineOrdersTable.clientId,
+  status: onlineOrdersTable.status,
+  deliveryType: onlineOrdersTable.deliveryType,
+  imagePath: onlineOrdersTable.deliveryProofImagePath,
+};
+
+export async function findDeliveryProofByOrderAndClient(orderId: number, clientId: number) {
+  const [proof] = await db.select(deliveryProofColumns)
+    .from(onlineOrdersTable)
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      eq(onlineOrdersTable.clientId, clientId),
+    ))
+    .limit(1);
+  return proof ?? null;
+}
+
+export async function findDeliveryProofForGuest(orderId: number) {
+  const [proof] = await db.select(deliveryProofColumns)
+    .from(onlineOrdersTable)
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      isNull(onlineOrdersTable.clientId),
+    ))
+    .limit(1);
+  return proof ?? null;
+}
+
+export async function findDeliveryProofByGuestDevice(
+  orderId: number,
+  guestDeviceHash: string,
+) {
+  const [proof] = await db.select(deliveryProofColumns)
+    .from(onlineOrdersTable)
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      eq(onlineOrdersTable.guestDeviceHash, guestDeviceHash),
+      isNull(onlineOrdersTable.clientId),
+    ))
+    .limit(1);
+  return proof ?? null;
 }
 
 export async function findOrdersByGuestDeviceHash(guestDeviceHash: string) {

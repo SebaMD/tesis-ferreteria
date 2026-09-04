@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
+import { ImageFileError } from "../../utils/imageFiles.js";
 import { WebpayConfigurationError } from "../payments/webpay.service.js";
 import {
   archiveClientOrderService,
@@ -13,13 +14,16 @@ import {
   createGuestCheckoutService,
   findOrderIdByPaymentReturnService,
   getClientOrderByIdService,
+  getClientOrderDeliveryProofService,
   getClientDeliveryAddressService,
   getClientOrderReceiptService,
   getClientOrdersService,
   getGuestDeviceOrderReceiptService,
+  getGuestDeviceOrderDeliveryProofService,
   getGuestOrderByAccessTokenService,
   getGuestDeviceOrdersService,
   getGuestOrderReceiptByAccessTokenService,
+  getGuestOrderDeliveryProofByAccessTokenService,
   getGuestPendingOrderService,
   issueGuestOrderTrackingAccessService,
   OnlineOrderError,
@@ -163,6 +167,50 @@ export async function getGuestDeviceOrdersController(req: Request, res: Response
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudieron obtener las compras del dispositivo", message(error));
+  }
+}
+
+function sendDeliveryProof(res: Response, proof: { absolutePath: string; mimeType: string }) {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.type(proof.mimeType);
+  return res.sendFile(proof.absolutePath);
+}
+
+function handleDeliveryProofError(res: Response, error: unknown) {
+  if (error instanceof OnlineOrderError || error instanceof ImageFileError) {
+    return handleErrorClient(res, error.statusCode, error.message);
+  }
+  return handleErrorServer(res, 500, "No se pudo obtener la evidencia de entrega", message(error));
+}
+
+export async function getGuestOrderDeliveryProofController(req: Request, res: Response) {
+  try {
+    return sendDeliveryProof(
+      res,
+      await getGuestOrderDeliveryProofByAccessTokenService(
+        requiredHeader(req, "x-guest-order-token"),
+      ),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
+  }
+}
+
+export async function getGuestDeviceOrderDeliveryProofController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return sendDeliveryProof(
+      res,
+      await getGuestDeviceOrderDeliveryProofService(
+        ensureGuestDeviceCookie(req, res),
+        orderId,
+      ),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
   }
 }
 
@@ -342,6 +390,22 @@ export async function getMyOrderReceiptController(req: AuthenticatedRequest, res
     return await sendOrderReceipt(res, model);
   } catch (error) {
     return handleReceiptError(res, error);
+  }
+}
+
+export async function getMyOrderDeliveryProofController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return sendDeliveryProof(
+      res,
+      await getClientOrderDeliveryProofService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
   }
 }
 

@@ -6,6 +6,7 @@ import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
 import {
   getGuestDeviceOrderReceiptRequest,
+  getGuestDeviceOrderDeliveryProofRequest,
   getGuestDeviceOrdersRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -113,7 +114,11 @@ export default function GuestDeviceOrdersPage() {
         </>
       )}
 
-      <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+      <OrderDetailModal
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        requestDeliveryProof={({ id }) => getGuestDeviceOrderDeliveryProofRequest(id)}
+      />
     </main>
   );
 }

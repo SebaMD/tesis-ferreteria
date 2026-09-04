@@ -40,6 +40,10 @@ export function getMyOnlineOrderReceiptRequest(orderId) {
   return api.get(`/online-orders/${orderId}/receipt`, { responseType: "blob" });
 }
 
+export function getMyOnlineOrderDeliveryProofRequest(orderId) {
+  return api.get(`/online-orders/${orderId}/delivery-proof`, { responseType: "blob" });
+}
+
 function guestSessionHeaders() {
   return { "X-Guest-Session": getOrCreateGuestSessionId() };
 }
@@ -83,6 +87,13 @@ export function getGuestOnlineOrderReceiptRequest(accessToken) {
   });
 }
 
+export function getGuestOnlineOrderDeliveryProofRequest(accessToken) {
+  return api.get("/online-orders/guest/order/delivery-proof", {
+    headers: guestOrderHeaders(accessToken),
+    responseType: "blob",
+  });
+}
+
 export async function retryGuestOnlineOrderPaymentRequest(accessToken) {
   const response = await api.post("/online-orders/guest/retry-payment", null, {
     headers: guestOrderHeaders(accessToken),
@@ -97,6 +108,12 @@ export async function getGuestDeviceOrdersRequest() {
 
 export function getGuestDeviceOrderReceiptRequest(orderId) {
   return api.get(`/online-orders/guest/device-orders/${orderId}/receipt`, {
+    responseType: "blob",
+  });
+}
+
+export function getGuestDeviceOrderDeliveryProofRequest(orderId) {
+  return api.get(`/online-orders/guest/device-orders/${orderId}/delivery-proof`, {
     responseType: "blob",
   });
 }

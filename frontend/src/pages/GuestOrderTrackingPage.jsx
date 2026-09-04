@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
+import DeliveryProofViewer from "../components/orders/DeliveryProofViewer.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   captureGuestAccessTokenFromHash,
@@ -35,6 +36,7 @@ import {
   continueGuestOnlineOrderPaymentRequest,
   getGuestOnlineOrderRequest,
   getGuestOnlineOrderReceiptRequest,
+  getGuestOnlineOrderDeliveryProofRequest,
   retryGuestOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -219,6 +221,11 @@ export default function GuestOrderTrackingPage() {
               <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
             </div>
           </section>
+
+          <DeliveryProofViewer
+            order={order}
+            requestProof={() => getGuestOnlineOrderDeliveryProofRequest(accessTokenRef.current)}
+          />
 
           {order.buyerEmail && (
             <p className="m-0 flex w-full items-start gap-2 rounded-[5px] bg-blue-50 px-4 py-3 text-left text-xs leading-5 text-blue-900">

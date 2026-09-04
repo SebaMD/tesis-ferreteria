@@ -7,11 +7,14 @@ import {
 } from "../notifications/notifications.service.js";
 import { issueGuestOrderTrackingAccessService } from "../onlineOrders/onlineOrders.service.js";
 import {
-  getStoredImageMimeType,
   removeStoredImageFile,
-  resolveStoredImagePath,
   saveImageFile,
 } from "../../utils/imageFiles.js";
+import { resolveDeliveryProofFile } from "./deliveryProofFile.js";
+import {
+  buildDispatchLabelModel,
+  buildPreparationLabelModel,
+} from "./logisticsLabelModels.js";
 import {
   findDeliveryProofPath,
   findLogisticsTaskById,
@@ -38,6 +41,8 @@ export type LogisticsAction =
   | "START_DELIVERY"
   | "COMPLETE_DELIVERY";
 
+export type LogisticsDocument = "PREPARATION_LABEL" | "DISPATCH_LABEL";
+
 export type DeliveryEvidenceInput = {
   receiverName?: unknown;
   receiverRut?: unknown;
@@ -58,7 +63,7 @@ function normalizeSearch(value?: string) {
   return folio ? folio[1] : search;
 }
 
-function allowedActions(task: LogisticsTask, user: { id: number; role: string }) {
+export function allowedActions(task: LogisticsTask, user: { id: number; role: string }) {
   if (user.role !== "WAREHOUSE") return [] as LogisticsAction[];
   if (task.status === "PAID") return ["START_PREPARATION"] as LogisticsAction[];
   if (task.status === "PREPARING" && task.preparationStartedBy === user.id) {
@@ -72,17 +77,110 @@ function allowedActions(task: LogisticsTask, user: { id: number; role: string })
   return [] as LogisticsAction[];
 }
 
-function presentTask(task: LogisticsTask, user: { id: number; role: string }) {
+export function allowedDocuments(task: LogisticsTask, user: { id: number; role: string }) {
+  const documents: LogisticsDocument[] = [];
+  const administrative = user.role === "ADMIN" || user.role === "MANAGER";
+
+  if (
+    administrative
+    || task.status === "PAID"
+    || (task.status === "PREPARING" && task.preparationStartedBy === user.id)
+  ) {
+    if (["PAID", "PREPARING", "READY_FOR_PICKUP", "READY_FOR_DELIVERY"].includes(task.status)) {
+      documents.push("PREPARATION_LABEL");
+    }
+  }
+
+  if (task.deliveryType === "DELIVERY") {
+    if (
+      (administrative && ["READY_FOR_DELIVERY", "OUT_FOR_DELIVERY", "DELIVERED"].includes(task.status))
+      || (task.status === "OUT_FOR_DELIVERY" && task.deliveryStartedBy === user.id)
+    ) {
+      documents.push("DISPATCH_LABEL");
+    }
+  }
+
+  return documents;
+}
+
+export function presentLogisticsTask(task: LogisticsTask, user: { id: number; role: string }) {
   const {
     preparationStartedBy,
     preparedBy: _preparedBy,
     deliveryStartedBy,
     deliveredBy: _deliveredBy,
-    ...publicTask
+    customerType,
+    customerName,
+    customerRut: _customerRut,
+    customerEmail: _customerEmail,
+    customerPhone: _customerPhone,
+    deliveryRecipientName,
+    deliveryRecipientRut: _deliveryRecipientRut,
+    deliveryPhone,
+    deliveryAddress,
+    deliveryCommune,
+    deliveryReference,
+    deliveryLatitude,
+    deliveryLongitude,
+    receivedByName: _receivedByName,
+    receivedByRut: _receivedByRut,
+    proofAvailable,
+    paymentMethod,
+    cashierName,
+    ...operationalTask
   } = task;
+
+  const documents = allowedDocuments(task, user);
+  if (user.role === "ADMIN" || user.role === "MANAGER") {
+    return {
+      ...operationalTask,
+      customerType,
+      customerName,
+      customerRut: task.customerRut,
+      customerEmail: task.customerEmail,
+      customerPhone: task.customerPhone,
+      deliveryRecipientName,
+      deliveryRecipientRut: task.deliveryRecipientRut,
+      deliveryPhone,
+      deliveryAddress,
+      deliveryCommune,
+      deliveryReference,
+      deliveryLatitude,
+      deliveryLongitude,
+      receivedByName: task.receivedByName,
+      receivedByRut: task.receivedByRut,
+      proofAvailable,
+      paymentMethod,
+      cashierName,
+      allowedActions: allowedActions(task, user),
+      availableDocuments: documents,
+    };
+  }
+
+  const pickupIdentification = task.status === "READY_FOR_PICKUP"
+    ? { customerName }
+    : {};
+  const assignedDelivery = task.deliveryType === "DELIVERY"
+    && task.status === "OUT_FOR_DELIVERY"
+    && deliveryStartedBy === user.id
+    ? {
+      deliveryRecipientName,
+      deliveryPhone,
+      deliveryAddress,
+      deliveryCommune,
+      deliveryReference,
+      deliveryLatitude,
+      deliveryLongitude,
+    }
+    : {};
+
   return {
-    ...publicTask,
+    ...operationalTask,
+    ...pickupIdentification,
+    ...assignedDelivery,
+    proofAvailable: false,
     allowedActions: allowedActions(task, user),
+    availableDocuments: documents,
   };
 }
 
@@ -116,12 +214,13 @@ export async function getLogisticsOrdersService(
     search: search || undefined,
     scope,
     userId: scope === "MINE" ? user.id : undefined,
+    allowPrivateSearch: user.role === "ADMIN" || user.role === "MANAGER",
   });
   const oldestFirst = scope === "MINE" || Boolean(status && status !== "DELIVERED");
   tasks.sort((left, right) => oldestFirst
     ? taskDate(left) - taskDate(right)
     : taskDate(right) - taskDate(left));
-  return tasks.map((task) => presentTask(task, user));
+  return tasks.map((task) => presentLogisticsTask(task, user));
 }
 
 export async function getLogisticsOrderByIdService(
@@ -136,7 +235,7 @@ export async function getLogisticsOrderByIdService(
       404,
     );
   }
-  return presentTask(task, user);
+  return presentLogisticsTask(task, user);
 }
 
 function transitionError(action: LogisticsAction, status: string) {
@@ -332,7 +431,7 @@ export async function transitionLogisticsOrderService(
       });
     }
 
-    return presentTask(updatedTask, { id: warehouseUserId, role: "WAREHOUSE" });
+    return presentLogisticsTask(updatedTask, { id: warehouseUserId, role: "WAREHOUSE" });
   } catch (error) {
     if (savedProofPath && !transitionCommitted) {
       await removeStoredImageFile(savedProofPath).catch(() => undefined);
@@ -341,12 +440,51 @@ export async function transitionLogisticsOrderService(
   }
 }
 
-export async function getDeliveryProofFileService(origin: LogisticsOrigin, taskId: number) {
-  const imagePath = await findDeliveryProofPath(origin, taskId);
-  if (!imagePath || !imagePath.replaceAll("\\", "/").startsWith("deliveries/")) {
-    throw new OrderLogisticsError("La compra no tiene fotografia comprobante", 404);
+export async function getDeliveryProofFileService(
+  origin: LogisticsOrigin,
+  taskId: number,
+  user: { id: number; role: string },
+) {
+  if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    throw new OrderLogisticsError("No tienes permisos para ver esta evidencia", 403);
   }
-  const mimeType = getStoredImageMimeType(imagePath);
-  if (!mimeType) throw new OrderLogisticsError("El comprobante almacenado no es valido", 500);
-  return { absolutePath: resolveStoredImagePath(imagePath), mimeType };
+  const task = await findLogisticsTaskById(origin, taskId);
+  if (!task || task.deliveryType !== "DELIVERY" || task.status !== "DELIVERED") {
+    throw new OrderLogisticsError("La evidencia de entrega no esta disponible", 404);
+  }
+  return resolveDeliveryProofFile(origin, taskId, await findDeliveryProofPath(origin, taskId));
+}
+
+async function logisticsDocumentTask(
+  origin: LogisticsOrigin,
+  taskId: number,
+  user: { id: number; role: string },
+  document: LogisticsDocument,
+) {
+  const task = await findLogisticsTaskById(origin, taskId);
+  if (!task) throw new OrderLogisticsError("Tarea logistica no encontrada", 404);
+  if (!allowedDocuments(task, user).includes(document)) {
+    throw new OrderLogisticsError("No tienes permisos para descargar esta etiqueta", 403);
+  }
+  return task;
+}
+
+export async function getPreparationLabelService(
+  origin: LogisticsOrigin,
+  taskId: number,
+  user: { id: number; role: string },
+) {
+  return buildPreparationLabelModel(
+    await logisticsDocumentTask(origin, taskId, user, "PREPARATION_LABEL"),
+  );
+}
+
+export async function getDispatchLabelService(
+  origin: LogisticsOrigin,
+  taskId: number,
+  user: { id: number; role: string },
+) {
+  return buildDispatchLabelModel(
+    await logisticsDocumentTask(origin, taskId, user, "DISPATCH_LABEL"),
+  );
 }

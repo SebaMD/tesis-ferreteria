@@ -241,6 +241,17 @@
     opacity: 0.5;
   }
 
+  .back-to-top {
+    transition: opacity 240ms ease-out, translate 240ms ease-out;
+    will-change: opacity, translate;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .back-to-top {
+      transition: none;
+    }
+  }
+
   input,
   select {
     @apply min-h-10.25 w-full rounded-[5px] border border-slate-300 bg-white px-2.75 text-ink-950;

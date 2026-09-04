@@ -5,6 +5,7 @@ import {
   WEBPAY_TIMEOUT_MS,
 } from "../../config/configEnv.js";
 import { applyInventoryMovement } from "../inventory/inventory.service.js";
+import { resolveDeliveryProofFile } from "../orderLogistics/deliveryProofFile.js";
 import {
   notifyClientOrderBestEffort,
   notifyWarehousesBestEffort,
@@ -34,6 +35,9 @@ import {
   expirePendingOrdersForGuestSession,
   findActiveClientForUpdate,
   findClientDeliveryAddress,
+  findDeliveryProofByGuestDevice,
+  findDeliveryProofByOrderAndClient,
+  findDeliveryProofForGuest,
   findLatestPaymentForOrder,
   findOtherAuthorizedPayment,
   findPaymentsNeedingReconciliation,
@@ -1489,6 +1493,44 @@ export async function getGuestDeviceOrderReceiptService(
   }
   return receiptModelFromOrder(
     await findOrderByIdAndGuestDeviceHash(orderId, guestDeviceHash),
+  );
+}
+
+type DeliveryProofSource = Awaited<ReturnType<typeof findDeliveryProofForGuest>>;
+
+async function buyerDeliveryProofFile(proof: DeliveryProofSource) {
+  if (
+    !proof
+    || proof.deliveryType !== "DELIVERY"
+    || proof.status !== "DELIVERED"
+    || !proof.imagePath
+  ) {
+    throw new OnlineOrderError("La evidencia de entrega no esta disponible", 404);
+  }
+  return resolveDeliveryProofFile("ONLINE", proof.id, proof.imagePath);
+}
+
+export async function getClientOrderDeliveryProofService(clientId: number, orderId: number) {
+  return buyerDeliveryProofFile(await findDeliveryProofByOrderAndClient(orderId, clientId));
+}
+
+export async function getGuestOrderDeliveryProofByAccessTokenService(accessToken: string) {
+  const orderId = await guestOrderIdFromAccessToken(accessToken);
+  return buyerDeliveryProofFile(await findDeliveryProofForGuest(orderId));
+}
+
+export async function getGuestDeviceOrderDeliveryProofService(
+  guestDeviceId: string,
+  orderId: number,
+) {
+  let guestDeviceHash: string;
+  try {
+    guestDeviceHash = hashGuestDeviceId(guestDeviceId);
+  } catch {
+    throw new OnlineOrderError("La evidencia de entrega no esta disponible", 404);
+  }
+  return buyerDeliveryProofFile(
+    await findDeliveryProofByGuestDevice(orderId, guestDeviceHash),
   );
 }
 

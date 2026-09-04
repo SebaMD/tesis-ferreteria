@@ -4,9 +4,11 @@ import { authenticateJwt } from "../../middlewares/authentication.middleware.js"
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { MAX_IMAGE_FILE_SIZE } from "../../utils/imageFiles.js";
 import {
+  getDispatchLabelController,
   getDeliveryProofController,
   getLogisticsOrderByIdController,
   getLogisticsOrdersController,
+  getPreparationLabelController,
   transitionLogisticsOrderController,
 } from "./orderLogistics.controller.js";
 
@@ -30,8 +32,18 @@ router.use(authenticateJwt);
 router.get("/", verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]), getLogisticsOrdersController);
 router.get(
   "/:origin/:id/delivery-proof",
-  verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]),
+  verifyRoles(["ADMIN", "MANAGER"]),
   getDeliveryProofController,
+);
+router.get(
+  "/:origin/:id/preparation-label",
+  verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]),
+  getPreparationLabelController,
+);
+router.get(
+  "/:origin/:id/dispatch-label",
+  verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]),
+  getDispatchLabelController,
 );
 router.get(
   "/:origin/:id",

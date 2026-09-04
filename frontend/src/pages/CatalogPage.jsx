@@ -84,35 +84,35 @@ export default function CatalogPage() {
 
       <section className="rounded-lg bg-slate-100 bg-cover bg-center bg-no-repeat" style={CATALOG_BACKGROUND_IMAGE ? { backgroundImage: `url(${CATALOG_BACKGROUND_IMAGE})` } : undefined}>
         <div className="grid gap-4 rounded-lg bg-white/85 p-4 max-[720px]:p-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[minmax(180px,1fr)_minmax(640px,3fr)] min-[1024px]:items-end">
             <div>
               <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
               <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>
               {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
             </div>
-          </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 min-[1024px]:grid-cols-[minmax(240px,1fr)_220px_220px]">
-            <label className="relative grid min-w-0 gap-1 text-xs font-semibold max-[1023px]:col-span-3">
-              Buscar producto
-              <Search className="pointer-events-none absolute bottom-3 left-3 text-slate-400" size={17} aria-hidden="true" />
-              <input className="min-h-11 w-full pl-9" type="search" value={filters.search} onChange={changeFilter("search")} placeholder="Buscar producto..." />
-            </label>
-            <label className="grid min-w-0 gap-1 text-xs font-semibold">
-              Categoría
-              <select className="min-h-11 w-full text-xs" value={filters.categoryId} onChange={changeFilter("categoryId")}>
-                <option value="">Todas</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </select>
-            </label>
-            <label className="grid min-w-0 gap-1 text-xs font-semibold min-[1024px]:col-start-3">
-              Ordenar por
-              <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
-                {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
-              <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
-            </button>
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 min-[1024px]:grid-cols-[minmax(240px,1fr)_190px_190px]">
+              <label className="relative grid min-w-0 gap-1 text-xs font-semibold max-[1023px]:col-span-3">
+                Buscar producto
+                <Search className="pointer-events-none absolute bottom-3 left-3 text-slate-400" size={17} aria-hidden="true" />
+                <input className="min-h-11 w-full pl-9" type="search" value={filters.search} onChange={changeFilter("search")} placeholder="Buscar producto..." />
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-semibold">
+                Categoría
+                <select className="min-h-11 w-full text-xs" value={filters.categoryId} onChange={changeFilter("categoryId")}>
+                  <option value="">Todas</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                </select>
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-semibold min-[1024px]:col-start-3">
+                Ordenar por
+                <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
+                  {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
+              </button>
+            </div>
           </div>
           <div className="grid min-w-0 grid-cols-[240px_minmax(0,1fr)] items-start gap-5 max-[1023px]:grid-cols-1">
             <aside className="rounded-lg border border-slate-200 bg-white p-4 max-[1023px]:hidden" aria-label="Filtros del catálogo">

@@ -101,6 +101,7 @@ type Actor = { id: number; names: string; surnames: string };
 type LogisticsItem = {
   productId: number;
   productName: string;
+  unitMeasure: string | null;
   quantity: number;
   unitPrice: string;
   subtotal: string;
@@ -156,22 +157,25 @@ async function findOnlineTasks(filters: {
   search?: string;
   scope: LogisticsScope;
   userId?: number;
+  allowPrivateSearch?: boolean;
 }) {
   const conditions = [inArray(onlineOrdersTable.status, OPERATIONAL_ORDER_STATUSES)];
   if (filters.status) conditions.push(eq(onlineOrdersTable.status, filters.status));
   if (filters.search) {
     const pattern = `%${filters.search}%`;
-    conditions.push(or(
-      ilike(sql`${onlineOrdersTable.id}::text`, pattern),
-      ilike(usersTable.names, pattern),
-      ilike(usersTable.surnames, pattern),
-      ilike(usersTable.rut, pattern),
-      ilike(usersTable.correo, pattern),
-      ilike(onlineOrdersTable.guestName, pattern),
-      ilike(onlineOrdersTable.guestEmail, pattern),
-      ilike(onlineOrdersTable.guestPhone, pattern),
-      ilike(sql`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`, pattern),
-    )!);
+    conditions.push(filters.allowPrivateSearch
+      ? or(
+        ilike(sql`${onlineOrdersTable.id}::text`, pattern),
+        ilike(usersTable.names, pattern),
+        ilike(usersTable.surnames, pattern),
+        ilike(usersTable.rut, pattern),
+        ilike(usersTable.correo, pattern),
+        ilike(onlineOrdersTable.guestName, pattern),
+        ilike(onlineOrdersTable.guestEmail, pattern),
+        ilike(onlineOrdersTable.guestPhone, pattern),
+        ilike(sql`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`, pattern),
+      )!
+      : ilike(sql`${onlineOrdersTable.id}::text`, pattern));
   }
   if (filters.scope === "MINE" && filters.userId) {
     conditions.push(or(
@@ -198,18 +202,21 @@ async function findSaleTasks(filters: {
   search?: string;
   scope: LogisticsScope;
   userId?: number;
+  allowPrivateSearch?: boolean;
 }) {
   const conditions = [];
   if (filters.status) conditions.push(eq(saleDeliveriesTable.status, filters.status));
   if (filters.search) {
     const pattern = `%${filters.search}%`;
-    conditions.push(or(
-      ilike(sql`${saleDeliveriesTable.saleId}::text`, pattern),
-      ilike(saleDeliveriesTable.recipientName, pattern),
-      ilike(saleDeliveriesTable.recipientRut, pattern),
-      ilike(saleDeliveriesTable.address, pattern),
-      ilike(sql`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`, pattern),
-    )!);
+    conditions.push(filters.allowPrivateSearch
+      ? or(
+        ilike(sql`${saleDeliveriesTable.saleId}::text`, pattern),
+        ilike(saleDeliveriesTable.recipientName, pattern),
+        ilike(saleDeliveriesTable.recipientRut, pattern),
+        ilike(saleDeliveriesTable.address, pattern),
+        ilike(sql`concat_ws(' ', ${usersTable.names}, ${usersTable.surnames})`, pattern),
+      )!
+      : ilike(sql`${saleDeliveriesTable.saleId}::text`, pattern));
   }
   if (filters.scope === "MINE" && filters.userId) {
     conditions.push(or(
@@ -252,6 +259,7 @@ export async function findLogisticsTasks(filters: {
   search?: string;
   scope: LogisticsScope;
   userId?: number;
+  allowPrivateSearch?: boolean;
 }) {
   const [onlineRows, saleRows] = await Promise.all([
     findOnlineTasks(filters),
@@ -267,6 +275,7 @@ export async function findLogisticsTasks(filters: {
         taskId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
         productName: productsTable.name,
+        unitMeasure: productsTable.unitMeasure,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -279,6 +288,7 @@ export async function findLogisticsTasks(filters: {
         taskId: saleDetailsTable.saleId,
         productId: saleDetailsTable.productId,
         productName: productsTable.name,
+        unitMeasure: productsTable.unitMeasure,
         quantity: saleDetailsTable.quantity,
         unitPrice: saleDetailsTable.unitPrice,
         subtotal: saleDetailsTable.subtotal,
@@ -354,7 +364,11 @@ export async function findLogisticsTasks(filters: {
 }
 
 export async function findLogisticsTaskById(origin: LogisticsOrigin, taskId: number) {
-  const tasks = await findLogisticsTasks({ scope: "ALL", search: String(taskId) });
+  const tasks = await findLogisticsTasks({
+    scope: "ALL",
+    search: String(taskId),
+    allowPrivateSearch: false,
+  });
   return tasks.find((task) => task.origin === origin && task.id === taskId) ?? null;
 }
 

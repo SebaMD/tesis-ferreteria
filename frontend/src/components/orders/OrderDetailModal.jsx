@@ -10,6 +10,7 @@ import {
 import { badgeClass } from "../../helpers/uiClasses.js";
 import OrderProgressTimeline from "./OrderProgressTimeline.jsx";
 import OrderProductImage from "./OrderProductImage.jsx";
+import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
 
 function hasCoordinates(order) {
   if (
@@ -25,7 +26,7 @@ function hasCoordinates(order) {
     && Number.isFinite(Number(order?.deliveryLongitude));
 }
 
-export default function OrderDetailModal({ order, onClose }) {
+export default function OrderDetailModal({ order, onClose, requestDeliveryProof }) {
   if (!order) return null;
   const status = getOnlineOrderStatus(order.status);
   const delivery = getOnlineOrderDeliveryType(order.deliveryType);
@@ -96,6 +97,12 @@ export default function OrderDetailModal({ order, onClose }) {
             ))}
           </div>
         </section>
+
+        <DeliveryProofViewer
+          key={order.id}
+          order={order}
+          requestProof={requestDeliveryProof}
+        />
 
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-200 pt-4">
           <div>

@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import {
+  FRONTEND_URL,
   MAIL_ENABLED,
   MAIL_FROM,
   SMTP_HOST,
@@ -8,7 +9,9 @@ import {
   SMTP_SECURE,
   SMTP_USER,
 } from "../../config/configEnv.js";
+import type { OrderCommercialModel } from "../onlineOrders/orderCommercialModel.js";
 import { findActiveWarehouseEmails } from "./notifications.repository.js";
+import { renderPurchaseConfirmedMail } from "./purchaseConfirmedMail.js";
 
 export type ClientOrderMailEvent =
   | "PURCHASE_CONFIRMED"
@@ -26,6 +29,7 @@ export type WarehouseMailEvent =
 type MailContent = {
   subject: string;
   text: string;
+  html?: string;
 };
 
 let transporter: Transporter | null = null;
@@ -86,18 +90,23 @@ async function sendMailBestEffort(to: string, content: MailContent) {
       to,
       subject: content.subject,
       text: content.text,
+      html: content.html,
     });
   } catch (error) {
     console.error(`No se pudo enviar el correo "${content.subject}": ${errorMessage(error)}`);
   }
 }
 
-function clientOrderContent(
+export function buildClientOrderMailContent(
   folio: string,
   event: ClientOrderMailEvent,
   trackingUrl?: string,
   recipientType: "CLIENT" | "GUEST" = "CLIENT",
+  commercialModel?: OrderCommercialModel,
 ): MailContent {
+  if (event === "PURCHASE_CONFIRMED" && commercialModel) {
+    return renderPurchaseConfirmedMail(commercialModel, trackingUrl);
+  }
   const trackingText = trackingUrl
     ? ` Puedes seguir el pedido de forma segura en: ${trackingUrl}`
     : recipientType === "GUEST"
@@ -156,11 +165,24 @@ export async function notifyClientOrderBestEffort(input: {
   event: ClientOrderMailEvent;
   trackingUrl?: string;
   recipientType?: "CLIENT" | "GUEST";
+  commercialModel?: OrderCommercialModel;
 }) {
   if (!MAIL_ENABLED) return;
+  let trackingUrl = input.trackingUrl;
+  if (!trackingUrl && input.recipientType !== "GUEST" && input.commercialModel) {
+    const url = new URL("/orders", FRONTEND_URL);
+    url.hash = `order-${input.commercialModel.orderId}`;
+    trackingUrl = url.toString();
+  }
   await sendMailBestEffort(
     input.email,
-    clientOrderContent(input.folio, input.event, input.trackingUrl, input.recipientType),
+    buildClientOrderMailContent(
+      input.folio,
+      input.event,
+      trackingUrl,
+      input.recipientType,
+      input.commercialModel,
+    ),
   );
 }
 

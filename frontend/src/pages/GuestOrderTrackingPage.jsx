@@ -4,7 +4,6 @@ import {
   Clock3,
   CreditCard,
   Mail,
-  Printer,
   RefreshCw,
   ShoppingCart,
   UserPlus,
@@ -15,6 +14,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   captureGuestAccessTokenFromHash,
@@ -34,6 +34,7 @@ import useCart from "../hooks/useCart.js";
 import {
   continueGuestOnlineOrderPaymentRequest,
   getGuestOnlineOrderRequest,
+  getGuestOnlineOrderReceiptRequest,
   retryGuestOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -245,11 +246,10 @@ export default function GuestOrderTrackingPage() {
                 {paymentAction === "retry" ? "Reintentando..." : "Reintentar pago"}
               </button>
             )}
-            {isPaid && (
-              <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => window.print()}>
-                <Printer size={17} /> Imprimir comprobante
-              </button>
-            )}
+            <DownloadReceiptButton
+              order={order}
+              requestReceipt={() => getGuestOnlineOrderReceiptRequest(accessTokenRef.current)}
+            />
             <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/cart">
               <ShoppingCart size={17} /> Volver al carrito
             </Link>

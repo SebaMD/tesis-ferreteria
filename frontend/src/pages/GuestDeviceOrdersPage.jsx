@@ -4,7 +4,10 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
-import { getGuestDeviceOrdersRequest } from "../services/onlineOrders.service.js";
+import {
+  getGuestDeviceOrderReceiptRequest,
+  getGuestDeviceOrdersRequest,
+} from "../services/onlineOrders.service.js";
 
 const ACTIVE_STATUSES = new Set([
   "PENDING_PAYMENT", "PAYMENT_REVIEW", "PAID", "PREPARING",
@@ -24,7 +27,15 @@ function OrdersSection({ title, description, orders, onView, empty, secondary = 
       </header>
       {orders.length ? (
         <div className="grid gap-3">
-          {orders.map((order) => <OrderSummaryCard key={order.id} order={order} onView={onView} secondary={secondary} />)}
+          {orders.map((order) => (
+            <OrderSummaryCard
+              key={order.id}
+              order={order}
+              onView={onView}
+              requestReceipt={({ id }) => getGuestDeviceOrderReceiptRequest(id)}
+              secondary={secondary}
+            />
+          ))}
         </div>
       ) : (
         <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-8 text-center text-sm text-slate-500">{empty}</p>

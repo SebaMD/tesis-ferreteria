@@ -9,9 +9,12 @@ import {
   createGuestCheckoutController,
   getDeliveryAddressController,
   getGuestOrderController,
+  getGuestOrderReceiptController,
+  getGuestDeviceOrderReceiptController,
   getGuestDeviceOrdersController,
   getGuestPendingOrderController,
   getMyOrderByIdController,
+  getMyOrderReceiptController,
   getMyOrdersController,
   retryPaymentController,
   retryGuestPaymentController,
@@ -26,7 +29,9 @@ router.get("/guest/pending", getGuestPendingOrderController);
 router.post("/guest/checkout", createGuestCheckoutController);
 router.post("/guest/continue-payment", continueGuestPaymentController);
 router.get("/guest/order", getGuestOrderController);
+router.get("/guest/order/receipt", getGuestOrderReceiptController);
 router.get("/guest/device-orders", getGuestDeviceOrdersController);
+router.get("/guest/device-orders/:id/receipt", getGuestDeviceOrderReceiptController);
 router.post("/guest/retry-payment", retryGuestPaymentController);
 
 router.use(authenticateJwt);
@@ -38,6 +43,7 @@ router.post("/checkout", createCheckoutController);
 router.post("/:id/continue-payment", continuePaymentController);
 router.post("/:id/retry-payment", retryPaymentController);
 router.patch("/:id/archive", archiveOrderController);
+router.get("/:id/receipt", getMyOrderReceiptController);
 router.get("/:id", getMyOrderByIdController);
 
 export default router;

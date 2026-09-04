@@ -801,6 +801,7 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
         orderId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
         productName: productsTable.name,
+        unitMeasure: productsTable.unitMeasure,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -906,6 +907,37 @@ export async function findOrderByIdForGuest(orderId: number) {
     .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
     .where(and(
       eq(onlineOrdersTable.id, orderId),
+      isNull(onlineOrdersTable.clientId),
+    ))
+    .limit(1);
+
+  const [order] = await attachOrderData(orders);
+  return order ?? null;
+}
+
+export async function findOrderByIdForCommercialUse(orderId: number) {
+  const orders = await db
+    .select(orderColumns)
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(eq(onlineOrdersTable.id, orderId))
+    .limit(1);
+
+  const [order] = await attachOrderData(orders);
+  return order ?? null;
+}
+
+export async function findOrderByIdAndGuestDeviceHash(
+  orderId: number,
+  guestDeviceHash: string,
+) {
+  const orders = await db
+    .select(orderColumns)
+    .from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      eq(onlineOrdersTable.guestDeviceHash, guestDeviceHash),
       isNull(onlineOrdersTable.clientId),
     ))
     .limit(1);

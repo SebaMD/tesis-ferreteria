@@ -39,7 +39,9 @@ import {
   findPaymentsNeedingReconciliation,
   findOrderByCheckoutKey,
   findOrderByGuestCheckoutKey,
+  findOrderByIdAndGuestDeviceHash,
   findOrderByIdAndClient,
+  findOrderByIdForCommercialUse,
   findOrderByIdForGuest,
   findOrderBuyerContact,
   findOrderForClientUpdate,
@@ -75,6 +77,12 @@ import {
   hashGuestDeviceId,
   hashGuestSessionId,
 } from "./guestOrderAccess.js";
+import {
+  buildOrderCommercialModel,
+  isReceiptEligibleStatus,
+  type CommercialOrderSource,
+  type OrderCommercialModel,
+} from "./orderCommercialModel.js";
 import type {
   CreateCheckoutBody,
   CreateGuestCheckoutBody,
@@ -1028,12 +1036,14 @@ async function finishProviderResponse(data: {
         const guestAccess = buyer.buyerType === "GUEST"
           ? await issueGuestOrderTrackingAccessService(result.orderId, "PAID")
           : null;
+        const commercialModel = await getOrderCommercialModelForNotificationService(result.orderId);
         await notifyClientOrderBestEffort({
           email: buyer.email,
           folio: `P-${String(result.orderId).padStart(6, "0")}`,
           event: "PURCHASE_CONFIRMED",
           trackingUrl: guestAccess?.url,
           recipientType: buyer.buyerType,
+          commercialModel,
         });
       } catch (error) {
         console.error("No se pudo enviar la confirmacion del pedido:", error);
@@ -1441,6 +1451,45 @@ export async function getClientOrderByIdService(clientId: number, orderId: numbe
   const order = await findOrderByIdAndClient(orderId, clientId);
   if (!order) throw new OnlineOrderError("Pedido no encontrado", 404);
   return order;
+}
+
+function receiptModelFromOrder(order: CommercialOrderSource | null): OrderCommercialModel {
+  if (!order) throw new OnlineOrderError("Comprobante no disponible", 404);
+  if (!isReceiptEligibleStatus(order.status)) {
+    throw new OnlineOrderError(
+      "El comprobante solo esta disponible para compras con pago confirmado",
+      409,
+    );
+  }
+  return buildOrderCommercialModel(order);
+}
+
+async function getOrderCommercialModelForNotificationService(orderId: number) {
+  return receiptModelFromOrder(await findOrderByIdForCommercialUse(orderId));
+}
+
+export async function getClientOrderReceiptService(clientId: number, orderId: number) {
+  return receiptModelFromOrder(await findOrderByIdAndClient(orderId, clientId));
+}
+
+export async function getGuestOrderReceiptByAccessTokenService(accessToken: string) {
+  const orderId = await guestOrderIdFromAccessToken(accessToken);
+  return receiptModelFromOrder(await findOrderByIdForGuest(orderId));
+}
+
+export async function getGuestDeviceOrderReceiptService(
+  guestDeviceId: string,
+  orderId: number,
+) {
+  let guestDeviceHash: string;
+  try {
+    guestDeviceHash = hashGuestDeviceId(guestDeviceId);
+  } catch {
+    throw new OnlineOrderError("Comprobante no disponible", 404);
+  }
+  return receiptModelFromOrder(
+    await findOrderByIdAndGuestDeviceHash(orderId, guestDeviceHash),
+  );
 }
 
 export async function issueGuestOrderTrackingAccessService(

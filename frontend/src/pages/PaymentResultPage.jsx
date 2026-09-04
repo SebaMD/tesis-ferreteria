@@ -1,9 +1,10 @@
-import { AlertTriangle, CheckCircle2, Clock3, Mail, Printer, ShoppingCart, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, Mail, ShoppingCart, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
@@ -14,7 +15,10 @@ import {
 } from "../helpers/onlineOrders.js";
 import { badgeClass } from "../helpers/uiClasses.js";
 import useCart from "../hooks/useCart.js";
-import { getMyOnlineOrderByIdRequest } from "../services/onlineOrders.service.js";
+import {
+  getMyOnlineOrderByIdRequest,
+  getMyOnlineOrderReceiptRequest,
+} from "../services/onlineOrders.service.js";
 
 function resultIcon(status) {
   if (isOnlineOrderPaid(status)) return <CheckCircle2 className="text-positive-600" size={52} />;
@@ -184,22 +188,12 @@ export default function PaymentResultPage() {
             </p>
           )}
 
-          {isPaid && (
-            <p className="m-0 w-full max-w-125 text-center text-xs leading-5 text-slate-500">
-              También puedes guardarlo como PDF desde las opciones de impresión del navegador.
-            </p>
-          )}
-
           <div className="flex w-full max-w-125 flex-wrap justify-center gap-3 max-[520px]:flex-col">
-            {isPaid && (
-              <button
-                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
-                type="button"
-                onClick={() => window.print()}
-              >
-                <Printer size={17} /> Imprimir comprobante
-              </button>
-            )}
+            <DownloadReceiptButton
+              order={order}
+              requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
+            />
             <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/orders">
               Ver mis pedidos
             </Link>

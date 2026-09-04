@@ -11,6 +11,7 @@ import {
   archiveOnlineOrderRequest,
   continueOnlineOrderPaymentRequest,
   getMyOnlineOrdersRequest,
+  getMyOnlineOrderReceiptRequest,
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -161,7 +162,14 @@ export default function ClientOrdersPage() {
   };
 
   const renderOrder = (secondary = false) => (order) => (
-    <OrderSummaryCard key={order.id} order={order} onView={setSelectedOrder} actions={actionsFor(order)} secondary={secondary} />
+    <OrderSummaryCard
+      key={order.id}
+      order={order}
+      onView={setSelectedOrder}
+      actions={actionsFor(order)}
+      requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}
+      secondary={secondary}
+    />
   );
 
   return (

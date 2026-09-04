@@ -1,4 +1,4 @@
-import { AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -56,7 +56,13 @@ export default function CatalogPage() {
   const brands = useMemo(() => getCatalogBrands(products), [products]);
   const filteredProducts = useMemo(() => filterAndSortCatalog(products, filters, order), [products, filters, order]);
   const activeCount = Object.entries(filters).filter(([key, value]) => value !== EMPTY_CATALOG_FILTERS[key]).length;
-  const filterProps = { filters, onChange: setFilters, onClear: () => setFilters(EMPTY_CATALOG_FILTERS), categories, brands };
+  const advancedFilterCount = ["minPrice", "maxPrice", "brand", "availability"]
+    .filter((key) => filters[key] !== EMPTY_CATALOG_FILTERS[key]).length;
+  const filterProps = { filters, onChange: setFilters, onClear: () => setFilters(EMPTY_CATALOG_FILTERS), brands };
+  const changeFilter = (field) => (event) => setFilters((current) => ({
+    ...current,
+    [field]: event.target.value,
+  }));
 
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
@@ -84,17 +90,29 @@ export default function CatalogPage() {
               <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>
               {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
             </div>
-            <div className="flex min-w-0 items-end gap-2 max-[720px]:w-full">
-              <label className="grid min-w-0 flex-1 gap-1 text-xs font-semibold">
-                Ordenar por
-                <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
-                  {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
-                <SlidersHorizontal size={17} /> Filtrar{activeCount > 0 ? ` (${activeCount})` : ""}
-              </button>
-            </div>
+          </div>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 min-[1024px]:grid-cols-[minmax(240px,1fr)_220px_220px]">
+            <label className="relative grid min-w-0 gap-1 text-xs font-semibold max-[1023px]:col-span-3">
+              Buscar producto
+              <Search className="pointer-events-none absolute bottom-3 left-3 text-slate-400" size={17} aria-hidden="true" />
+              <input className="min-h-11 w-full pl-9" type="search" value={filters.search} onChange={changeFilter("search")} placeholder="Buscar producto..." />
+            </label>
+            <label className="grid min-w-0 gap-1 text-xs font-semibold">
+              Categoría
+              <select className="min-h-11 w-full text-xs" value={filters.categoryId} onChange={changeFilter("categoryId")}>
+                <option value="">Todas</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+            </label>
+            <label className="grid min-w-0 gap-1 text-xs font-semibold min-[1024px]:col-start-3">
+              Ordenar por
+              <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
+                {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+              <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
+            </button>
           </div>
           <div className="grid min-w-0 grid-cols-[240px_minmax(0,1fr)] items-start gap-5 max-[1023px]:grid-cols-1">
             <aside className="rounded-lg border border-slate-200 bg-white p-4 max-[1023px]:hidden" aria-label="Filtros del catálogo">

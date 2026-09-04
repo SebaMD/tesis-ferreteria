@@ -14,15 +14,20 @@ import {
   findOrderIdByPaymentReturnService,
   getClientOrderByIdService,
   getClientDeliveryAddressService,
+  getClientOrderReceiptService,
   getClientOrdersService,
+  getGuestDeviceOrderReceiptService,
   getGuestOrderByAccessTokenService,
   getGuestDeviceOrdersService,
+  getGuestOrderReceiptByAccessTokenService,
   getGuestPendingOrderService,
   issueGuestOrderTrackingAccessService,
   OnlineOrderError,
   retryOnlineOrderPaymentService,
   retryGuestOnlineOrderPaymentService,
 } from "./onlineOrders.service.js";
+import { renderOrderReceiptPdf } from "./orderReceiptPdf.js";
+import type { OrderCommercialModel } from "./orderCommercialModel.js";
 import {
   validateCreateCheckoutBody,
   validateCreateGuestCheckoutBody,
@@ -161,6 +166,53 @@ export async function getGuestDeviceOrdersController(req: Request, res: Response
   }
 }
 
+async function sendOrderReceipt(res: Response, model: OrderCommercialModel) {
+  const pdf = await renderOrderReceiptPdf(model);
+  res.status(200);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="comprobante-${model.folio}.pdf"`,
+  );
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Length", String(pdf.length));
+  return res.send(pdf);
+}
+
+function handleReceiptError(res: Response, error: unknown) {
+  if (error instanceof OnlineOrderError) {
+    return handleErrorClient(res, error.statusCode, error.message);
+  }
+  return handleErrorServer(res, 500, "No se pudo generar el comprobante", message(error));
+}
+
+export async function getGuestOrderReceiptController(req: Request, res: Response) {
+  try {
+    const model = await getGuestOrderReceiptByAccessTokenService(
+      requiredHeader(req, "x-guest-order-token"),
+    );
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
+  }
+}
+
+export async function getGuestDeviceOrderReceiptController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    const model = await getGuestDeviceOrderReceiptService(
+      ensureGuestDeviceCookie(req, res),
+      orderId,
+    );
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
+  }
+}
+
 export async function retryGuestPaymentController(req: Request, res: Response) {
   try {
     return handleSuccess(
@@ -279,6 +331,17 @@ export async function getMyOrderByIdController(req: AuthenticatedRequest, res: R
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo obtener el pedido", message(error));
+  }
+}
+
+export async function getMyOrderReceiptController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    const model = await getClientOrderReceiptService(requireClient(req), orderId);
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
   }
 }
 

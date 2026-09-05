@@ -6,6 +6,7 @@ import { ImageFileError } from "../../utils/imageFiles.js";
 import { WebpayConfigurationError } from "../payments/webpay.service.js";
 import {
   archiveClientOrderService,
+  restoreArchivedClientOrderService,
   cancelWebpayPaymentService,
   confirmWebpayPaymentService,
   continueOnlineOrderPaymentService,
@@ -329,6 +330,25 @@ export async function archiveOrderController(req: AuthenticatedRequest, res: Res
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo ocultar el pedido", message(error));
+  }
+}
+
+export async function restoreArchivedOrderController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+
+    return handleSuccess(
+      res,
+      200,
+      "Intento restaurado en Mis pedidos",
+      await restoreArchivedClientOrderService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo restaurar el intento", message(error));
   }
 }
 

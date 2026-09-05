@@ -24,6 +24,7 @@ import {
 } from "../payments/webpay.service.js";
 import {
   archiveOrderForClient,
+  restoreArchivedOrderForClient,
   bindGuestOrderToDevice,
   createOnlineOrder,
   createOnlineOrderItems,
@@ -869,6 +870,17 @@ export async function archiveClientOrderService(clientId: number, orderId: numbe
     const archived = await archiveOrderForClient(tx, order.id, clientId);
     if (!archived) throw new OnlineOrderError("El pedido ya estaba oculto", 409);
     return { orderId: archived.id };
+  });
+}
+
+export async function restoreArchivedClientOrderService(clientId: number, orderId: number) {
+  return db.transaction(async (tx) => {
+    const client = await findActiveClientForUpdate(tx, clientId);
+    assertActiveClient(client);
+
+    const restored = await restoreArchivedOrderForClient(tx, orderId, clientId);
+    if (!restored) throw new OnlineOrderError("El intento no se puede restaurar", 404);
+    return { orderId: restored.id };
   });
 }
 

@@ -7,6 +7,7 @@ import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
@@ -1332,7 +1333,7 @@ export default function ProductsPage() {
           </select>
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[980px]:ml-0 max-[980px]:w-full max-[980px]:shrink max-[980px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
             {canManage && (
               <>
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
@@ -2024,6 +2025,55 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
+        <ResponsiveTableView
+          rows={productsPagination.paginatedItems}
+          getRowKey={(product) => product.id}
+          getRowLabel={(product) => product.name}
+          resetKey={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}`}
+          emptyMessage="No se encontraron productos con los filtros seleccionados."
+          renderSummary={(product) => {
+            const stockStatus = getStockStatus(product, user?.role);
+            return (
+              <div className="grid min-w-0 gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm text-ink-950">{product.name}</strong>
+                    {product.brand && <span className="block truncate text-xs text-slate-500">{product.brand}</span>}
+                  </div>
+                  <span className={badgeClass(product.status === false ? "neutral" : stockStatus.tone)}>
+                    {product.status === false ? "Desactivado" : stockStatus.label}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <strong className="font-mono text-ink-950">{formatClp(product.price)}</strong>
+                  <span className="font-semibold text-slate-600">Stock: {product.currentStock}</span>
+                </div>
+              </div>
+            );
+          }}
+          renderDetails={(product) => (
+            <>
+              <MobileDetailGrid>
+                <MobileDetailField label="ID">#{product.id}</MobileDetailField>
+                <MobileDetailField label="Código de barra">{product.barcode || "Sin código"}</MobileDetailField>
+                <MobileDetailField label="Categoría">{product.categoryName}</MobileDetailField>
+                <MobileDetailField label="Marca">{product.brand || "Sin marca"}</MobileDetailField>
+                <MobileDetailField label="Unidad">{getDisplayUnit(product.unitMeasure)}</MobileDetailField>
+                {canViewAdministrativeStock && <MobileDetailField label="Stock mínimo">{product.minimumStock}</MobileDetailField>}
+              </MobileDetailGrid>
+              {canManage && (
+                <MobileRowActions>
+                  <button className={secondaryButtonClass} type="button" onClick={() => startEditing(product)}><Pencil size={17} /> Editar</button>
+                  {product.status === false ? (
+                    <button type="button" onClick={() => openProductStatusModal(product)}><CheckCircle size={17} /> Activar</button>
+                  ) : (
+                    <button className={dangerButtonClass} type="button" onClick={() => openProductStatusModal(product)}><XCircle size={17} /> Desactivar</button>
+                  )}
+                </MobileRowActions>
+              )}
+            </>
+          )}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
           <thead>
@@ -2095,6 +2145,8 @@ export default function ProductsPage() {
           </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -2128,6 +2180,31 @@ export default function ProductsPage() {
               </button>
             )}
           </div>
+          <ResponsiveTableView
+            rows={movementsPagination.paginatedItems}
+            getRowKey={(movement) => movement.id}
+            getRowLabel={(movement) => `movimiento de ${movement.productName}`}
+            resetKey={`${movementsPagination.page}|${categoryFilter}|${normalizedSearch}`}
+            emptyMessage={sortedMovements.length === 0 ? "No hay movimientos registrados." : "No se encontraron movimientos con los filtros seleccionados."}
+            renderSummary={(movement) => (
+              <div className="grid min-w-0 gap-2">
+                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={badgeClass(getMovementTone(movement))}>{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span>
+                  <strong className="font-mono text-sm text-ink-950">{movement.quantity}</strong>
+                </div>
+                <span className="text-xs text-slate-500">{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</span>
+              </div>
+            )}
+            renderDetails={(movement) => (
+              <MobileDetailGrid>
+                <MobileDetailField label="Usuario">
+                  {movement.userNames || movement.userSurnames ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim() : "Sistema"}
+                </MobileDetailField>
+                <MobileDetailField label="Motivo" wide>{movement.reason || "Sin motivo"}</MobileDetailField>
+              </MobileDetailGrid>
+            )}
+            desktop={(
           <div className={tableScrollClass}>
             <table>
             <thead>
@@ -2171,6 +2248,8 @@ export default function ProductsPage() {
             </tbody>
             </table>
           </div>
+            )}
+          />
           <Pagination
             page={movementsPagination.page}
             pageSize={movementsPagination.pageSize}

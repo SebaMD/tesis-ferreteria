@@ -16,6 +16,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import DeliveryProofViewer from "../components/orders/DeliveryProofViewer.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   captureGuestAccessTokenFromHash,
@@ -200,6 +201,28 @@ export default function GuestOrderTrackingPage() {
               )}
             </dl>
 
+            <ResponsiveTableView
+              rows={order.items || []}
+              getRowKey={(item) => `${item.productId}-${item.productName}`}
+              getRowLabel={(item) => item.productName}
+              resetKey={order.id}
+              renderSummary={(item) => (
+                <div className="grid min-w-0 gap-2">
+                  <strong className="truncate text-sm text-ink-950">{item.productName}</strong>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span>Cantidad: {item.quantity}</span>
+                    <strong className="font-mono">{formatClp(item.subtotal)}</strong>
+                  </div>
+                </div>
+              )}
+              renderDetails={(item) => (
+                <MobileDetailGrid>
+                  <MobileDetailField label="Cantidad">{item.quantity}</MobileDetailField>
+                  <MobileDetailField label="Precio unitario">{formatClp(item.unitPrice)}</MobileDetailField>
+                  <MobileDetailField label="Subtotal">{formatClp(item.subtotal)}</MobileDetailField>
+                </MobileDetailGrid>
+              )}
+              desktop={(
             <div className="w-full max-w-full overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr><th>Producto</th><th className="text-right">Cantidad</th><th className="text-right">Precio unitario</th><th className="text-right">Subtotal</th></tr></thead>
@@ -215,6 +238,8 @@ export default function GuestOrderTrackingPage() {
                 </tbody>
               </table>
             </div>
+              )}
+            />
 
             <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
               <span className="font-bold text-slate-600">Total</span>

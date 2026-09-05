@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
@@ -150,6 +151,28 @@ export default function PaymentResultPage() {
                 )}
               </dl>
 
+              <ResponsiveTableView
+                rows={order.items || []}
+                getRowKey={(item) => `${item.productId}-${item.productName}`}
+                getRowLabel={(item) => item.productName}
+                resetKey={order.id}
+                renderSummary={(item) => (
+                  <div className="grid min-w-0 gap-2">
+                    <strong className="truncate text-sm text-ink-950">{item.productName}</strong>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span>Cantidad: {item.quantity}</span>
+                      <strong className="font-mono">{formatClp(item.subtotal)}</strong>
+                    </div>
+                  </div>
+                )}
+                renderDetails={(item) => (
+                  <MobileDetailGrid>
+                    <MobileDetailField label="Cantidad">{item.quantity}</MobileDetailField>
+                    <MobileDetailField label="Precio unitario">{formatClp(item.unitPrice)}</MobileDetailField>
+                    <MobileDetailField label="Subtotal">{formatClp(item.subtotal)}</MobileDetailField>
+                  </MobileDetailGrid>
+                )}
+                desktop={(
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -167,6 +190,8 @@ export default function PaymentResultPage() {
                   </tbody>
                 </table>
               </div>
+                )}
+              />
 
               <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
                 <span className="font-bold text-slate-600">Total</span>

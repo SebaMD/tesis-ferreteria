@@ -84,7 +84,7 @@ export default function CatalogPage() {
 
       <section className="rounded-lg bg-slate-100 bg-cover bg-center bg-no-repeat" style={CATALOG_BACKGROUND_IMAGE ? { backgroundImage: `url(${CATALOG_BACKGROUND_IMAGE})` } : undefined}>
         <div className="grid gap-4 rounded-lg bg-white/85 p-4 max-[720px]:p-3">
-          <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[minmax(180px,1fr)_minmax(640px,3fr)] min-[1024px]:items-end">
+          <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
             <div>
               <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
               <span className="text-xs font-semibold text-slate-500">{filteredProducts.length} productos en catálogo</span>

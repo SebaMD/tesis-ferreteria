@@ -1074,3 +1074,22 @@ export async function archiveOrderForClient(
 
   return order ?? null;
 }
+
+export async function restoreArchivedOrderForClient(
+  tx: DbTransaction,
+  orderId: number,
+  clientId: number,
+) {
+  const [order] = await tx
+    .update(onlineOrdersTable)
+    .set({ clientArchivedAt: null, updatedAt: new Date() })
+    .where(and(
+      eq(onlineOrdersTable.id, orderId),
+      eq(onlineOrdersTable.clientId, clientId),
+      inArray(onlineOrdersTable.status, ["PAYMENT_FAILED", "CANCELLED", "EXPIRED"]),
+      isNotNull(onlineOrdersTable.clientArchivedAt),
+    ))
+    .returning({ id: onlineOrdersTable.id });
+
+  return order ?? null;
+}

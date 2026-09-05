@@ -15,6 +15,7 @@ import {
   getMyOnlineOrdersRequest,
   getMyOnlineOrderDeliveryProofRequest,
   getMyOnlineOrderReceiptRequest,
+  restoreArchivedOnlineOrderRequest,
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
@@ -130,7 +131,23 @@ export default function ClientOrdersPage() {
       setOrders((current) => current.filter((item) => item.id !== order.id));
       setSelectedOrder((current) => current?.id === order.id ? null : current);
       setArchiveCandidate(null);
-      toast.success("El intento se ocultó de Mis pedidos");
+      let undoRequested = false;
+      toast.success("Intento ocultado", {
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            if (undoRequested) return;
+            undoRequested = true;
+            try {
+              await restoreArchivedOnlineOrderRequest(order.id);
+              await loadOrders({ showLoading: false, notifyError: false });
+              toast.success("El intento volvió a aparecer en Mis pedidos");
+            } catch (error) {
+              toast.error(getApiError(error, "No se pudo restaurar el intento"));
+            }
+          },
+        },
+      });
     } catch (error) {
       toast.error(getApiError(error, "No se pudo ocultar el pedido"));
       await loadOrders({ showLoading: false, notifyError: false });

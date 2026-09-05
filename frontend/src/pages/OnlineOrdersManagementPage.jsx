@@ -16,6 +16,7 @@ import DeliveryEvidenceForm from "../components/DeliveryEvidenceForm.jsx";
 import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
@@ -506,6 +507,48 @@ export default function OnlineOrdersManagementPage() {
             </div>
           )}
         </div>
+        <ResponsiveTableView
+          rows={ordersPagination.paginatedItems}
+          getRowKey={orderKey}
+          getRowLabel={(order) => formatFolio(order)}
+          resetKey={`${ordersPagination.page}|${debouncedSearch}|${status}|${scope}|${view}`}
+          emptyMessage={noResultsMessage}
+          renderSummary={(order) => {
+            const orderStatus = getOnlineOrderStatus(order.status);
+            const delivery = getOnlineOrderDeliveryType(order.deliveryType);
+            return (
+              <div className="grid min-w-0 gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <strong className="font-mono text-sm text-ink-950">{formatFolio(order)}</strong>
+                  <span className={badgeClass(orderStatus.tone)}>{orderStatus.label}</span>
+                </div>
+                <div className="flex flex-wrap items-end justify-between gap-2 text-xs">
+                  <span className="text-slate-500">{formatDate(order.paidAt || order.createdAt, DATE_OPTIONS)}</span>
+                  <strong className="font-mono text-ink-950">{formatClp(order.total)}</strong>
+                </div>
+                <span className="text-xs font-semibold text-slate-600">{delivery.shortLabel}</span>
+              </div>
+            );
+          }}
+          renderDetails={(order) => {
+            const origin = originData(order.origin);
+            return (
+              <>
+                <MobileDetailGrid>
+                  <MobileDetailField label="Origen"><span className={badgeClass(origin.tone)}>{origin.label}</span></MobileDetailField>
+                  <MobileDetailField label="Responsable">{currentResponsible(order)}</MobileDetailField>
+                  {order.customerName && <MobileDetailField label="Cliente / destinatario" wide>{customerName(order)}{order.customerType === "GUEST" ? " · Invitado" : ""}</MobileDetailField>}
+                  {order.customerEmail && <MobileDetailField label="Correo" wide><span className="break-all">{order.customerEmail}</span></MobileDetailField>}
+                  <MobileDetailField label="Productos" wide>{productSummary(order)}</MobileDetailField>
+                  <MobileDetailField label="Total">{formatClp(order.total)}</MobileDetailField>
+                </MobileDetailGrid>
+                <MobileRowActions>
+                  <button type="button" onClick={() => openOrder(order)}><Eye size={16} /> Ver detalle</button>
+                </MobileRowActions>
+              </>
+            );
+          }}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
             <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acción</th></tr></thead>
@@ -539,6 +582,8 @@ export default function OnlineOrdersManagementPage() {
             </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={ordersPagination.page}
           pageSize={ordersPagination.pageSize}
@@ -640,12 +685,37 @@ export default function OnlineOrdersManagementPage() {
             )}
 
             <section className="overflow-hidden rounded-md border border-slate-200">
+              <ResponsiveTableView
+                rows={selectedOrder.items || []}
+                getRowKey={(item) => `${item.productId}-${item.productName}`}
+                getRowLabel={(item) => item.productName}
+                resetKey={selectedOrder.id}
+                emptyMessage="No hay productos asociados a este pedido."
+                renderSummary={(item) => (
+                  <div className="grid min-w-0 gap-2">
+                    <strong className="truncate text-sm text-ink-950">{item.productName}</strong>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="text-slate-600">Cantidad: {item.quantity}</span>
+                      <strong className="font-mono text-ink-950">{formatClp(item.subtotal)}</strong>
+                    </div>
+                  </div>
+                )}
+                renderDetails={(item) => (
+                  <MobileDetailGrid>
+                    <MobileDetailField label="Cantidad">{item.quantity}</MobileDetailField>
+                    <MobileDetailField label="Precio unitario">{formatClp(item.unitPrice)}</MobileDetailField>
+                    <MobileDetailField label="Subtotal">{formatClp(item.subtotal)}</MobileDetailField>
+                  </MobileDetailGrid>
+                )}
+                desktop={(
               <div className={tableScrollClass}>
                 <table>
                   <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
                   <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="font-semibold text-ink-950">{item.productName}</td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
                 </table>
               </div>
+                )}
+              />
             </section>
 
             <section className="grid gap-3">

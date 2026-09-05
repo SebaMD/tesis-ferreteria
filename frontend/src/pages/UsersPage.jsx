@@ -5,6 +5,7 @@ import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
 import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
@@ -774,6 +775,47 @@ export default function UsersPage() {
             })}</p>
           </div>
         </div>
+        <ResponsiveTableView
+          rows={usersPagination.paginatedItems}
+          getRowKey={(user) => user.id}
+          getRowLabel={(user) => `${user.names} ${user.surnames}`}
+          resetKey={`${usersPagination.page}|${normalizedSearch}|${roleFilter}`}
+          emptyMessage={users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con la búsqueda ingresada."}
+          renderSummary={(user) => (
+            <div className="grid min-w-0 gap-2">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm text-ink-950">{user.names} {user.surnames}</strong>
+                  <span className="font-mono text-[11px] text-slate-500">#{user.id}</span>
+                </div>
+                <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
+                  {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-slate-600">{ROLE_NAMES[user.roleName] || user.roleName}</span>
+            </div>
+          )}
+          renderDetails={(user) => (
+            <>
+              <MobileDetailGrid>
+                <MobileDetailField label="RUT">{user.rut}</MobileDetailField>
+                <MobileDetailField label="Rol">{ROLE_NAMES[user.roleName] || user.roleName}</MobileDetailField>
+                <MobileDetailField label="Correo" wide><span className="break-all">{user.correo}</span></MobileDetailField>
+                <MobileDetailField label="Teléfono">{user.phone || "-"}</MobileDetailField>
+                <MobileDetailField label="Creado">{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</MobileDetailField>
+                {user.roleName === "CASHIER" && <MobileDetailField label="Horario" wide>{formatWorkSchedule(user)}</MobileDetailField>}
+              </MobileDetailGrid>
+              <MobileRowActions>
+                <button className={secondaryButtonClass} type="button" onClick={() => startEditing(user)}><Pencil size={17} /> Editar</button>
+                {user.roleName === "CASHIER" && (
+                  <button className={secondaryButtonClass} type="button" onClick={() => openScheduleForm(user)}>
+                    <Clock3 size={16} /> {user.workShift ? "Modificar horario" : "Configurar horario"}
+                  </button>
+                )}
+              </MobileRowActions>
+            </>
+          )}
+          desktop={(
         <div className={tableScrollClass}>
           <table className="min-w-315">
             <thead>
@@ -832,6 +874,8 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={usersPagination.page}
           pageSize={usersPagination.pageSize}

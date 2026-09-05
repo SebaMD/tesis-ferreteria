@@ -140,6 +140,28 @@ try {
   assert.equal((await request(`/online-orders/${clientAOrder}/receipt`)).status, 401);
   console.log("PASS PDF CLIENT propio/ajeno/sin sesión y pedido no pagado");
 
+  assert.equal((await request(`/online-orders/${clientFailedOrder}/archive`, {
+    method: "PATCH",
+    headers: { Authorization: auth(clientA) },
+  })).status, 200);
+  const hiddenOrders = (await (await request("/online-orders", { headers: { Authorization: auth(clientA) } })).json()).data;
+  assert.equal(hiddenOrders.some((order) => order.id === clientFailedOrder), false);
+  assert.equal((await request(`/online-orders/${clientFailedOrder}/restore`, {
+    method: "PATCH",
+    headers: { Authorization: auth(clientB) },
+  })).status, 404);
+  assert.equal((await request(`/online-orders/${clientFailedOrder}/restore`, {
+    method: "PATCH",
+    headers: { Authorization: auth(clientA) },
+  })).status, 200);
+  const restoredOrders = (await (await request("/online-orders", { headers: { Authorization: auth(clientA) } })).json()).data;
+  assert.equal(restoredOrders.some((order) => order.id === clientFailedOrder), true);
+  assert.equal((await request(`/online-orders/${clientFailedOrder}/restore`, {
+    method: "PATCH",
+    headers: { Authorization: auth(clientA) },
+  })).status, 404);
+  console.log("PASS ocultar/restaurar persistente, propietario y acción única");
+
   await assertPdf(await request("/online-orders/guest/order/receipt", { headers: { "X-Guest-Order-Token": guestTokenA } }), guestAOrder);
   assert.equal((await request("/online-orders/guest/order/receipt", { headers: { "X-Guest-Order-Token": randomBytes(32).toString("base64url") } })).status, 404);
   assert.equal((await request(`/online-orders/guest/order/receipt?folio=P-${guestAOrder}`)).status, 400);

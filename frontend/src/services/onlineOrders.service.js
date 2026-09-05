@@ -21,6 +21,11 @@ export async function archiveOnlineOrderRequest(orderId) {
   return response.data.data;
 }
 
+export async function restoreArchivedOnlineOrderRequest(orderId) {
+  const response = await api.patch(`/online-orders/${orderId}/restore`);
+  return response.data.data;
+}
+
 export async function getMyOnlineOrdersRequest() {
   const response = await api.get("/online-orders");
   return response.data.data || [];

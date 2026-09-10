@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
+import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { formatClp } from "../helpers/formatters.js";
@@ -23,6 +24,12 @@ import {
   getGuestPendingOrderRequest,
   getMyOnlineOrdersRequest,
 } from "../services/onlineOrders.service.js";
+import {
+  requestClientEmailVerification,
+  requestGuestEmailVerification,
+  verifyClientEmail,
+  verifyGuestEmail,
+} from "../services/emailVerification.service.js";
 
 function getPrimaryImage(product) {
   return product?.images?.find((image) => image.isPrimary) || product?.images?.[0] || null;
@@ -37,7 +44,7 @@ function createCheckoutKey() {
 }
 
 export default function CheckoutPage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, replaceSession } = useAuth();
   const { items } = useCart();
   const { removeProduct } = useCartActions();
   const isClient = isAuthenticated && user?.role === "CLIENT";
@@ -58,6 +65,10 @@ export default function CheckoutPage() {
     emailConfirmation: "",
     phone: "",
   });
+  const [clientEmailVerified, setClientEmailVerified] = useState(
+    Boolean(user?.emailVerifiedAt || user?.emailVerified),
+  );
+  const [guestEmailVerification, setGuestEmailVerification] = useState(null);
   const [deliveryData, setDeliveryData] = useState(() => ({
     recipientName: `${user?.names || ""} ${user?.surnames || ""}`.trim(),
     phone: user?.phone || "",
@@ -174,6 +185,14 @@ export default function CheckoutPage() {
     && normalizedGuestEmail === guestData.emailConfirmation.trim().toLowerCase()
     && /^[+0-9()\s-]{7,20}$/.test(guestData.phone.trim())
   );
+  const guestEmailFieldsAreValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedGuestEmail)
+    && normalizedGuestEmail === guestData.emailConfirmation.trim().toLowerCase();
+  const emailVerifiedForCheckout = isClient
+    ? clientEmailVerified
+    : Boolean(
+      guestEmailVerification?.verified
+      && guestEmailVerification.email === normalizedGuestEmail,
+    );
   const deliveryDataIsValid = deliveryType === "PICKUP" || (
     deliveryData.recipientName.trim()
     && /^[+0-9()\s-]{7,20}$/.test(deliveryData.phone.trim())
@@ -187,6 +206,7 @@ export default function CheckoutPage() {
     && rows.length > 0
     && !hasAvailabilityIssues
     && guestDataIsValid
+    && emailVerifiedForCheckout
     && Boolean(deliveryDataIsValid);
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
@@ -262,6 +282,7 @@ export default function CheckoutPage() {
           guestEmail: guestData.email,
           guestEmailConfirmation: guestData.emailConfirmation,
           guestPhone: guestData.phone,
+          emailVerificationChallengeId: guestEmailVerification?.challengeId,
           saveDeliveryAddress: false,
         });
 
@@ -455,6 +476,42 @@ export default function CheckoutPage() {
                     Usaremos este correo para enviarte el comprobante y las actualizaciones de tu pedido.
                   </p>
                 </div>
+              )}
+              {isClient && !clientEmailVerified && !pendingOrder && (
+                <EmailVerificationPanel
+                  key={`client-${user.correo}`}
+                  email={user.correo}
+                  requestCode={requestClientEmailVerification}
+                  verifyCode={verifyClientEmail}
+                  onVerified={(session) => {
+                    replaceSession(session);
+                    setClientEmailVerified(true);
+                  }}
+                  title="Verifica el correo de tu cuenta"
+                  description="Solo debes hacerlo una vez antes de iniciar tu próxima compra."
+                />
+              )}
+              {!isClient && !pendingOrder && (
+                guestEmailFieldsAreValid ? (
+                  <EmailVerificationPanel
+                    key={`guest-${normalizedGuestEmail}`}
+                    email={normalizedGuestEmail}
+                    requestCode={() => requestGuestEmailVerification(normalizedGuestEmail)}
+                    verifyCode={verifyGuestEmail}
+                    verified={emailVerifiedForCheckout}
+                    onVerified={(result) => setGuestEmailVerification({
+                      challengeId: result.challengeId,
+                      email: result.email,
+                      verified: true,
+                    })}
+                    title="Verifica el correo de esta compra"
+                    description="Debes confirmar el correo antes de iniciar Webpay."
+                  />
+                ) : (
+                  <p className="m-0 rounded-[5px] bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                    Escribe y confirma el mismo correo para poder verificarlo.
+                  </p>
+                )
               )}
             </section>
 

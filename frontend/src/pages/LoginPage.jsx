@@ -31,7 +31,14 @@ export default function LoginPage() {
     ? location.state.from
     : null;
 
-  if (isAuthenticated) return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace />;
+  if (isAuthenticated) {
+    const destination = user?.role !== "CLIENT"
+      ? "/dashboard"
+      : user.emailVerifiedAt || user.emailVerified
+        ? requestedPath || "/catalog"
+        : "/verify-email";
+    return <Navigate to={destination} state={destination === "/verify-email" ? { from: requestedPath || "/catalog" } : undefined} replace />;
+  }
 
   const clearExpiredSessionMessage = () => {
     if (!sessionNotice) return;
@@ -46,7 +53,15 @@ export default function LoginPage() {
 
     try {
       const authenticatedUser = await login({ correo, password });
-      navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
+      if (
+        authenticatedUser.role === "CLIENT"
+        && !authenticatedUser.emailVerifiedAt
+        && !authenticatedUser.emailVerified
+      ) {
+        navigate("/verify-email", { state: { from: requestedPath || "/catalog" } });
+      } else {
+        navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
+      }
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {

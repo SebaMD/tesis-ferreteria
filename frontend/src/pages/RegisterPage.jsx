@@ -55,7 +55,7 @@ export default function RegisterPage() {
 
     try {
       setLoading(true);
-      await registerClient({
+      const session = await registerClient({
         rut: form.rut,
         names: form.names,
         surnames: form.surnames,
@@ -64,7 +64,13 @@ export default function RegisterPage() {
         password: form.password,
       });
       toast.success("Cuenta creada exitosamente");
-      navigate(requestedPath || "/catalog");
+      navigate("/verify-email", {
+        replace: true,
+        state: {
+          from: requestedPath || "/catalog",
+          initialChallenge: session.emailVerification,
+        },
+      });
     } catch (error) {
       toast.error(getApiError(error, "No se pudo crear la cuenta"));
     } finally {

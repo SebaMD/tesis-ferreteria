@@ -3,6 +3,7 @@ import {
   DELIVERY_COMMUNE,
   validateCoordinatePair,
 } from "../../utils/delivery.js";
+import { isValidEmail, normalizeEmail } from "../../utils/email.js";
 
 export type OnlineOrderItemInput = {
   productId: number;
@@ -27,6 +28,7 @@ export type CreateGuestCheckoutBody = CreateCheckoutBody & {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  emailVerificationChallengeId: number;
 };
 
 type ValidationResult<T> =
@@ -202,6 +204,7 @@ export function validateCreateGuestCheckoutBody(
     "guestEmail",
     "guestEmailConfirmation",
     "guestPhone",
+    "emailVerificationChallengeId",
   ]);
   const checkoutFields = new Set([
     "checkoutKey",
@@ -243,9 +246,9 @@ export function validateCreateGuestCheckoutBody(
   if (!guestName.value || guestName.value.length < 3) {
     return { success: false, error: "El nombre del comprador debe tener al menos 3 caracteres" };
   }
-  const normalizedEmail = guestEmail.value?.toLowerCase() || "";
-  const normalizedEmailConfirmation = guestEmailConfirmation.value?.toLowerCase() || "";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+  const normalizedEmail = normalizeEmail(guestEmail.value || "");
+  const normalizedEmailConfirmation = normalizeEmail(guestEmailConfirmation.value || "");
+  if (!isValidEmail(normalizedEmail)) {
     return { success: false, error: "El correo electronico no es valido" };
   }
   if (normalizedEmail !== normalizedEmailConfirmation) {
@@ -253,6 +256,10 @@ export function validateCreateGuestCheckoutBody(
   }
   if (!guestPhone.value || !/^[+0-9()\s-]{7,20}$/.test(guestPhone.value)) {
     return { success: false, error: "El telefono del comprador no es valido" };
+  }
+  const emailVerificationChallengeId = positiveInteger(input.emailVerificationChallengeId);
+  if (!emailVerificationChallengeId) {
+    return { success: false, error: "Debes verificar el correo antes de iniciar el pago" };
   }
 
   const checkoutInput = Object.fromEntries(
@@ -270,6 +277,7 @@ export function validateCreateGuestCheckoutBody(
       guestName: guestName.value,
       guestEmail: normalizedEmail,
       guestPhone: guestPhone.value,
+      emailVerificationChallengeId,
     },
   };
 }

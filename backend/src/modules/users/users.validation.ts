@@ -1,7 +1,7 @@
 import type { NewUser } from "../../db/schema/index.js";
+import { isValidEmail, normalizeEmail } from "../../utils/email.js";
 
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
@@ -36,9 +36,7 @@ export function normalizeRut(value: string) {
   return value.trim().replace(/\./g, "").toUpperCase();
 }
 
-export function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
+export { normalizeEmail };
 
 export function normalizeName(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -119,7 +117,7 @@ export function validateEditUserBody(body: unknown): ValidationResult<EditUserBo
     if (!correo) {
       return { success: false, error: "El correo electrónico es obligatorio" };
     }
-    if (correo.length > 255 || !EMAIL_REGEX.test(correo)) {
+    if (!isValidEmail(correo)) {
       return { success: false, error: "El correo electrónico no tiene un formato valido" };
     }
     value.correo = correo;

@@ -125,6 +125,7 @@ export async function findActiveClientForUpdate(tx: DbTransaction, clientId: num
       id: usersTable.id,
       role: rolesTable.name,
       status: usersTable.status,
+      emailVerifiedAt: usersTable.emailVerifiedAt,
     })
     .from(usersTable)
     .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))

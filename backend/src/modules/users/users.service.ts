@@ -84,6 +84,14 @@ export async function editUserService(id: number, data: EditUserBody, authentica
     userData.password = await bcrypt.hash(userData.password, 10);
   }
 
+  if (
+    userData.correo !== undefined
+    && userData.correo !== user.correo
+    && (nextRole?.name ?? user.roleName) === "CLIENT"
+  ) {
+    Object.assign(userData, { emailVerifiedAt: null });
+  }
+
   const updatedUser = await updateUserById(id, userData);
 
   if (!updatedUser) {

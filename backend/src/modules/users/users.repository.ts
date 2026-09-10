@@ -10,6 +10,7 @@ const publicUserColumns = {
     names: usersTable.names,
     surnames: usersTable.surnames,
     correo: usersTable.correo,
+    emailVerifiedAt: usersTable.emailVerifiedAt,
     phone: usersTable.phone,
     status: usersTable.status,
     workShift: usersTable.workShift,

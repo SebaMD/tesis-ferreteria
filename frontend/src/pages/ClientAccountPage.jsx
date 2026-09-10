@@ -1,8 +1,17 @@
 import { Mail, Phone, ShieldCheck, UserRound } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import useAuth from "../hooks/useAuth.js";
+import {
+  requestClientEmailChange,
+  verifyClientEmailChange,
+} from "../services/emailVerification.service.js";
 
 export default function ClientAccountPage() {
-  const { user } = useAuth();
+  const { user, replaceSession } = useAuth();
+  const [newEmail, setNewEmail] = useState("");
+  const [changeEmail, setChangeEmail] = useState("");
 
   return (
     <main className="mx-auto grid w-full max-w-220 gap-5 px-6 py-8 max-[720px]:px-3.5">
@@ -20,9 +29,54 @@ export default function ClientAccountPage() {
         </div>
         <dl className="grid grid-cols-2 gap-4 max-[620px]:grid-cols-1">
           <div className="rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><ShieldCheck size={16} /> RUT</dt><dd className="mt-2 ml-0 font-semibold text-ink-950">{user.rut}</dd></div>
-          <div className="rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Mail size={16} /> Correo</dt><dd className="mt-2 ml-0 font-semibold text-ink-950">{user.correo}</dd></div>
+          <div className="rounded-[5px] bg-slate-50 p-4">
+            <dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Mail size={16} /> Correo</dt>
+            <dd className="mt-2 ml-0 font-semibold text-ink-950">{user.correo}</dd>
+            <span className={`mt-1 block text-xs font-bold ${user.emailVerifiedAt || user.emailVerified ? "text-positive-600" : "text-amber-700"}`}>
+              {user.emailVerifiedAt || user.emailVerified ? "Correo verificado" : "Correo pendiente de verificacion"}
+            </span>
+            {!user.emailVerifiedAt && !user.emailVerified && <Link className="mt-2 inline-block text-xs font-bold text-rust-600" to="/verify-email">Verificar ahora</Link>}
+          </div>
           <div className="rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Phone size={16} /> Teléfono</dt><dd className="mt-2 ml-0 font-semibold text-ink-950">{user.phone || "No registrado"}</dd></div>
         </dl>
+        <section className="grid gap-3 border-t border-slate-200 pt-5">
+          <div>
+            <h2 className="m-0 text-base font-bold text-ink-950">Cambiar correo</h2>
+            <p className="mt-1 mb-0 text-xs leading-5 text-slate-500">Tu correo actual se mantendrá hasta que verifiques el nuevo.</p>
+          </div>
+          {!changeEmail ? (
+            <form
+              className="flex items-end gap-2 max-[620px]:grid"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setChangeEmail(newEmail.trim().toLowerCase());
+              }}
+            >
+              <label className="grid min-w-0 flex-1 gap-1.5 text-xs font-bold text-slate-600">
+                Nuevo correo electrónico
+                <input type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} required />
+              </label>
+              <button type="submit" disabled={!newEmail.trim()}>Continuar</button>
+            </form>
+          ) : (
+            <div className="grid gap-3">
+              <EmailVerificationPanel
+                key={changeEmail}
+                email={changeEmail}
+                requestCode={() => requestClientEmailChange(changeEmail)}
+                verifyCode={verifyClientEmailChange}
+                onVerified={(session) => {
+                  replaceSession(session);
+                  setNewEmail("");
+                  setChangeEmail("");
+                }}
+                title="Verifica el nuevo correo"
+                description="El cambio se aplicará únicamente después de ingresar el código correcto."
+              />
+              <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => setChangeEmail("")}>Cancelar cambio</button>
+            </div>
+          )}
+        </section>
         <p className="m-0 text-xs leading-5 text-slate-500">Las direcciones y datos de entrega se solicitarán posteriormente al realizar un pedido, no forman parte de esta etapa.</p>
       </section>
     </main>

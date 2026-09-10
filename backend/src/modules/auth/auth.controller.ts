@@ -6,6 +6,10 @@ import {
 } from "../../utils/helpers.js";
 import { AuthError, loginService, registerClientService } from "./auth.service.js";
 import { validateLoginBody, validateRegisterBody } from "./auth.validation.js";
+import {
+  EmailVerificationError,
+  requestClientEmailVerificationService,
+} from "../emailVerification/emailVerification.service.js";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
@@ -44,7 +48,21 @@ export async function registerClient(req: Request, res: Response) {
     }
 
     const data = await registerClientService(validation.value);
-    return handleSuccess(res, 201, "Cuenta de cliente creada exitosamente", data);
+    try {
+      const emailVerification = await requestClientEmailVerificationService(data.user.id);
+      return handleSuccess(res, 201, "Cuenta de cliente creada exitosamente", {
+        ...data,
+        emailVerification: { sent: true, ...emailVerification },
+      });
+    } catch (error) {
+      const verificationMessage = error instanceof EmailVerificationError
+        ? error.message
+        : "No se pudo preparar la verificacion del correo";
+      return handleSuccess(res, 201, "Cuenta creada, pero no se pudo enviar el codigo", {
+        ...data,
+        emailVerification: { sent: false, message: verificationMessage },
+      });
+    }
   } catch (error) {
     if (error instanceof AuthError) {
       return handleErrorClient(res, error.statusCode, error.message);

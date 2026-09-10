@@ -26,11 +26,18 @@ export type WarehouseMailEvent =
   | "NEW_SALE_DELIVERY"
   | "READY_FOR_DELIVERY";
 
-type MailContent = {
+export type MailContent = {
   subject: string;
   text: string;
   html?: string;
 };
+
+export class MailDeliveryError extends Error {
+  constructor(message = "No se pudo enviar el correo") {
+    super(message);
+    this.name = "MailDeliveryError";
+  }
+}
 
 let transporter: Transporter | null = null;
 let configurationWarningPrinted = false;
@@ -94,6 +101,37 @@ async function sendMailBestEffort(to: string, content: MailContent) {
     });
   } catch (error) {
     console.error(`No se pudo enviar el correo "${content.subject}": ${errorMessage(error)}`);
+  }
+}
+
+export async function sendMailRequired(to: string, content: MailContent) {
+  if (!MAIL_ENABLED) {
+    throw new MailDeliveryError("El envio de correos no esta habilitado");
+  }
+  if (mailConfigurationIssues().length > 0) {
+    warnInvalidConfigurationOnce();
+    throw new MailDeliveryError("La configuracion SMTP esta incompleta");
+  }
+  if (!MAIL_FROM || !to.trim()) {
+    throw new MailDeliveryError("El destinatario del correo no es valido");
+  }
+
+  const currentTransporter = getTransporter();
+  if (!currentTransporter) {
+    throw new MailDeliveryError("El transporte SMTP no esta disponible");
+  }
+
+  try {
+    await currentTransporter.sendMail({
+      from: MAIL_FROM,
+      to,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    });
+  } catch {
+    console.error("No se pudo enviar un correo requerido mediante SMTP.");
+    throw new MailDeliveryError();
   }
 }
 

@@ -20,6 +20,7 @@ export const DATABASE_URL = process.env.DATABASE_URL;
 
 export const COOKIE_KEY = process.env.COOKIE_KEY;
 export const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+export const EMAIL_VERIFICATION_SECRET = process.env.EMAIL_VERIFICATION_SECRET;
 export const UPLOADS_ROOT = process.env.UPLOADS_ROOT || path.resolve(process.cwd(), "uploads");
 
 export const WEBPAY_ENVIRONMENT = (process.env.WEBPAY_ENVIRONMENT || "integration").toLowerCase();

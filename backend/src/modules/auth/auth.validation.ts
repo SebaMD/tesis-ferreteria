@@ -1,5 +1,6 @@
+import { isValidEmail, normalizeEmail } from "../../utils/email.js";
+
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
@@ -28,9 +29,7 @@ type ValidationResult<T> =
       error: string;
     };
 
-export function normalizeEmail(email = "") {
-  return String(email).trim().toLowerCase();
-}
+export { normalizeEmail };
 
 export function normalizeName(name = "") {
   return String(name).trim().replace(/\s+/g, " ");
@@ -79,7 +78,7 @@ export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
 
   const correo = normalizeEmail(input.correo);
 
-  if (!EMAIL_REGEX.test(correo)) {
+  if (!isValidEmail(correo)) {
     return { success: false, error: "Debe ingresar un correo valido" };
   }
 
@@ -137,7 +136,7 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
     return { success: false, error: "Los apellidos deben tener entre 3 y 120 caracteres y solo letras/espacios" };
   }
 
-  if (correo.length > 255 || !EMAIL_REGEX.test(correo)) {
+  if (!isValidEmail(correo)) {
     return { success: false, error: "Debe ingresar un correo valido" };
   }
 

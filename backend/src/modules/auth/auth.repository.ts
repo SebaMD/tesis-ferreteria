@@ -10,6 +10,7 @@ const authUserColumns = {
   names: usersTable.names,
   surnames: usersTable.surnames,
   correo: usersTable.correo,
+  emailVerifiedAt: usersTable.emailVerifiedAt,
   password: usersTable.password,
   phone: usersTable.phone,
   status: usersTable.status,
@@ -25,6 +26,16 @@ export async function findAuthUserByCorreo(correo: string) {
     .where(eq(usersTable.correo, correo))
     .limit(1);
 
+  return user;
+}
+
+export async function findAuthUserById(id: number) {
+  const [user] = await db
+    .select(authUserColumns)
+    .from(usersTable)
+    .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
+    .where(eq(usersTable.id, id))
+    .limit(1);
   return user;
 }
 

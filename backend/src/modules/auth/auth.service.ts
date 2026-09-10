@@ -4,6 +4,7 @@ import { SESSION_SECRET } from "../../config/configEnv.js";
 import {
   createAuthUser,
   findAuthUserByCorreo,
+  findAuthUserById,
   findRoleByName,
   findUserByRutOrCorreo,
 } from "./auth.repository.js";
@@ -19,23 +20,9 @@ export class AuthError extends Error {
   }
 }
 
-export async function loginService(data: LoginBody) {
-  const user = await findAuthUserByCorreo(data.correo);
+type AuthUser = NonNullable<Awaited<ReturnType<typeof findAuthUserByCorreo>>>;
 
-  if (!user) {
-    throw new Error("Credenciales incorrectas");
-  }
-
-  const isPasswordValid = await bcrypt.compare(data.password, user.password);
-
-  if (!isPasswordValid) {
-    throw new Error("Credenciales incorrectas");
-  }
-
-  if (user.status === "INACTIVE") {
-    throw new Error("Tu cuenta esta inactiva. Contacta a administracion");
-  }
-
+function createAuthenticatedSession(user: AuthUser) {
   if (!SESSION_SECRET) {
     throw new Error("JWT_SECRET no esta configurado");
   }
@@ -63,10 +50,40 @@ export async function loginService(data: LoginBody) {
       names: user.names,
       surnames: user.surnames,
       correo: user.correo,
+      emailVerifiedAt: user.emailVerifiedAt,
+      emailVerified: Boolean(user.emailVerifiedAt),
       phone: user.phone,
       status: user.status,
     },
   };
+}
+
+export async function createSessionForUserId(userId: number) {
+  const user = await findAuthUserById(userId);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AuthError("La cuenta no esta activa", 403);
+  }
+  return createAuthenticatedSession(user);
+}
+
+export async function loginService(data: LoginBody) {
+  const user = await findAuthUserByCorreo(data.correo);
+
+  if (!user) {
+    throw new Error("Credenciales incorrectas");
+  }
+
+  const isPasswordValid = await bcrypt.compare(data.password, user.password);
+
+  if (!isPasswordValid) {
+    throw new Error("Credenciales incorrectas");
+  }
+
+  if (user.status === "INACTIVE") {
+    throw new Error("Tu cuenta esta inactiva. Contacta a administracion");
+  }
+
+  return createAuthenticatedSession(user);
 }
 
 export async function registerClientService(data: RegisterBody) {
@@ -92,6 +109,7 @@ export async function registerClientService(data: RegisterBody) {
       names: data.names,
       surnames: data.surnames,
       correo: data.correo,
+      emailVerifiedAt: null,
       password: await bcrypt.hash(data.password, 10),
       phone: data.phone ?? null,
       status: "ACTIVE",

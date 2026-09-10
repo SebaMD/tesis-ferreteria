@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   clearSessionNotice,
   clearStoredAuth,
@@ -12,15 +12,19 @@ export default function AuthProvider({ children }) {
   const [session, setSession] = useState(readStoredAuth);
   const { token, user } = session;
 
-  const login = async (credentials) => {
-    const data = await loginRequest(credentials);
-    storeAuthSession(data.token, data.user);
+  const replaceSession = useCallback((sessionData) => {
+    storeAuthSession(sessionData.token, sessionData.user);
     clearSessionNotice();
-    setSession({ token: data.token, user: data.user });
-    return data.user;
-  };
+    setSession({ token: sessionData.token, user: sessionData.user });
+    return sessionData.user;
+  }, []);
 
-  const logout = async () => {
+  const login = useCallback(async (credentials) => {
+    const data = await loginRequest(credentials);
+    return replaceSession(data);
+  }, [replaceSession]);
+
+  const logout = useCallback(async () => {
     try {
       if (localStorage.getItem("token")) await logoutRequest();
     } finally {
@@ -28,15 +32,13 @@ export default function AuthProvider({ children }) {
       clearSessionNotice();
       setSession({ token: null, user: null });
     }
-  };
+  }, []);
 
-  const registerClient = async (data) => {
+  const registerClient = useCallback(async (data) => {
     const sessionData = await registerClientRequest(data);
-    storeAuthSession(sessionData.token, sessionData.user);
-    clearSessionNotice();
-    setSession({ token: sessionData.token, user: sessionData.user });
-    return sessionData.user;
-  };
+    replaceSession(sessionData);
+    return sessionData;
+  }, [replaceSession]);
 
   const value = useMemo(
     () => ({
@@ -45,9 +47,10 @@ export default function AuthProvider({ children }) {
       isAuthenticated: Boolean(token && user),
       login,
       registerClient,
+      replaceSession,
       logout,
     }),
-    [token, user],
+    [login, logout, registerClient, replaceSession, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -92,6 +92,7 @@ import type {
   CreateCheckoutBody,
   CreateGuestCheckoutBody,
 } from "./onlineOrders.validation.js";
+import { consumeVerifiedGuestChallenge } from "../emailVerification/emailVerification.repository.js";
 
 export class OnlineOrderError extends Error {
   constructor(
@@ -121,6 +122,7 @@ type CheckoutOwner =
     guestName: string;
     guestEmail: string;
     guestPhone: string;
+    emailVerificationChallengeId: number;
   };
 
 const WEBPAY_LAUNCH_REUSE_MILLISECONDS = 4 * 60_000;
@@ -262,6 +264,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
     guestAccessToken?: string;
   } | null = null;
   let expiredLaunch = false;
+  let clientEmailVerified = false;
   const orderHistoryLabel = owner.type === "CLIENT" ? "Mis pedidos" : "el seguimiento del pedido";
 
   try {
@@ -269,6 +272,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
       if (owner.type === "CLIENT") {
         const client = await findActiveClientForUpdate(tx, owner.clientId);
         assertActiveClient(client);
+        clientEmailVerified = Boolean(client?.emailVerifiedAt);
         await expirePendingOrdersForClient(tx, owner.clientId);
       } else {
         await expirePendingOrdersForGuestSession(tx, owner.guestSessionHash);
@@ -347,6 +351,26 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
           "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
           409,
         );
+      }
+
+      if (owner.type === "CLIENT" && !clientEmailVerified) {
+        throw new OnlineOrderError(
+          "Debes verificar el correo de tu cuenta antes de iniciar una compra",
+          403,
+        );
+      }
+      if (owner.type === "GUEST") {
+        const consumedChallenge = await consumeVerifiedGuestChallenge(tx, {
+          challengeId: owner.emailVerificationChallengeId,
+          guestSessionHash: owner.guestSessionHash,
+          email: owner.guestEmail,
+        });
+        if (!consumedChallenge) {
+          throw new OnlineOrderError(
+            "Debes verificar el correo de esta compra antes de iniciar el pago",
+            403,
+          );
+        }
       }
 
       const productIds = data.items.map((item) => item.productId);
@@ -498,6 +522,7 @@ export async function createGuestCheckoutService(
     guestName: data.guestName,
     guestEmail: data.guestEmail,
     guestPhone: data.guestPhone,
+    emailVerificationChallengeId: data.emailVerificationChallengeId,
   }, data);
 }
 

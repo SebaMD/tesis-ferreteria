@@ -10,6 +10,7 @@ import reportsRoutes from "./reports/reports.routes.js";
 import salesRoutes from "./sales/sales.routes.js";
 import usersRoutes from "./users/users.routes.js";
 import favoritesRoutes from "./favorites/favorites.routes.js";
+import emailVerificationRoutes from "./emailVerification/emailVerification.routes.js";
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.get("/health", (_req, res) => {
 router.use("/auth", authRoutes);
 router.use("/catalog", catalogRoutes);
 router.use("/favorites", favoritesRoutes);
+router.use("/email-verification", emailVerificationRoutes);
 router.use("/categories", categoriesRoutes);
 router.use("/inventory", inventoryRoutes);
 router.use("/online-orders", onlineOrdersRoutes);

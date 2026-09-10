@@ -15,3 +15,4 @@ export * from "./onlinePayments.js";
 export * from "./clientDeliveryAddresses.js";
 export * from "./guestOrderAccessTokens.js";
 export * from "./clientProductFavorites.js";
+export * from "./emailVerificationChallenges.js";

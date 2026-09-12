@@ -1,6 +1,6 @@
 export const pageClass = "mx-auto grid w-full max-w-[1440px] gap-4 px-6 py-5 max-[720px]:gap-4 max-[720px]:px-3.5 max-[720px]:py-[18px]";
 
-export const pageHeaderClass = "flex flex-wrap items-start justify-between gap-4 [&_h1]:m-0 [&_h1]:text-[21px] [&_h1]:font-bold [&_h1]:text-ink-950 max-[720px]:[&_h1]:text-[19px] [&_p]:mt-[5px] [&_p]:mb-0 [&_p]:text-sm [&_p]:text-slate-500";
+export const pageHeaderClass = "flex flex-wrap items-start justify-between gap-4 max-[720px]:justify-center max-[720px]:text-center max-[720px]:[&>div:first-child]:w-full [&_h1]:m-0 [&_h1]:text-[21px] [&_h1]:font-bold [&_h1]:text-ink-950 max-[720px]:[&_h1]:text-[19px] [&_p]:mt-[5px] [&_p]:mb-0 [&_p]:text-sm [&_p]:text-slate-500";
 
 export const panelClass = "grid content-start gap-[15px] rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.04)]";
 

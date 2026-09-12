@@ -37,7 +37,7 @@ export default function ProductImagesManager({
         <div className="grid grid-cols-3 gap-2 max-[620px]:grid-cols-2">
           {images.map((image, index) => (
             <article className="grid gap-2 rounded-[5px] border border-slate-200 bg-white p-2" key={image.id}>
-              <div className="relative aspect-square overflow-hidden rounded-[4px] bg-slate-100">
+              <div className="relative aspect-square overflow-hidden rounded-sm bg-slate-100">
                 <img className="h-full w-full object-cover" src={image.imageUrl} alt={`Fotografía ${index + 1}`} />
                 {image.isPrimary && <span className="absolute top-1.5 left-1.5 rounded bg-rust-500 px-2 py-1 text-[10px] font-bold text-white">Principal</span>}
               </div>
@@ -60,7 +60,7 @@ export default function ProductImagesManager({
         <div className="grid gap-1.5">
           <strong className="text-xs text-ink-700">Se subirán al guardar:</strong>
           {pendingFiles.map((file, index) => (
-            <div className="flex items-center justify-between gap-2 rounded-[4px] border border-rust-200 bg-rust-50 px-2.5 py-1.5 text-xs text-rust-700" key={`${file.name}-${file.lastModified}-${index}`}>
+            <div className="flex items-center justify-between gap-2 rounded-sm border border-rust-200 bg-rust-50 px-2.5 py-1.5 text-xs text-rust-700" key={`${file.name}-${file.lastModified}-${index}`}>
               <span className="truncate">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</span>
               <button className="size-7 min-h-7 shrink-0 border-rust-200 bg-white p-0 text-rust-700" type="button" onClick={() => onRemovePending(index)} disabled={disabled} aria-label={`Quitar ${file.name}`}><X size={14} /></button>
             </div>

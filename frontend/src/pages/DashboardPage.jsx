@@ -7,8 +7,10 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { compareByNewest, formatClp, formatDate, getSaleTotals } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct } from "../helpers/inventory.js";
 import { getSaleStatusLabel, MOVEMENT_LABELS } from "../helpers/labels.js";
+import { formatOnlineOrderFolio, getOnlineOrderDeliveryType, getOnlineOrderStatus } from "../helpers/onlineOrders.js";
 import { ROUTE_PERMISSIONS } from "../helpers/roles.js";
 import { getInventoryMovementsRequest } from "../services/inventory.service.js";
+import { getOperationalOrdersRequest } from "../services/orderLogistics.service.js";
 import { getProductsRequest } from "../services/products.service.js";
 import { getSalesRequest } from "../services/sales.service.js";
 import useAuth from "../hooks/useAuth.js";
@@ -58,12 +60,25 @@ function getSaleStatusTone(status) {
   return "critical";
 }
 
+function dashboardOrderFolio(order) {
+  if (order.folio) return order.folio;
+  return order.origin === "POS"
+    ? `V-${String(order.id || 0).padStart(6, "0")}`
+    : formatOnlineOrderFolio(order.id);
+}
+
+function logisticsTimestamp(order) {
+  const timestamp = new Date(order.paidAt || order.createdAt).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [logisticsOrders, setLogisticsOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const canViewSales = ROUTE_PERMISSIONS.sales.includes(user?.role);
@@ -71,6 +86,7 @@ export default function DashboardPage() {
   const canViewStockReplenishment = user?.role !== "CASHIER";
   const canUseLowStockFilter = user?.role !== "CASHIER";
   const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
+  const isWarehouse = user?.role === "WAREHOUSE";
 
   const goTo = (path) => {
     if (path) navigate(path);
@@ -99,16 +115,18 @@ export default function DashboardPage() {
       try {
         setLoading(true);
 
-        const [productData, saleData, movementData] = await Promise.all([
+        const [productData, saleData, movementData, logisticsData] = await Promise.all([
           getProductsRequest(),
           canViewSales ? getSalesRequest() : Promise.resolve([]),
           canViewInventoryHistory ? getInventoryMovementsRequest() : Promise.resolve([]),
+          isWarehouse ? getOperationalOrdersRequest({ scope: "ALL" }) : Promise.resolve([]),
         ]);
 
         if (!active) return;
         setProducts(productData);
         setSales(saleData);
         setMovements(movementData);
+        setLogisticsOrders(logisticsData);
       } catch (err) {
         if (active) toast.error(getApiError(err, "No se pudo cargar el resumen del sistema"));
       } finally {
@@ -120,7 +138,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [canViewInventoryHistory, canViewSales]);
+  }, [canViewInventoryHistory, canViewSales, isWarehouse]);
 
   const activeProducts = useMemo(
     () => products.filter((product) => product.status !== false),
@@ -165,6 +183,16 @@ export default function DashboardPage() {
   );
   const latestSales = useMemo(() => [...sales].sort(compareByNewest).slice(0, 5), [sales]);
   const latestMovements = useMemo(() => [...movements].sort(compareByNewest).slice(0, 5), [movements]);
+  const operationalOrders = useMemo(
+    () => logisticsOrders.filter((order) => order.status !== "DELIVERED"),
+    [logisticsOrders],
+  );
+  const priorityOperationalOrders = useMemo(
+    () => [...operationalOrders]
+      .sort((left, right) => logisticsTimestamp(left) - logisticsTimestamp(right))
+      .slice(0, 5),
+    [operationalOrders],
+  );
 
   const metrics = [
     {
@@ -198,12 +226,15 @@ export default function DashboardPage() {
     ...(user?.role === "CASHIER"
       ? [{ label: "Vendido hoy", value: formatClp(cashierTodaySalesTotal), icon: DollarSign, tone: "positive", path: "/sales?view=history" }]
       : []),
+    ...(user?.role === "WAREHOUSE"
+      ? [{ label: "Pedidos y repartos", value: operationalOrders.length, icon: PackageCheck, tone: "positive", path: "/online-orders-management" }]
+      : []),
     ...(canViewInventoryHistory
       ? [{ label: "Movimientos recientes", value: recentMovements.length, icon: ArrowLeftRight, tone: "neutral", path: "/products?view=history" }]
       : []),
   ];
   const metricsGridColumnsClass = user?.role === "WAREHOUSE"
-    ? "grid-cols-2"
+    ? "grid-cols-3"
     : metrics.length >= 5
       ? "grid-cols-5"
       : metrics.length >= 4
@@ -239,7 +270,7 @@ export default function DashboardPage() {
         })}
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-stretch gap-4 [&>section]:grid [&>section]:h-full [&>section]:grid-rows-[auto_1fr]">
         {canViewStockReplenishment && (
           <section
             className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
@@ -253,7 +284,7 @@ export default function DashboardPage() {
               <span className={panelCountClass}>{lowStockProducts.length}</span>
             </div>
 
-            <div className="grid">
+            <div className={`grid ${isWarehouse ? "h-full content-center" : "content-start"}`}>
               {priorityLowStockProducts.length === 0 ? (
                 <p className={emptyStateClass}>No hay productos con stock bajo.</p>
               ) : (
@@ -345,6 +376,43 @@ export default function DashboardPage() {
                     </div>
                   </article>
                 ))
+              )}
+            </div>
+          </section>
+        )}
+
+        {isWarehouse && (
+          <section
+            className={`${dashboardPanelClass} ${quickLinkClass}`}
+            {...quickLinkProps("/online-orders-management")}
+          >
+            <div className={dashboardPanelHeadingClass}>
+              <div>
+                <h2>Pedidos y repartos</h2>
+                <p>Tareas operacionales más antiguas</p>
+              </div>
+              <span className={panelCountClass}>{operationalOrders.length}</span>
+            </div>
+
+            <div className="grid h-full auto-rows-fr">
+              {priorityOperationalOrders.length === 0 ? (
+                <p className={emptyStateClass}>No hay pedidos pendientes actualmente.</p>
+              ) : (
+                priorityOperationalOrders.map((order) => {
+                  const status = getOnlineOrderStatus(order.status);
+                  const delivery = getOnlineOrderDeliveryType(order.deliveryType);
+                  return (
+                    <article className={dashboardListRowClass} key={`${order.origin}-${order.id}`}>
+                      <div>
+                        <strong>{dashboardOrderFolio(order)}</strong>
+                        <span>{delivery.label} · {formatDate(order.paidAt || order.createdAt, DASHBOARD_DATE_OPTIONS)}</span>
+                      </div>
+                      <div className={listRowEndClass}>
+                        <span className={badgeClass(status.tone)}>{status.label}</span>
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>
           </section>

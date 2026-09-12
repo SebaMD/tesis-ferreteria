@@ -2,10 +2,12 @@ import { db } from "../../db/index.js";
 import { isValidRut, normalizeName, normalizeRut } from "../auth/auth.validation.js";
 import {
   notifyClientOrderBestEffort,
-  notifyWarehousesBestEffort,
   type ClientOrderMailEvent,
 } from "../notifications/notifications.service.js";
-import { issueGuestOrderTrackingAccessService } from "../onlineOrders/onlineOrders.service.js";
+import {
+  getOrderCommercialModelForNotificationService,
+  issueGuestOrderTrackingAccessService,
+} from "../onlineOrders/onlineOrders.service.js";
 import {
   removeStoredImageFile,
   saveImageFile,
@@ -283,7 +285,6 @@ function validateEvidence(input: DeliveryEvidenceInput, requirePhoto: boolean) {
 function notificationEvent(action: LogisticsAction, nextStatus: LogisticsStatus) {
   if (action === "START_PREPARATION") return "PREPARATION_STARTED";
   if (nextStatus === "READY_FOR_PICKUP") return "READY_FOR_PICKUP";
-  if (nextStatus === "READY_FOR_DELIVERY") return "READY_FOR_DELIVERY";
   if (nextStatus === "OUT_FOR_DELIVERY") return "OUT_FOR_DELIVERY";
   if (nextStatus === "DELIVERED") return "DELIVERED";
   return null;
@@ -405,6 +406,7 @@ export async function transitionLogisticsOrderService(
     const nextStatus = transitionResult.status as LogisticsStatus;
     const event = notificationEvent(action, nextStatus);
     if (origin === "ONLINE" && event && updatedTask.customerEmail) {
+      const customerEmail = updatedTask.customerEmail;
       let trackingUrl: string | undefined;
       if (updatedTask.customerType === "GUEST") {
         try {
@@ -416,21 +418,22 @@ export async function transitionLogisticsOrderService(
           console.error("No se pudo generar el enlace de seguimiento invitado:", error);
         }
       }
-      void notifyClientOrderBestEffort({
-        email: updatedTask.customerEmail,
-        folio: updatedTask.folio,
-        event: event as ClientOrderMailEvent,
-        trackingUrl,
-        recipientType: updatedTask.customerType === "GUEST" ? "GUEST" : "CLIENT",
-      });
+      void (async () => {
+        try {
+          const commercialModel = await getOrderCommercialModelForNotificationService(updatedTask.id);
+          await notifyClientOrderBestEffort({
+            email: customerEmail,
+            folio: updatedTask.folio,
+            event: event as ClientOrderMailEvent,
+            trackingUrl,
+            recipientType: updatedTask.customerType === "GUEST" ? "GUEST" : "CLIENT",
+            commercialModel,
+          });
+        } catch {
+          console.error("No se pudo preparar una notificación de estado del pedido.");
+        }
+      })();
     }
-    if (nextStatus === "READY_FOR_DELIVERY") {
-      void notifyWarehousesBestEffort({
-        folio: updatedTask.folio,
-        event: "READY_FOR_DELIVERY",
-      });
-    }
-
     return presentLogisticsTask(updatedTask, { id: warehouseUserId, role: "WAREHOUSE" });
   } catch (error) {
     if (savedProofPath && !transitionCommitted) {

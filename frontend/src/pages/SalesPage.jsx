@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
@@ -2082,27 +2083,29 @@ export default function SalesPage() {
       {activeView === "history" && (
         <>
           <div className="flex flex-wrap items-center gap-2.5 max-[720px]:items-stretch">
-            <label className="relative block w-full max-w-120 max-[720px]:max-w-none">
-              <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-              <input
-                className="pl-9.75"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por folio, fecha, cajero, método o total"
-                aria-label="Buscar ventas"
-              />
-            </label>
-            {canReviewCancellation && (
-              <button
-                className={`${secondaryButtonClass} mr-0 size-11 min-h-11 shrink-0 p-0`}
-                type="button"
-                onClick={() => setSalesScannerOpen(true)}
-                aria-label="Escanear código de barra"
-                title="Escanear código de barra"
-              >
-                <ScanBarcode size={20} />
-              </button>
-            )}
+            <div className="flex w-full max-w-134 min-w-0 items-center gap-2.5">
+              <label className="relative block min-w-0 flex-1">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar por folio, fecha, cajero, método o total"
+                  aria-label="Buscar ventas"
+                />
+              </label>
+              {canReviewCancellation && (
+                <button
+                  className={`${secondaryButtonClass} mr-0 size-11 min-h-11 shrink-0 p-0`}
+                  type="button"
+                  onClick={() => setSalesScannerOpen(true)}
+                  aria-label="Escanear código de barra"
+                  title="Escanear código de barra"
+                >
+                  <ScanBarcode size={20} />
+                </button>
+              )}
+            </div>
             {canReviewCancellation && scannedSalesProduct && (
               <div className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border border-rust-200 bg-rust-50 py-1 pr-1.5 pl-3 text-xs text-rust-700">
                 <span className="truncate">
@@ -2136,14 +2139,21 @@ export default function SalesPage() {
                       : "Ventas"}
                   </h2>
                 )}
-                <p className={salesFilter === "current" ? "!m-0" : undefined}>{formatTableRecordCount({
+                <p className={salesFilter === "current" ? "m-0!" : undefined}>{formatTableRecordCount({
                   visibleCount: salesPagination.paginatedItems.length,
                   totalCount: salesByStatusFilter.length,
                   filteredCount: filteredSales.length,
                   hasFilters: hasSalesFilters,
                 })}</p>
               </div>
-              <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
+              <MobileTableTools
+                hasActiveFilters={hasSalesFilters}
+                onClear={() => { setSearch(""); setScannedSalesProduct(null); applySalesFilter("current"); }}
+              >
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} disabled={salesFilter === "cancelled"} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} disabled={salesFilter === "partial"} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+              </MobileTableTools>
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
                 <button
                   className={`mr-0 min-h-9 px-3 text-xs ${salesFilter === "cancelled" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : salesFilter === "partial" ? "border-ink-950 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                   type="button"

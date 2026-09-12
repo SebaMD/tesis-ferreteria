@@ -5,7 +5,7 @@ export function MobileDetailField({ label, children, wide = false }) {
   return (
     <div className={`min-w-0 ${wide ? "col-span-full" : ""}`}>
       <dt className="text-[11px] font-bold tracking-[0.02em] text-slate-500 uppercase">{label}</dt>
-      <dd className="mt-1 mb-0 min-w-0 break-words text-sm text-ink-950">{children ?? "-"}</dd>
+      <dd className="mt-1 mb-0 min-w-0 wrap-break-word text-sm text-ink-950">{children ?? "-"}</dd>
     </div>
   );
 }

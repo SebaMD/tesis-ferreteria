@@ -5,9 +5,10 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import { isValidPassword, PASSWORD_REQUIREMENTS } from "../helpers/password.js";
 import useAuth from "../hooks/useAuth.js";
 
-const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
+let postRegistrationNavigationPending = false;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ export default function RegisterPage() {
     ? location.state.from
     : null;
 
-  if (isAuthenticated) {
+  if (isAuthenticated && !postRegistrationNavigationPending) {
     return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace />;
   }
 
@@ -43,8 +44,8 @@ export default function RegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!PASSWORD_REGEX.test(form.password)) {
-      toast.error("La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial");
+    if (!isValidPassword(form.password)) {
+      toast.error(PASSWORD_REQUIREMENTS);
       return;
     }
 
@@ -55,6 +56,7 @@ export default function RegisterPage() {
 
     try {
       setLoading(true);
+      postRegistrationNavigationPending = true;
       const session = await registerClient({
         rut: form.rut,
         names: form.names,
@@ -69,12 +71,17 @@ export default function RegisterPage() {
         state: {
           from: requestedPath || "/catalog",
           initialChallenge: session.emailVerification,
+          fromRegistration: true,
         },
       });
     } catch (error) {
+      postRegistrationNavigationPending = false;
       toast.error(getApiError(error, "No se pudo crear la cuenta"));
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        postRegistrationNavigationPending = false;
+      }, 0);
     }
   };
 
@@ -165,7 +172,7 @@ export default function RegisterPage() {
           </div>
 
           <p className="m-0 rounded-[5px] bg-rust-50 px-3 py-2 text-xs text-rust-700">
-            La contraseña debe incluir una mayúscula, un número y un carácter especial.
+            {PASSWORD_REQUIREMENTS}.
           </p>
 
           <button className="w-full" type="submit" disabled={loading}>Crear cuenta</button>

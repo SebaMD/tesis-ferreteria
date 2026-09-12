@@ -1505,7 +1505,7 @@ function receiptModelFromOrder(order: CommercialOrderSource | null): OrderCommer
   return buildOrderCommercialModel(order);
 }
 
-async function getOrderCommercialModelForNotificationService(orderId: number) {
+export async function getOrderCommercialModelForNotificationService(orderId: number) {
   return receiptModelFromOrder(await findOrderByIdForCommercialUse(orderId));
 }
 

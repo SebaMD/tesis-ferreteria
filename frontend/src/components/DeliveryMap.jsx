@@ -134,7 +134,7 @@ function MapCanvas({ coordinates, interactive, onLocationChange }) {
       </MapContainer>
       {tilesLoading && (
         <div
-          className="absolute inset-0 z-[1000] grid place-items-center bg-white/90 text-center"
+          className="absolute inset-0 z-1000 grid place-items-center bg-white/90 text-center"
           role="status"
           aria-live="polite"
         >

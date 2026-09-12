@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
@@ -1968,7 +1969,29 @@ export default function ProductsPage() {
               hasFilters: hasListFilters,
             })}</p>
           </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools
+            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly}
+            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }}
+            exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
+            showFilters={canViewInactiveProducts || canViewLowStockFilter}
+          >
+            {canViewInactiveProducts && (
+              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} disabled={lowStockOnly || outOfStockOnly} aria-pressed={showInactiveProducts}>
+                {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setOutOfStockOnly(false); }} disabled={showInactiveProducts || outOfStockOnly} aria-pressed={lowStockOnly}>
+                {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setLowStockOnly(false); }} disabled={showInactiveProducts || lowStockOnly} aria-pressed={outOfStockOnly}>
+                {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
+              </button>
+            )}
+          </MobileTableTools>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             {canViewInactiveProducts && (
               <button
                 className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
@@ -2168,9 +2191,13 @@ export default function ProductsPage() {
                 hasFilters: hasMovementFilters,
               })}</p>
             </div>
+            <MobileTableTools
+              exportAction={canExportInventory ? { onClick: handleExportMovements, disabled: filteredMovements.length === 0, label: "Exportar movimientos a Excel" } : null}
+              showFilters={false}
+            />
             {canExportInventory && (
               <button
-                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
+                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:hidden"
                 type="button"
                 onClick={handleExportMovements}
                 disabled={filteredMovements.length === 0}

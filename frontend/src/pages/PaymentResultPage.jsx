@@ -219,12 +219,14 @@ export default function PaymentResultPage() {
               requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
             />
-            <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/orders">
-              Ver mis pedidos
+            <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to={`/orders#order-${order.id}`}>
+              {isPaid ? "Ir a mis compras" : "Ver mis pedidos"}
             </Link>
-            <Link className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/cart">
-              <ShoppingCart size={17} /> Volver al carrito
-            </Link>
+            {isPaid ? (
+              <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">Volver al catálogo</Link>
+            ) : (
+              <Link className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/cart"><ShoppingCart size={17} /> Volver al carrito</Link>
+            )}
           </div>
         </section>
       ) : !loading && (

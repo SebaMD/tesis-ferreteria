@@ -26,6 +26,8 @@ import ProductDetailPage from "./pages/ProductDetailPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import FavoritesPage from "./pages/FavoritesPage.jsx";
 import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -83,6 +85,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />

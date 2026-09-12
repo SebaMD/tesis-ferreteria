@@ -49,11 +49,11 @@ export default function ClientNavbar() {
 
           {!isAuthenticated && (
             <>
-              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:hidden" to="/login">
-                <LogIn size={17} /> Ingresar
+              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white no-underline hover:bg-ink-700" to="/login">
+                <LogIn size={17} /> <span>Iniciar sesión</span>
               </Link>
-              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white no-underline hover:bg-ink-700" to="/register" aria-label="Registrarse">
-                <UserPlus size={17} /> <span className="max-[620px]:hidden">Registrarse</span>
+              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:hidden" to="/register" aria-label="Registrarse">
+                <UserPlus size={17} /> <span>Registrarse</span>
               </Link>
             </>
           )}
@@ -68,8 +68,9 @@ export default function ClientNavbar() {
           </Link>
 
           {isClient && (
-            <Link className="grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title="Mi cuenta" aria-label="Mi cuenta">
+            <Link className="relative grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta · correo pendiente de verificación"} aria-label={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta, correo pendiente de verificación"}>
               <UserRound size={18} />
+              {!user.emailVerifiedAt && !user.emailVerified && <span className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-rust-500 text-[11px] font-black text-white" aria-hidden="true">!</span>}
             </Link>
           )}
 

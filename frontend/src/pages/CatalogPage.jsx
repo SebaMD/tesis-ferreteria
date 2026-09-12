@@ -8,7 +8,6 @@ import AppModal from "../components/AppModal.jsx";
 import CatalogFilters from "../components/CatalogFilters.jsx";
 import BackToTop from "../components/BackToTop.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, filterAndSortCatalog, getCatalogBrands } from "../helpers/catalogFilters.js";
-import { CATALOG_BACKGROUND_IMAGE } from "../helpers/catalogAppearance.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 export default function CatalogPage() {
@@ -82,8 +81,8 @@ export default function CatalogPage() {
         </section>
       )}
 
-      <section className="rounded-lg bg-slate-100 bg-cover bg-center bg-no-repeat" style={CATALOG_BACKGROUND_IMAGE ? { backgroundImage: `url(${CATALOG_BACKGROUND_IMAGE})` } : undefined}>
-        <div className="grid gap-4 rounded-lg bg-white/85 p-4 max-[720px]:p-3">
+      <section className="rounded-lg bg-white">
+        <div className="grid w-full gap-4 rounded-lg bg-white p-4 shadow-[0_2px_12px_rgba(16,21,31,0.08)] max-[720px]:p-3">
           <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
             <div>
               <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
@@ -118,8 +117,8 @@ export default function CatalogPage() {
             <aside className="rounded-lg border border-slate-200 bg-white p-4 max-[1023px]:hidden" aria-label="Filtros del catálogo">
               <CatalogFilters {...filterProps} />
             </aside>
-            <div className="min-w-0">
-              <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:grid-cols-1" aria-label="Productos del catálogo">
+            <div className="min-w-0 bg-white">
+              <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:gap-2.5" aria-label="Productos del catálogo">
                 {filteredProducts.map((product) => <ProductCard key={product.id} product={product} />)}
               </section>
               {!loading && !loadError && filteredProducts.length === 0 && (

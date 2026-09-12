@@ -2,7 +2,8 @@ import { isValidEmail, normalizeEmail } from "../../utils/email.js";
 
 const NAME_REGEX = /^[\p{L} ]+$/u;
 const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
-const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
+export const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
+export const PASSWORD_REQUIREMENTS_MESSAGE = "La contrasena debe tener 8 a 128 caracteres, una mayuscula, un numero y un caracter especial";
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 
 export type LoginBody = {
@@ -30,6 +31,10 @@ type ValidationResult<T> =
     };
 
 export { normalizeEmail };
+
+export function isValidPassword(password: string) {
+  return PASSWORD_REGEX.test(password);
+}
 
 export function normalizeName(name = "") {
   return String(name).trim().replace(/\s+/g, " ");
@@ -140,10 +145,10 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
     return { success: false, error: "Debe ingresar un correo valido" };
   }
 
-  if (!PASSWORD_REGEX.test(input.password)) {
+  if (!isValidPassword(input.password)) {
     return {
       success: false,
-      error: "La contrasena debe tener 8 a 128 caracteres, una mayuscula, un numero y un caracter especial",
+      error: PASSWORD_REQUIREMENTS_MESSAGE,
     };
   }
 
@@ -177,4 +182,39 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
       phone,
     },
   };
+}
+
+export function validatePasswordResetRequestBody(body: unknown): ValidationResult<{ email: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe ingresar un correo electronico" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "email")) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.email !== "string") {
+    return { success: false, error: "Debe ingresar un correo electronico" };
+  }
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return { success: false, error: "Debe ingresar un correo valido" };
+  return { success: true, value: { email } };
+}
+
+export function validatePasswordResetConfirmBody(
+  body: unknown,
+): ValidationResult<{ token: string; password: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe ingresar el enlace y la nueva contrasena" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => !["token", "password"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(input.token)) {
+    return { success: false, error: "El enlace no es valido o ya expiro" };
+  }
+  if (typeof input.password !== "string" || !isValidPassword(input.password)) {
+    return { success: false, error: PASSWORD_REQUIREMENTS_MESSAGE };
+  }
+  return { success: true, value: { token: input.token, password: input.password } };
 }

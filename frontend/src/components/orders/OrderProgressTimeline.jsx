@@ -103,7 +103,7 @@ export default function OrderProgressTimeline({ order }) {
         return (
           <li className="relative grid grid-cols-[36px_minmax(0,1fr)] gap-3 pb-5 last:pb-0" key={step.key}>
             {index < steps.length - 1 && (
-              <span className={`absolute top-8 bottom-0 left-[17px] w-0.5 ${index < currentIndex ? "bg-positive-600" : "bg-slate-200"}`} aria-hidden="true" />
+              <span className={`absolute top-8 bottom-0 left-4.25 w-0.5 ${index < currentIndex ? "bg-positive-600" : "bg-slate-200"}`} aria-hidden="true" />
             )}
             <span className={`relative z-1 grid size-9 place-items-center rounded-full border-2 ${active ? "border-positive-600 bg-positive-600 text-white" : "border-slate-300 bg-white text-slate-400"}`}>
               <Icon size={17} aria-hidden="true" />

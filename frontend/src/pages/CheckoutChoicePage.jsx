@@ -38,8 +38,9 @@ export default function CheckoutChoicePage() {
             <h2 className="m-0 text-xl font-bold text-ink-950">Usar una cuenta de cliente</h2>
             <ul className="mt-3 mb-0 grid list-none gap-2 p-0 text-sm text-slate-600">
               <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Guardar tu dirección.</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Consultar todos tus pedidos.</li>
+              <li className="flex items-center gap-2"><CheckCircle2 className="shrink-0 text-positive-600" size={17} /> Consulta tus pedidos desde cualquier lugar o dispositivo.</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Reutilizar tus datos.</li>
+              <li className="flex items-center gap-2"><CheckCircle2 className="text-positive-600" size={17} /> Guarda tus productos favoritos.</li>
             </ul>
           </div>
           <div className="grid grid-cols-2 gap-2 max-[430px]:grid-cols-1">
@@ -47,7 +48,7 @@ export default function CheckoutChoicePage() {
               <LogIn size={17} /> Iniciar sesión
             </Link>
             <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={{ from: "/checkout" }}>
-              <UserPlus size={17} /> Crear cuenta
+              <UserPlus size={17} /> Crear mi cuenta
             </Link>
           </div>
         </article>

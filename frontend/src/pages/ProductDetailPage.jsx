@@ -70,8 +70,8 @@ export default function ProductDetailPage() {
               {hasStock ? `Stock disponible: ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}
             </span>
           </div>
-          <div className="w-full max-w-80">
-            <ProductPurchaseControls key={product.id} product={product} />
+          <div className="mx-auto w-full max-w-md">
+            <ProductPurchaseControls key={product.id} product={product} showBuyNow />
           </div>
           <p className="m-0 text-xs leading-5 text-slate-500">Agregar al carrito no reserva stock. La disponibilidad se vuelve a validar al iniciar el pago.</p>
         </div>

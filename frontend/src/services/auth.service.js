@@ -14,3 +14,13 @@ export async function registerClientRequest(data) {
   const response = await api.post("/auth/register", data);
   return response.data.data;
 }
+
+export async function requestPasswordResetRequest(email) {
+  const response = await api.post("/auth/password-reset/request", { email });
+  return response.data;
+}
+
+export async function confirmPasswordResetRequest(data) {
+  const response = await api.post("/auth/password-reset/confirm", data);
+  return response.data;
+}

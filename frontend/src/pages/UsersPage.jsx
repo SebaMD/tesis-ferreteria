@@ -536,7 +536,7 @@ export default function UsersPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch">
           <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
@@ -767,7 +767,7 @@ export default function UsersPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="!m-0">{formatTableRecordCount({
+            <p className="m-0!">{formatTableRecordCount({
               visibleCount: usersPagination.paginatedItems.length,
               totalCount: users.length,
               filteredCount: filteredUsers.length,

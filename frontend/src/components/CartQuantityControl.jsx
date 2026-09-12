@@ -2,7 +2,7 @@ import { Minus, Plus } from "lucide-react";
 import { useId, useState } from "react";
 import { validateCartQuantity } from "../helpers/cartQuantity.js";
 
-export default function CartQuantityControl({ quantity, availableStock, disabled, productName, onQuantityChange, onValidationChange }) {
+export default function CartQuantityControl({ quantity, availableStock, disabled, productName, onQuantityChange, onValidationChange, className = "" }) {
   const [draft, setDraft] = useState(null);
   const [error, setError] = useState("");
   const errorId = useId();
@@ -21,11 +21,11 @@ export default function CartQuantityControl({ quantity, availableStock, disabled
   };
 
   return (
-    <div className="grid max-w-40 gap-1.5">
-      <div className="flex items-center gap-1">
+    <div className={`grid max-w-40 gap-1.5 max-[600px]:max-w-full ${className}`}>
+      <div className="flex items-center gap-1 max-[600px]:gap-0.5">
         <button className="size-9 min-h-9 shrink-0 border-slate-300 bg-white p-0 text-ink-700" type="button" onClick={() => confirmQuantity(Math.min(quantity - 1, availableStock))} disabled={disabled || quantity <= 1} aria-label="Disminuir cantidad"><Minus size={16} /></button>
         <input
-          className="min-w-0 w-16 text-center"
+          className="min-w-0 w-16 text-center max-[600px]:w-10 max-[600px]:px-1"
           type="text"
           inputMode="numeric"
           value={draft ?? String(quantity)}

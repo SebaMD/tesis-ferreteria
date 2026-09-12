@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import DeliveryEvidenceForm from "../components/DeliveryEvidenceForm.jsx";
 import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -222,6 +223,10 @@ export default function OnlineOrdersManagementPage() {
   const requestSequence = useRef(0);
   const deliveredView = scope === "ALL" && view === "DELIVERED";
   const requestedStatus = deliveredView ? "DELIVERED" : status;
+  const toggleDeliveredView = () => {
+    setView(deliveredView ? "ACTIVE" : "DELIVERED");
+    setStatus("ALL");
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -450,29 +455,33 @@ export default function OnlineOrdersManagementPage() {
         )}
       </header>
 
-      <section className="flex items-center gap-3 max-[620px]:flex-col max-[620px]:items-stretch">
-        <div className="relative min-w-64 flex-1 max-[620px]:min-w-0">
-          <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
-          <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid min-w-0 max-w-215 flex-1 grid-cols-[minmax(0,1fr)_220px] items-center gap-2.5 max-[720px]:w-full max-[720px]:max-w-none max-[720px]:grid-cols-1">
+          <label className="relative block min-w-0">
+            <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
+            <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} aria-label={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
+          </label>
+          <div className="flex min-w-0 items-center gap-2">
+            <select
+              className="min-w-0 flex-1"
+              value={deliveredView ? "DELIVERED" : status}
+              onChange={(event) => setStatus(event.target.value)}
+              aria-label="Filtrar por estado"
+              disabled={deliveredView}
+            >
+              {STATUS_FILTERS
+                .filter((option) => {
+                  if (deliveredView) return option.value === "DELIVERED";
+                  if (scope === "MINE") return ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value);
+                  return option.value !== "DELIVERED";
+                })
+                .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
         </div>
-        <select
-          className="w-60 shrink-0 max-[620px]:w-full"
-          value={deliveredView ? "DELIVERED" : status}
-          onChange={(event) => setStatus(event.target.value)}
-          aria-label="Filtrar por estado"
-          disabled={deliveredView}
-        >
-          {STATUS_FILTERS
-            .filter((option) => {
-              if (deliveredView) return option.value === "DELIVERED";
-              if (scope === "MINE") return ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value);
-              return option.value !== "DELIVERED";
-            })
-            .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
         {(search || status !== "ALL") && (
           <button
-            className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
+            className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"
             type="button"
             onClick={() => {
               setSearch("");
@@ -485,26 +494,25 @@ export default function OnlineOrdersManagementPage() {
       <section className={tablePanelClass}>
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-xs text-slate-500">
           <span>Mostrando {ordersPagination.paginatedItems.length} de {ordersPagination.totalItems} {ordersPagination.totalItems === 1 ? "registro" : "registros"}</span>
+          <MobileTableTools
+            hasActiveFilters={deliveredView}
+            onClear={() => { setView("ACTIVE"); setStatus("ALL"); }}
+            showFilters={scope === "ALL"}
+            title="Vista de pedidos"
+          >
+            <button type="button" onClick={toggleDeliveredView} aria-pressed={deliveredView}>
+              {deliveredView ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
+            </button>
+          </MobileTableTools>
           {scope === "ALL" && (
-            <div className="flex items-center gap-2" aria-label="Tipo de pedidos">
-              {[
-                { value: "ACTIVE", label: "En curso" },
-                { value: "DELIVERED", label: "Entregados" },
-              ].map((option) => (
-                <button
-                  className={`min-h-8 px-3 py-1 text-xs font-bold ${view === option.value ? "border-rust-500 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-rust-500 hover:bg-rust-50"}`}
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    setView(option.value);
-                    setStatus("ALL");
-                  }}
-                  aria-pressed={view === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <button
+              className={`mr-0 min-h-9 px-3 text-xs font-bold max-[720px]:hidden ${deliveredView ? "border-rust-500 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-rust-500 hover:bg-rust-50"}`}
+              type="button"
+              onClick={toggleDeliveredView}
+              aria-pressed={deliveredView}
+            >
+              {deliveredView ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
+            </button>
           )}
         </div>
         <ResponsiveTableView

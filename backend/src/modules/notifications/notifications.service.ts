@@ -12,19 +12,18 @@ import {
 import type { OrderCommercialModel } from "../onlineOrders/orderCommercialModel.js";
 import { findActiveWarehouseEmails } from "./notifications.repository.js";
 import { renderPurchaseConfirmedMail } from "./purchaseConfirmedMail.js";
+import { renderOrderStatusMail } from "./orderStatusMail.js";
 
 export type ClientOrderMailEvent =
   | "PURCHASE_CONFIRMED"
   | "PREPARATION_STARTED"
   | "READY_FOR_PICKUP"
-  | "READY_FOR_DELIVERY"
   | "OUT_FOR_DELIVERY"
   | "DELIVERED";
 
 export type WarehouseMailEvent =
   | "NEW_ONLINE_ORDER_PAID"
-  | "NEW_SALE_DELIVERY"
-  | "READY_FOR_DELIVERY";
+  | "NEW_SALE_DELIVERY";
 
 export type MailContent = {
   subject: string;
@@ -145,6 +144,15 @@ export function buildClientOrderMailContent(
   if (event === "PURCHASE_CONFIRMED" && commercialModel) {
     return renderPurchaseConfirmedMail(commercialModel, trackingUrl);
   }
+  if (event !== "PURCHASE_CONFIRMED") {
+    return renderOrderStatusMail({
+      folio,
+      event,
+      trackingUrl,
+      recipientType,
+      model: commercialModel,
+    });
+  }
   const trackingText = trackingUrl
     ? ` Puedes seguir el pedido de forma segura en: ${trackingUrl}`
     : recipientType === "GUEST"
@@ -162,10 +170,6 @@ export function buildClientOrderMailContent(
     READY_FOR_PICKUP: {
       subject: `${folio}: pedido listo para retirar`,
       text: `Tu pedido ${folio} esta listo para retirar en FERRETERIA FYF.${trackingText}`,
-    },
-    READY_FOR_DELIVERY: {
-      subject: `${folio}: pedido listo para despacho`,
-      text: `Tu pedido ${folio} esta preparado y listo para iniciar su despacho.${trackingText}`,
     },
     OUT_FOR_DELIVERY: {
       subject: `${folio}: pedido en reparto`,
@@ -188,10 +192,6 @@ function warehouseContent(folio: string, event: WarehouseMailEvent): MailContent
     NEW_SALE_DELIVERY: {
       subject: `${folio}: nueva venta en caja con despacho`,
       text: `La venta ${folio} genero una entrega pendiente de preparacion.`,
-    },
-    READY_FOR_DELIVERY: {
-      subject: `${folio}: disponible para reparto`,
-      text: `El pedido ${folio} esta preparado y disponible para iniciar reparto.`,
     },
   };
   return content[event];

@@ -1,4 +1,4 @@
-import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Trash2, Truck, UserRound } from "lucide-react";
+import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrde
 import { readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
-import useCartActions from "../hooks/useCartActions.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
@@ -46,7 +45,6 @@ function createCheckoutKey() {
 export default function CheckoutPage() {
   const { isAuthenticated, user, replaceSession } = useAuth();
   const { items } = useCart();
-  const { removeProduct } = useCartActions();
   const isClient = isAuthenticated && user?.role === "CLIENT";
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
@@ -217,16 +215,6 @@ export default function CheckoutPage() {
     setDeliveryData((current) => ({ ...current, [field]: value }));
   };
 
-  const handleRemoveProduct = (productId) => {
-    if (pendingOrder) {
-      toast.warning("Finaliza o revisa el pago pendiente antes de modificar el carrito");
-      return;
-    }
-    if (submitting) return;
-
-    removeProduct(productId);
-  };
-
   const handleContinuePayment = async () => {
     if (!pendingOrder?.canContinuePayment || continuingPayment) return;
 
@@ -325,7 +313,7 @@ export default function CheckoutPage() {
               Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 max-[520px]:w-full max-[520px]:[&>*]:flex-1">
+          <div className="flex flex-wrap items-center gap-2 max-[520px]:w-full max-[520px]:*:flex-1">
             {pendingOrder.canContinuePayment && (
               <button type="button" onClick={handleContinuePayment} disabled={continuingPayment}>
                 {continuingPayment ? <RefreshCw className="animate-spin" size={17} /> : <CreditCard size={17} />}
@@ -389,27 +377,18 @@ export default function CheckoutPage() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-end gap-3 max-[620px]:col-span-2 max-[620px]:w-full max-[620px]:justify-between">
+                      <div className="flex items-center justify-end gap-3 max-[620px]:col-span-2 max-[620px]:w-full max-[620px]:justify-end">
                         <strong className="font-mono text-sm text-ink-950">
                           {formatClp(row.subtotal)}
                         </strong>
-                        <button
-                          className="size-9 min-h-9 shrink-0 border-critical-200 bg-critical-50 p-0 text-critical-600 hover:bg-critical-100"
-                          type="button"
-                          onClick={() => handleRemoveProduct(row.product.id)}
-                          disabled={Boolean(pendingOrder) || submitting}
-                          aria-label={`Eliminar ${row.product.name} del carrito`}
-                          title={pendingOrder
-                            ? "No puedes modificar el carrito mientras exista un pago pendiente"
-                            : `Eliminar ${row.product.name}`}
-                        >
-                          <Trash2 size={17} />
-                        </button>
                       </div>
                     </article>
                   );
                 })}
               </div>
+              <footer className="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">
+                Para cambiar cantidades o eliminar productos, vuelve al carrito antes de pagar.
+              </footer>
             </section>
 
             <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

@@ -5,6 +5,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
@@ -229,7 +230,7 @@ export default function ReportsPage() {
           <div className="flex items-center gap-3">
             <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
             <div>
-              <h2 className="m-0 text-base font-bold text-ink-950">Filtros</h2>
+              <h2 className="m-0 text-base font-bold text-ink-950">Período del reporte</h2>
               <p className="mt-1 mb-0 text-xs text-slate-500">Selecciona fecha o rango. No se permiten fechas futuras.</p>
             </div>
           </div>
@@ -403,7 +404,8 @@ export default function ReportsPage() {
               hasFilters: true,
             })}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools exportAction={{ onClick: handleExportSales, disabled: loading || reportSales.length === 0, label: "Exportar reporte a Excel" }} />
+          <div className="flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             <button
               className={`${secondaryButtonClass} mr-0`}
               type="button"

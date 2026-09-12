@@ -6,10 +6,10 @@ export default function useCartActions() {
   const { addItem, removeItem } = useCart();
   const navigate = useNavigate();
 
-  const addProduct = (product, quantity) => {
+  const addProduct = (product, quantity, { showSuccessToast = true } = {}) => {
     const result = addItem(product, quantity);
     if (!result.success) toast.error(result.message);
-    else toast.success("Producto agregado al carrito", {
+    else if (showSuccessToast) toast.success("Producto agregado al carrito", {
       action: { label: "Ver carrito", onClick: () => navigate("/cart") },
     });
     return result;

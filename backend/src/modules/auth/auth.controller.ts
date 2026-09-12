@@ -5,7 +5,18 @@ import {
   handleSuccess,
 } from "../../utils/helpers.js";
 import { AuthError, loginService, registerClientService } from "./auth.service.js";
-import { validateLoginBody, validateRegisterBody } from "./auth.validation.js";
+import {
+  validateLoginBody,
+  validatePasswordResetConfirmBody,
+  validatePasswordResetRequestBody,
+  validateRegisterBody,
+} from "./auth.validation.js";
+import {
+  confirmPasswordResetService,
+  PASSWORD_RESET_GENERIC_MESSAGE,
+  PasswordResetError,
+  requestPasswordResetService,
+} from "./passwordReset.service.js";
 import {
   EmailVerificationError,
   requestClientEmailVerificationService,
@@ -68,5 +79,40 @@ export async function registerClient(req: Request, res: Response) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo registrar la cuenta", getErrorMessage(error));
+  }
+}
+
+export async function requestPasswordReset(req: Request, res: Response) {
+  const validation = validatePasswordResetRequestBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+
+  try {
+    await requestPasswordResetService(validation.value.email);
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(res, 202, PASSWORD_RESET_GENERIC_MESSAGE);
+  } catch (error) {
+    console.error("No se pudo procesar una solicitud de recuperación de contraseña:", getErrorMessage(error));
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(res, 202, PASSWORD_RESET_GENERIC_MESSAGE);
+  }
+}
+
+export async function confirmPasswordReset(req: Request, res: Response) {
+  const validation = validatePasswordResetConfirmBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+
+  try {
+    await confirmPasswordResetService(validation.value.token, validation.value.password);
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(res, 200, "Contrasena actualizada correctamente");
+  } catch (error) {
+    if (error instanceof PasswordResetError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo actualizar la contrasena", getErrorMessage(error));
   }
 }

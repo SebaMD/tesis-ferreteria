@@ -1,4 +1,4 @@
-import { Mail, Phone, ShieldCheck, UserRound } from "lucide-react";
+import { AlertTriangle, Mail, Phone, ShieldCheck, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
@@ -19,6 +19,15 @@ export default function ClientAccountPage() {
         <h1 className="m-0 text-2xl font-bold text-ink-950">Mi cuenta</h1>
         <p className="mt-1.5 mb-0 text-sm text-slate-500">Información básica de tu cuenta de cliente.</p>
       </div>
+      {!user.emailVerifiedAt && !user.emailVerified && (
+        <section className="flex items-center justify-between gap-4 rounded-lg border-2 border-rust-300 bg-rust-50 p-5 max-[620px]:grid">
+          <div className="flex min-w-0 items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0 text-rust-600" size={22} />
+            <div><strong className="block text-sm text-ink-950">Tu correo todavía está pendiente de verificación</strong><p className="mt-1 mb-0 text-xs leading-5 text-rust-800">Verifícalo una sola vez para poder iniciar una compra.</p></div>
+          </div>
+          <Link className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-[5px] border border-rust-600 bg-rust-600 px-4 text-sm font-bold text-white no-underline hover:bg-rust-700" to="/verify-email">Verificar correo ahora</Link>
+        </section>
+      )}
       <section className="grid gap-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm max-[620px]:p-4">
         <div className="flex items-center gap-4 border-b border-slate-200 pb-5">
           <span className="grid size-14 place-items-center rounded-full bg-rust-50 text-rust-600"><UserRound size={27} /></span>
@@ -35,7 +44,6 @@ export default function ClientAccountPage() {
             <span className={`mt-1 block text-xs font-bold ${user.emailVerifiedAt || user.emailVerified ? "text-positive-600" : "text-amber-700"}`}>
               {user.emailVerifiedAt || user.emailVerified ? "Correo verificado" : "Correo pendiente de verificacion"}
             </span>
-            {!user.emailVerifiedAt && !user.emailVerified && <Link className="mt-2 inline-block text-xs font-bold text-rust-600" to="/verify-email">Verificar ahora</Link>}
           </div>
           <div className="rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Phone size={16} /> Teléfono</dt><dd className="mt-2 ml-0 font-semibold text-ink-950">{user.phone || "No registrado"}</dd></div>
         </dl>

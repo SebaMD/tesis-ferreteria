@@ -116,7 +116,7 @@ export default function EmailVerificationPanel({
               required
             />
           </label>
-          <div className="flex flex-wrap gap-2 max-[480px]:[&>*]:w-full">
+          <div className="flex flex-wrap gap-2 max-[480px]:*:w-full">
             <button type="submit" disabled={busy || pin.length !== 6}>
               {busy ? <RefreshCw className="animate-spin" size={17} /> : <CheckCircle2 size={17} />}
               Verificar correo

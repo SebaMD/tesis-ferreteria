@@ -204,9 +204,11 @@ export default function ClientOrdersPage() {
           <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis compras</h1>
           <p className="mt-1.5 mb-0 text-sm text-slate-500">Sigue tus pedidos en curso y consulta tus compras anteriores.</p>
         </div>
-        <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-rust-600 no-underline" to="/catalog">
-          <ShoppingCart size={17} /> Volver al catálogo
-        </Link>
+        {!loading && !loadError && orders.length > 0 && (
+          <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-rust-600 no-underline" to="/catalog">
+            <ShoppingCart size={17} /> Volver al catálogo
+          </Link>
+        )}
       </header>
 
       {!loading && loadError ? (

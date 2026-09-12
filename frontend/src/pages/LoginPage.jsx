@@ -34,10 +34,8 @@ export default function LoginPage() {
   if (isAuthenticated) {
     const destination = user?.role !== "CLIENT"
       ? "/dashboard"
-      : user.emailVerifiedAt || user.emailVerified
-        ? requestedPath || "/catalog"
-        : "/verify-email";
-    return <Navigate to={destination} state={destination === "/verify-email" ? { from: requestedPath || "/catalog" } : undefined} replace />;
+      : requestedPath || "/catalog";
+    return <Navigate to={destination} replace />;
   }
 
   const clearExpiredSessionMessage = () => {
@@ -53,15 +51,7 @@ export default function LoginPage() {
 
     try {
       const authenticatedUser = await login({ correo, password });
-      if (
-        authenticatedUser.role === "CLIENT"
-        && !authenticatedUser.emailVerifiedAt
-        && !authenticatedUser.emailVerified
-      ) {
-        navigate("/verify-email", { state: { from: requestedPath || "/catalog" } });
-      } else {
-        navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
-      }
+      navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
@@ -151,6 +141,10 @@ export default function LoginPage() {
               </button>
             </span>
           </label>
+
+          <Link className="-mt-3 justify-self-end text-xs font-bold text-rust-600" to="/forgot-password">
+            ¿Olvidaste tu contraseña?
+          </Link>
 
           <button className="mt-0.5 w-full" type="submit" disabled={loading}>
             Ingresar

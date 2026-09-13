@@ -8,6 +8,7 @@ import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
 import useAuth from "../hooks/useAuth.js";
+import AuthThemeToggle from "../components/AuthThemeToggle.jsx";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -32,7 +33,9 @@ export default function LoginPage() {
     : null;
 
   if (isAuthenticated) {
-    const destination = user?.role !== "CLIENT"
+    const destination = user?.requiresEmailVerification
+      ? "/verify-work-email"
+      : user?.role !== "CLIENT"
       ? "/dashboard"
       : requestedPath || "/catalog";
     return <Navigate to={destination} replace />;
@@ -51,7 +54,9 @@ export default function LoginPage() {
 
     try {
       const authenticatedUser = await login({ correo, password });
-      navigate(authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
+      navigate(authenticatedUser.requiresEmailVerification
+        ? "/verify-work-email"
+        : authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
@@ -61,6 +66,7 @@ export default function LoginPage() {
 
   return (
     <main className="relative isolate grid h-dvh min-h-0 grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
+      <AuthThemeToggle />
       <LoadingOverlay active={loading} fullScreen />
 
       <section className="relative z-10 grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">

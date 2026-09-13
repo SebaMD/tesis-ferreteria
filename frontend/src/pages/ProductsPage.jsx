@@ -9,8 +9,10 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
@@ -1299,7 +1301,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-[860px] flex-none") : "w-full max-w-190 flex-none"}`}>
+        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-215 flex-none") : "w-full max-w-190 flex-none"}`}>
           <label className="relative block min-w-0 flex-1 max-[720px]:min-w-60 max-[720px]:max-w-none">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
@@ -1321,17 +1323,13 @@ export default function ProductsPage() {
               <ScanBarcode size={18} />
             </button>
           )}
-          <select
+          <AppSelect
             className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
             value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-            aria-label="Filtrar productos por categoría"
-          >
-            <option value="">Todas las categorías</option>
-            {categoryOptions.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
+            onChange={setCategoryFilter}
+            ariaLabel="Filtrar productos por categoría"
+            options={[{ value: "", label: "Todas las categorías" }, ...categoryOptions.map((category) => ({ value: category.id, label: category.name }))]}
+          />
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
           <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[980px]:ml-0 max-[980px]:w-full max-[980px]:shrink max-[980px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
@@ -1890,16 +1888,12 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Motivo del ajuste
-                <select
+                <AppSelect
                   value={movementForm.adjustmentReason}
-                  onChange={(event) => setMovementForm((current) => ({ ...current, adjustmentReason: event.target.value }))}
-                  required
-                >
-                  <option value="">Seleccionar motivo</option>
-                  {ADJUSTMENT_REASONS.map((reason) => (
-                    <option key={reason} value={reason}>{reason}</option>
-                  ))}
-                </select>
+                  onChange={(adjustmentReason) => setMovementForm((current) => ({ ...current, adjustmentReason }))}
+                  ariaLabel="Motivo del ajuste"
+                  options={[{ value: "", label: "Seleccionar motivo" }, ...ADJUSTMENT_REASONS.map((reason) => ({ value: reason, label: reason }))]}
+                />
               </label>
               <label>
                 Observación detallada
@@ -1962,12 +1956,15 @@ export default function ProductsPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="!m-0">{formatTableRecordCount({
-              visibleCount: productsPagination.paginatedItems.length,
-              totalCount: visibleStatusProducts.length,
-              filteredCount: filteredProducts.length,
-              hasFilters: hasListFilters,
-            })}</p>
+            <p className="m-0!"><TableRecordCount
+              visibleCount={productsPagination.paginatedItems.length}
+              totalCount={visibleStatusProducts.length}
+              filteredCount={filteredProducts.length}
+              hasFilters={hasListFilters}
+              mobileTotalCount={products.length}
+              mobilePage={productsPagination.page}
+              mobilePageSize={productsPagination.pageSize}
+            /></p>
           </div>
           <MobileTableTools
             hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly}
@@ -1976,17 +1973,17 @@ export default function ProductsPage() {
             showFilters={canViewInactiveProducts || canViewLowStockFilter}
           >
             {canViewInactiveProducts && (
-              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} disabled={lowStockOnly || outOfStockOnly} aria-pressed={showInactiveProducts}>
+              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} aria-pressed={showInactiveProducts}>
                 {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
               </button>
             )}
             {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setOutOfStockOnly(false); }} disabled={showInactiveProducts || outOfStockOnly} aria-pressed={lowStockOnly}>
+              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setShowInactiveProducts(false); setOutOfStockOnly(false); }} aria-pressed={lowStockOnly}>
                 {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
               </button>
             )}
             {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setLowStockOnly(false); }} disabled={showInactiveProducts || lowStockOnly} aria-pressed={outOfStockOnly}>
+              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setShowInactiveProducts(false); setLowStockOnly(false); }} aria-pressed={outOfStockOnly}>
                 {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
               </button>
             )}
@@ -2184,12 +2181,14 @@ export default function ProductsPage() {
         <div className={tablePanelClass}>
           <div className={tableHeadingClass}>
             <div>
-              <p className="!m-0">{formatTableRecordCount({
-                visibleCount: movementsPagination.paginatedItems.length,
-                totalCount: sortedMovements.length,
-                filteredCount: filteredMovements.length,
-                hasFilters: hasMovementFilters,
-              })}</p>
+              <p className="m-0!"><TableRecordCount
+                visibleCount={movementsPagination.paginatedItems.length}
+                totalCount={sortedMovements.length}
+                filteredCount={filteredMovements.length}
+                hasFilters={hasMovementFilters}
+                mobilePage={movementsPagination.page}
+                mobilePageSize={movementsPagination.pageSize}
+              /></p>
             </div>
             <MobileTableTools
               exportAction={canExportInventory ? { onClick: handleExportMovements, disabled: filteredMovements.length === 0, label: "Exportar movimientos a Excel" } : null}

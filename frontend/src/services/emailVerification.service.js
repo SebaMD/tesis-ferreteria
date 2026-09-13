@@ -38,3 +38,13 @@ export async function verifyGuestEmail(data) {
   });
   return response.data.data;
 }
+
+export async function requestInternalEmailVerification() {
+  const response = await api.post("/email-verification/internal/request", {});
+  return response.data.data;
+}
+
+export async function verifyInternalEmail(data) {
+  const response = await api.post("/email-verification/internal/verify", data);
+  return response.data.data;
+}

@@ -213,7 +213,8 @@
 
   button,
   input,
-  select {
+  select,
+  textarea {
     font: inherit;
   }
 
@@ -231,7 +232,8 @@
 
   button:focus-visible,
   input:focus-visible,
-  select:focus-visible {
+  select:focus-visible,
+  textarea:focus-visible {
     outline: 2px solid var(--color-rust-500);
     outline-offset: 2px;
   }
@@ -289,6 +291,164 @@
 
   tbody tr:hover {
     background: #fafbfc;
+  }
+}
+
+/* El tema conserva el naranjo FYF y adapta las superficies, no las imágenes ni documentos. */
+.dark,
+.dark body,
+.dark #root {
+  background: #0f141c;
+  color: #e7ebef;
+}
+
+.dark .bg-white,
+.dark .bg-white\/95,
+.dark .bg-\[\#f5f6f7\],
+.dark .bg-\[\#f7f8f9\],
+.dark .bg-\[\#fafbfc\] {
+  background-color: #171e28 !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #232c38 !important;
+}
+
+.dark .bg-rust-50 {
+  background-color: #3a2718 !important;
+}
+
+.dark .bg-positive-50 {
+  background-color: #123320 !important;
+}
+
+.dark .bg-critical-50 {
+  background-color: #3b1b20 !important;
+}
+
+.dark .text-ink-950,
+.dark .text-ink-900,
+.dark .text-ink-700 {
+  color: #eef1f4 !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  color: #aeb7c2 !important;
+}
+
+.dark label,
+.dark th {
+  color: #cbd3dc;
+}
+
+.dark th {
+  background: #202936;
+}
+
+.dark td {
+  color: #dce2e8;
+}
+
+/* Algunos encabezados heredados reciben el color mediante una variante del
+   contenedor, no mediante una clase propia en el elemento. */
+.dark [class*="[&_h1]:text-ink-950"] h1,
+.dark [class*="[&_h2]:text-ink-950"] h2,
+.dark [class*="[&_h3]:text-ink-950"] h3,
+.dark [class*="[&>strong]:text-ink-950"] > strong,
+.dark [class*="[&>div>strong]:text-ink-950"] > div > strong {
+  color: #eef1f4;
+}
+
+.dark .border-slate-300,
+.dark .border-slate-200 {
+  border-color: #3d4856 !important;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea,
+.dark .app-select-trigger {
+  border-color: #465260 !important;
+  background: #1c2530 !important;
+  color: #f2f4f7 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #8792a0;
+}
+
+.dark input:disabled,
+.dark select:disabled,
+.dark textarea:disabled,
+.dark button:disabled {
+  color: #8993a0;
+}
+
+.dark tbody tr:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: #252f3b !important;
+}
+
+.dark .app-modal-panel,
+.dark .app-select-popup {
+  border-color: #465260;
+  background: #171e28;
+  color: #edf1f5;
+}
+
+.dark .app-select-option {
+  color: #edf1f5;
+}
+
+.dark .app-select-option:hover {
+  background: #283340;
+}
+
+.dark .app-select-option.bg-rust-50 {
+  background: #49301b !important;
+  color: #fdba74 !important;
+}
+
+.dark .theme-toggle {
+  border-color: #465260;
+  background: #1c2530 !important;
+  color: #f1f4f7 !important;
+}
+
+.dark .app-loading-overlay {
+  background: rgba(15, 20, 28, 0.62);
+}
+
+.dark .app-loading-indicator,
+.dark .app-loading-text {
+  color: #f1f4f7;
+}
+
+.customer-notice-panel {
+  background-image:
+    linear-gradient(90deg, rgba(132, 78, 36, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(132, 78, 36, 0.06) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.dark .customer-notice-panel {
+  background-color: #211a16 !important;
+  background-image:
+    linear-gradient(90deg, rgba(230, 155, 86, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(230, 155, 86, 0.07) 1px, transparent 1px);
+}
+
+.dark .customer-notice-content {
+  border-color: #9a6234;
+  background: #35261c;
+  color: #f8eadc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-select-trigger svg {
+    transition: none;
   }
 }
 

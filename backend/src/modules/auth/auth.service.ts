@@ -52,6 +52,8 @@ function createAuthenticatedSession(user: AuthUser) {
       correo: user.correo,
       emailVerifiedAt: user.emailVerifiedAt,
       emailVerified: Boolean(user.emailVerifiedAt),
+      requiresEmailVerification: ["MANAGER", "CASHIER", "WAREHOUSE"].includes(user.roleName)
+        && !user.emailVerifiedAt,
       phone: user.phone,
       status: user.status,
     },

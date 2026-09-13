@@ -5,9 +5,10 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals } from "../helpers/formatters.js";
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
@@ -397,12 +398,14 @@ export default function ReportsPage() {
         <div className={tableHeadingClass}>
           <div>
             <h2>Ventas del período</h2>
-            <p>{formatTableRecordCount({
-              visibleCount: salesPagination.paginatedItems.length,
-              totalCount: reportSales.length,
-              filteredCount: reportSales.length,
-              hasFilters: true,
-            })}</p>
+            <p><TableRecordCount
+              visibleCount={salesPagination.paginatedItems.length}
+              totalCount={reportSales.length}
+              filteredCount={reportSales.length}
+              hasFilters
+              mobilePage={salesPagination.page}
+              mobilePageSize={salesPagination.pageSize}
+            /></p>
           </div>
           <MobileTableTools exportAction={{ onClick: handleExportSales, disabled: loading || reportSales.length === 0, label: "Exportar reporte a Excel" }} />
           <div className="flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">

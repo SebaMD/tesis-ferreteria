@@ -9,6 +9,7 @@ import {
   changeClientEmail,
   countRecentVerificationSends,
   createVerificationChallenge,
+  findActiveVerificationChallenge,
   findChallengeForUpdate,
   findLatestVerificationSend,
   findOtherUserByEmail,
@@ -17,6 +18,7 @@ import {
   lockVerificationContext,
   markChallengeVerified,
   markClientEmailVerified,
+  markUserEmailVerified,
   registerFailedAttempt,
   updateVerificationPinHash,
   type VerificationOwner,
@@ -50,11 +52,20 @@ function assertActiveClient(user: Awaited<ReturnType<typeof findVerificationUser
   return user;
 }
 
+const INTERNAL_VERIFICATION_ROLES = new Set(["MANAGER", "CASHIER", "WAREHOUSE"]);
+
+function assertActiveInternalUser(user: Awaited<ReturnType<typeof findVerificationUserForUpdate>>) {
+  if (!user || !INTERNAL_VERIFICATION_ROLES.has(user.role) || user.status !== "ACTIVE") {
+    throw new EmailVerificationError("La cuenta de trabajador no esta activa", 403);
+  }
+  return user;
+}
+
 function ownerMatches(
   challenge: NonNullable<Awaited<ReturnType<typeof findChallengeForUpdate>>>,
   owner: VerificationOwner,
 ) {
-  return owner.type === "CLIENT"
+  return owner.type !== "GUEST"
     ? challenge.userId === owner.userId && challenge.guestSessionHash === null
     : challenge.userId === null && challenge.guestSessionHash === owner.guestSessionHash;
 }
@@ -94,7 +105,7 @@ async function issueChallenge(
       }
 
       const latest = await findLatestVerificationSend(tx, owner, purpose);
-      if (latest) {
+      if (latest && latest.email === normalizedEmail) {
         const elapsedSeconds = Math.floor((now.getTime() - latest.lastSentAt.getTime()) / 1000);
         if (elapsedSeconds < EMAIL_VERIFICATION_RESEND_SECONDS) {
           const retryAfterSeconds = EMAIL_VERIFICATION_RESEND_SECONDS - elapsedSeconds;
@@ -245,6 +256,31 @@ export async function requestGuestEmailVerificationService(guestSessionId: strin
   return issueChallenge({ type: "GUEST", guestSessionHash }, "GUEST_CHECKOUT", email);
 }
 
+export async function requestInternalEmailVerificationService(userId: number) {
+  const user = await db.transaction(async (tx) => assertActiveInternalUser(
+    await findVerificationUserForUpdate(tx, userId),
+  ));
+  if (user.emailVerifiedAt) {
+    throw new EmailVerificationError("El correo de esta cuenta ya esta verificado", 409);
+  }
+
+  const owner: VerificationOwner = { type: "USER", userId };
+  const active = await findActiveVerificationChallenge(owner, "INTERNAL_USER_REGISTRATION");
+  const now = Date.now();
+  if (active && active.expiresAt.getTime() > now) {
+    const resendAt = new Date(active.lastSentAt.getTime() + EMAIL_VERIFICATION_RESEND_SECONDS * 1000);
+    if (resendAt.getTime() > now) {
+      return {
+        sent: true,
+        challengeId: active.challengeId,
+        expiresAt: active.expiresAt.toISOString(),
+        resendAvailableAt: resendAt.toISOString(),
+      };
+    }
+  }
+  return issueChallenge(owner, "INTERNAL_USER_REGISTRATION", user.correo);
+}
+
 export async function verifyClientEmailService(userId: number, challengeId: number, pin: string) {
   const result = await db.transaction(async (tx) => {
     const user = assertActiveClient(await findVerificationUserForUpdate(tx, userId));
@@ -316,6 +352,28 @@ export async function verifyGuestEmailService(
     const now = new Date();
     await markChallengeVerified(tx, challenge.id, now, false);
     return { challengeId: challenge.id, email: challenge.email, verifiedAt: now.toISOString() };
+  });
+  if (result instanceof EmailVerificationError) throw result;
+  return result;
+}
+
+export async function verifyInternalEmailService(userId: number, challengeId: number, pin: string) {
+  const result = await db.transaction(async (tx) => {
+    const user = assertActiveInternalUser(await findVerificationUserForUpdate(tx, userId));
+    const challenge = await verifyChallenge(tx, {
+      challengeId,
+      pin,
+      purpose: "INTERNAL_USER_REGISTRATION",
+      owner: { type: "USER", userId },
+    });
+    if (challenge instanceof EmailVerificationError) return challenge;
+    if (challenge.email !== user.correo) {
+      throw new EmailVerificationError("El codigo no corresponde al correo actual", 409);
+    }
+    const now = new Date();
+    await markUserEmailVerified(tx, userId, now);
+    await markChallengeVerified(tx, challenge.id, now, true);
+    return { email: user.correo, emailVerifiedAt: now.toISOString() };
   });
   if (result instanceof EmailVerificationError) throw result;
   return result;

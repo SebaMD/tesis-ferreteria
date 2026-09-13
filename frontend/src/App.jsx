@@ -28,6 +28,7 @@ import FavoritesPage from "./pages/FavoritesPage.jsx";
 import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
+import InternalEmailVerificationPage from "./pages/InternalEmailVerificationPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -87,6 +88,7 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />

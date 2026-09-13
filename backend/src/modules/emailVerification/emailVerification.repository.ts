@@ -9,10 +9,11 @@ import {
 
 export type VerificationOwner =
   | { type: "CLIENT"; userId: number }
+  | { type: "USER"; userId: number }
   | { type: "GUEST"; guestSessionHash: string };
 
 function ownerCondition(owner: VerificationOwner) {
-  return owner.type === "CLIENT"
+  return owner.type !== "GUEST"
     ? eq(emailVerificationChallengesTable.userId, owner.userId)
     : eq(emailVerificationChallengesTable.guestSessionHash, owner.guestSessionHash);
 }
@@ -22,7 +23,7 @@ export async function lockVerificationContext(
   owner: VerificationOwner,
   purpose: EmailVerificationPurpose,
 ) {
-  const ownerKey = owner.type === "CLIENT" ? `user:${owner.userId}` : `guest:${owner.guestSessionHash}`;
+  const ownerKey = owner.type !== "GUEST" ? `user:${owner.userId}` : `guest:${owner.guestSessionHash}`;
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${purpose}:${ownerKey}`}, 0))`);
 }
 
@@ -68,9 +69,31 @@ export async function findLatestVerificationSend(
   owner: VerificationOwner,
   purpose: EmailVerificationPurpose,
 ) {
-  const [row] = await tx.select({ lastSentAt: emailVerificationChallengesTable.lastSentAt })
+  const [row] = await tx.select({
+    email: emailVerificationChallengesTable.email,
+    lastSentAt: emailVerificationChallengesTable.lastSentAt,
+  })
     .from(emailVerificationChallengesTable)
     .where(and(eq(emailVerificationChallengesTable.purpose, purpose), ownerCondition(owner)))
+    .orderBy(desc(emailVerificationChallengesTable.lastSentAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function findActiveVerificationChallenge(
+  owner: VerificationOwner,
+  purpose: EmailVerificationPurpose,
+) {
+  const [row] = await db.select({
+    challengeId: emailVerificationChallengesTable.id,
+    expiresAt: emailVerificationChallengesTable.expiresAt,
+    lastSentAt: emailVerificationChallengesTable.lastSentAt,
+  }).from(emailVerificationChallengesTable)
+    .where(and(
+      eq(emailVerificationChallengesTable.purpose, purpose),
+      ownerCondition(owner),
+      isNull(emailVerificationChallengesTable.consumedAt),
+    ))
     .orderBy(desc(emailVerificationChallengesTable.lastSentAt))
     .limit(1);
   return row ?? null;
@@ -105,7 +128,7 @@ export async function createVerificationChallenge(
   const [challenge] = await tx.insert(emailVerificationChallengesTable).values({
     email: input.email,
     purpose: input.purpose,
-    userId: input.owner.type === "CLIENT" ? input.owner.userId : null,
+    userId: input.owner.type !== "GUEST" ? input.owner.userId : null,
     guestSessionHash: input.owner.type === "GUEST" ? input.owner.guestSessionHash : null,
     pinHash: input.pinHash,
     expiresAt: input.expiresAt,
@@ -166,6 +189,8 @@ export async function markClientEmailVerified(tx: DbTransaction, userId: number,
   await tx.update(usersTable).set({ emailVerifiedAt: now, updatedAt: now })
     .where(eq(usersTable.id, userId));
 }
+
+export const markUserEmailVerified = markClientEmailVerified;
 
 export async function changeClientEmail(
   tx: DbTransaction,

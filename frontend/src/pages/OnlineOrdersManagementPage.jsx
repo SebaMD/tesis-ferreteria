@@ -18,6 +18,8 @@ import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
@@ -213,6 +215,7 @@ export default function OnlineOrdersManagementPage() {
   const [status, setStatus] = useState("ALL");
   const [scope, setScope] = useState("ALL");
   const [view, setView] = useState("ACTIVE");
+  const [originalTotals, setOriginalTotals] = useState({});
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [confirmationAction, setConfirmationAction] = useState(null);
@@ -247,7 +250,15 @@ export default function OnlineOrdersManagementPage() {
         search: debouncedSearch || undefined,
         scope: canManage ? scope : "ALL",
       });
-      if (requestSequence.current === sequence) setOrders(data);
+      if (requestSequence.current === sequence) {
+        setOrders(data);
+        if (!debouncedSearch && status === "ALL") {
+          const totalKey = `${scope}:${deliveredView ? "DELIVERED" : "ACTIVE"}`;
+          setOriginalTotals((current) => current[totalKey] === data.length
+            ? current
+            : { ...current, [totalKey]: data.length });
+        }
+      }
     } catch (error) {
       if (notifyError && requestSequence.current === sequence) {
         toast.error(getApiError(error, "No se pudieron cargar los pedidos y repartos"));
@@ -255,7 +266,7 @@ export default function OnlineOrdersManagementPage() {
     } finally {
       if (requestSequence.current === sequence) setLoading(false);
     }
-  }, [canManage, debouncedSearch, requestedStatus, scope]);
+  }, [canManage, debouncedSearch, deliveredView, requestedStatus, scope, status]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -462,21 +473,19 @@ export default function OnlineOrdersManagementPage() {
             <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} aria-label={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
           </label>
           <div className="flex min-w-0 items-center gap-2">
-            <select
+            <AppSelect
               className="min-w-0 flex-1"
               value={deliveredView ? "DELIVERED" : status}
-              onChange={(event) => setStatus(event.target.value)}
-              aria-label="Filtrar por estado"
+              onChange={setStatus}
+              ariaLabel="Filtrar por estado"
               disabled={deliveredView}
-            >
-              {STATUS_FILTERS
+              options={STATUS_FILTERS
                 .filter((option) => {
                   if (deliveredView) return option.value === "DELIVERED";
                   if (scope === "MINE") return ["ALL", "PREPARING", "OUT_FOR_DELIVERY"].includes(option.value);
                   return option.value !== "DELIVERED";
-                })
-                .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
+                })}
+            />
           </div>
         </div>
         {(search || status !== "ALL") && (
@@ -493,7 +502,13 @@ export default function OnlineOrdersManagementPage() {
 
       <section className={tablePanelClass}>
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-xs text-slate-500">
-          <span>Mostrando {ordersPagination.paginatedItems.length} de {ordersPagination.totalItems} {ordersPagination.totalItems === 1 ? "registro" : "registros"}</span>
+          <span><TableRecordCount
+            visibleCount={ordersPagination.paginatedItems.length}
+            totalCount={ordersPagination.totalItems}
+            mobileTotalCount={originalTotals[`${scope}:${deliveredView ? "DELIVERED" : "ACTIVE"}`] ?? ordersPagination.totalItems}
+            mobilePage={ordersPagination.page}
+            mobilePageSize={ordersPagination.pageSize}
+          /></span>
           <MobileTableTools
             hasActiveFilters={deliveredView}
             onClear={() => { setView("ACTIVE"); setStatus("ALL"); }}

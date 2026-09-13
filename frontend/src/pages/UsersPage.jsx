@@ -6,7 +6,9 @@ import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
-import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
+import { compareByNewest, formatDate } from "../helpers/formatters.js";
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
 import {
@@ -429,12 +431,18 @@ export default function UsersPage() {
 
     try {
       setSubmitting(true);
+      let savedUser;
       if (isEditing) {
-        await updateUserRequest(editingUserId, payload);
+        savedUser = await updateUserRequest(editingUserId, payload);
       } else {
-        await createUserRequest(payload);
+        savedUser = await createUserRequest(payload);
       }
       toast.success(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
+      if (savedUser?.emailVerification?.sent === true) {
+        toast.info("Se envió un código de verificación al correo del trabajador.");
+      } else if (savedUser?.emailVerification?.sent === false) {
+        toast.warning(savedUser.emailVerification.message || "El usuario quedó creado, pero no se pudo enviar el código. Podrá reenviarlo al iniciar sesión.");
+      }
       resetForm();
       await loadUsers();
     } catch (err) {
@@ -547,10 +555,7 @@ export default function UsersPage() {
               aria-label="Buscar usuarios"
             />
           </label>
-          <select className="w-full max-w-55 max-[720px]:max-w-none" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Filtrar usuarios por rol">
-            <option value="">Todos los roles</option>
-            {roleOptions.map((role) => <option key={role.name} value={role.name}>{role.label}</option>)}
-          </select>
+          <AppSelect className="w-full max-w-55 max-[720px]:max-w-none" value={roleFilter} onChange={setRoleFilter} ariaLabel="Filtrar usuarios por rol" options={[{ value: "", label: "Todos los roles" }, ...roleOptions.map((role) => ({ value: role.name, label: role.label }))]} />
         </div>
         <button type="button" onClick={openCreateForm}>
           <UserPlus size={18} />
@@ -633,32 +638,28 @@ export default function UsersPage() {
             <div className={`grid gap-3 max-[720px]:grid-cols-1 ${isEditing ? "grid-cols-2" : "grid-cols-1"}`}>
               <label>
                 Rol
-                <select
+                <AppSelect
                   value={form.roleName}
-                  onChange={(event) => {
-                    const roleName = event.target.value;
+                  onChange={(roleName) => {
                     setForm((current) => ({
                       ...current,
                       roleName,
                       status: roleName === "ADMIN" ? "ACTIVE" : current.status,
                     }));
                   }}
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role.name} value={role.name}>{role.label}</option>
-                  ))}
-                </select>
+                  ariaLabel="Rol del usuario"
+                  options={roleOptions.map((role) => ({ value: role.name, label: role.label }))}
+                />
               </label>
               {isEditing && (
                 <label>
                   Estado
-                  <select
+                  <AppSelect
                     value={form.status}
-                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-                  >
-                    <option value="ACTIVE">Activo</option>
-                    <option value="INACTIVE">Inactivo</option>
-                  </select>
+                    onChange={(status) => setForm((current) => ({ ...current, status }))}
+                    ariaLabel="Estado del usuario"
+                    options={[{ value: "ACTIVE", label: "Activo" }, { value: "INACTIVE", label: "Inactivo" }]}
+                  />
                 </label>
               )}
             </div>
@@ -711,40 +712,31 @@ export default function UsersPage() {
         <form className="grid gap-3.75" onSubmit={handleScheduleSubmit}>
           <label>
             Turno
-            <select
+            <AppSelect
               value={scheduleForm.workShift}
-              onChange={(event) => handleScheduleShiftChange(event.target.value)}
-              required
-            >
-              {WORK_SHIFT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={handleScheduleShiftChange}
+              ariaLabel="Turno del cajero"
+              options={WORK_SHIFT_OPTIONS}
+            />
           </label>
           <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
             <label>
               Hora de inicio
-              <select
+              <AppSelect
                 value={scheduleForm.shiftStartTime}
-                onChange={(event) => handleScheduleStartTimeChange(event.target.value)}
-                required
-              >
-                {shiftStartOptions.map((time) => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+                onChange={handleScheduleStartTimeChange}
+                ariaLabel="Hora de inicio"
+                options={shiftStartOptions.map((time) => ({ value: time, label: time }))}
+              />
             </label>
             <label>
               Hora de término
-              <select
+              <AppSelect
                 value={scheduleForm.shiftEndTime}
-                onChange={(event) => setScheduleForm((current) => ({ ...current, shiftEndTime: event.target.value }))}
-                required
-              >
-                {shiftEndOptions.map((time) => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+                onChange={(shiftEndTime) => setScheduleForm((current) => ({ ...current, shiftEndTime }))}
+                ariaLabel="Hora de término"
+                options={shiftEndOptions.map((time) => ({ value: time, label: time }))}
+              />
             </label>
           </div>
           <label>
@@ -767,12 +759,14 @@ export default function UsersPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="m-0!">{formatTableRecordCount({
-              visibleCount: usersPagination.paginatedItems.length,
-              totalCount: users.length,
-              filteredCount: filteredUsers.length,
-              hasFilters: hasUserFilters,
-            })}</p>
+            <p className="m-0!"><TableRecordCount
+              visibleCount={usersPagination.paginatedItems.length}
+              totalCount={users.length}
+              filteredCount={filteredUsers.length}
+              hasFilters={hasUserFilters}
+              mobilePage={usersPagination.page}
+              mobilePageSize={usersPagination.pageSize}
+            /></p>
           </div>
         </div>
         <ResponsiveTableView

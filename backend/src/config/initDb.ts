@@ -41,6 +41,7 @@ export async function createInitialUsers() {
   if (existingUsers.length > 0) return;
 
   const roleByName = new Map(roles.map((role) => [role.name, role.id]));
+  const bootstrapEmailVerifiedAt = new Date();
 
   const users: Array<typeof usersTable.$inferInsert> = [
     {
@@ -52,6 +53,7 @@ export async function createInitialUsers() {
       password: await bcrypt.hash("@dmin.2026", 10),
       phone: null,
       status: "ACTIVE",
+      emailVerifiedAt: bootstrapEmailVerifiedAt,
     },
     {
       roleId: roleByName.get("MANAGER")!,
@@ -62,6 +64,7 @@ export async function createInitialUsers() {
       password: await bcrypt.hash("Gerente123.", 10),
       phone: null,
       status: "ACTIVE",
+      emailVerifiedAt: bootstrapEmailVerifiedAt,
     },
     {
       roleId: roleByName.get("CASHIER")!,
@@ -72,6 +75,7 @@ export async function createInitialUsers() {
       password: await bcrypt.hash("Cajero123.", 10),
       phone: "+56933333333",
       status: "ACTIVE",
+      emailVerifiedAt: bootstrapEmailVerifiedAt,
       workShift: "MORNING",
       shiftStartTime: "08:30",
       shiftEndTime: "13:30",
@@ -86,6 +90,7 @@ export async function createInitialUsers() {
       password: await bcrypt.hash("Cajero123.", 10),
       phone: "+56944444444",
       status: "ACTIVE",
+      emailVerifiedAt: bootstrapEmailVerifiedAt,
       workShift: "AFTERNOON",
       shiftStartTime: "14:00",
       shiftEndTime: "20:00",
@@ -100,6 +105,7 @@ export async function createInitialUsers() {
       password: await bcrypt.hash("Bodeguero123.", 10),
       phone: null,
       status: "ACTIVE",
+      emailVerifiedAt: bootstrapEmailVerifiedAt,
     },
   ];
 

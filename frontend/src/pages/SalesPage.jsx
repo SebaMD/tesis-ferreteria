@@ -9,7 +9,9 @@ import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals } from "../helpers/formatters.js";
 import { getAvailableStockStatus } from "../helpers/inventory.js";
 import {
   getCancellationRequestStatusLabel,
@@ -1066,17 +1068,15 @@ export default function SalesPage() {
           </div>
           <label>
             Metodo de pago
-            <select
+            <AppSelect
               value={paymentMethod}
-              onChange={(event) => {
-                setPaymentMethod(event.target.value);
-                if (event.target.value !== "efectivo") setCashReceived("");
+              onChange={(nextPaymentMethod) => {
+                setPaymentMethod(nextPaymentMethod);
+                if (nextPaymentMethod !== "efectivo") setCashReceived("");
               }}
-            >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method.value} value={method.value}>{method.label}</option>
-              ))}
-            </select>
+              ariaLabel="Método de pago"
+              options={PAYMENT_METHODS}
+            />
           </label>
 
           {isCashPayment && (
@@ -1915,17 +1915,13 @@ export default function SalesPage() {
                   aria-label="Buscar productos para venta por ID, código, nombre o categoría"
                 />
               </label>
-              <select
+              <AppSelect
                 className="min-h-9 w-full max-w-55 max-[720px]:max-w-none"
                 value={catalogCategoryFilter}
-                onChange={(event) => setCatalogCategoryFilter(event.target.value)}
-                aria-label="Filtrar productos por categoría"
-              >
-                <option value="">Todas las categorías</option>
-                {productCategories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </select>
+                onChange={setCatalogCategoryFilter}
+                ariaLabel="Filtrar productos por categoría"
+                options={[{ value: "", label: "Todas las categorías" }, ...productCategories.map((category) => ({ value: category.id, label: category.name }))]}
+              />
               <span
                 className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 text-xs font-bold text-positive-600"
                 role="status"
@@ -2139,19 +2135,22 @@ export default function SalesPage() {
                       : "Ventas"}
                   </h2>
                 )}
-                <p className={salesFilter === "current" ? "m-0!" : undefined}>{formatTableRecordCount({
-                  visibleCount: salesPagination.paginatedItems.length,
-                  totalCount: salesByStatusFilter.length,
-                  filteredCount: filteredSales.length,
-                  hasFilters: hasSalesFilters,
-                })}</p>
+                <p className={salesFilter === "current" ? "m-0!" : undefined}><TableRecordCount
+                  visibleCount={salesPagination.paginatedItems.length}
+                  totalCount={salesByStatusFilter.length}
+                  filteredCount={filteredSales.length}
+                  hasFilters={hasSalesFilters}
+                  mobileTotalCount={sales.length}
+                  mobilePage={salesPagination.page}
+                  mobilePageSize={salesPagination.pageSize}
+                /></p>
               </div>
               <MobileTableTools
                 hasActiveFilters={hasSalesFilters}
                 onClear={() => { setSearch(""); setScannedSalesProduct(null); applySalesFilter("current"); }}
               >
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} disabled={salesFilter === "cancelled"} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} disabled={salesFilter === "partial"} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
               </MobileTableTools>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
                 <button

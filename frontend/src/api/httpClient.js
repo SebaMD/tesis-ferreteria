@@ -22,6 +22,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
+    const code = String(error?.response?.data?.code || "");
     const message = String(error?.response?.data?.message || error?.response?.data?.details || "");
     const requestUrl = String(error?.config?.url || "");
     const hasStoredToken = Boolean(localStorage.getItem("token"));
@@ -29,6 +30,11 @@ api.interceptors.response.use(
     const isInvalidTokenResponse =
       status === 401 ||
       (status === 403 && /token|jwt|expirad/i.test(message));
+
+    if (hasStoredToken && status === 403 && code === "EMAIL_VERIFICATION_REQUIRED" && window.location.pathname !== "/verify-work-email") {
+      window.location.replace("/verify-work-email");
+      return Promise.reject(error);
+    }
 
     if (hasStoredToken && !isLoginRequest && isInvalidTokenResponse && !redirectingToLogin) {
       redirectingToLogin = true;

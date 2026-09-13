@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticateJwt } from "../../middlewares/authentication.middleware.js";
+import { authenticateJwtAllowUnverified } from "../../middlewares/authentication.middleware.js";
 import {
   confirmPasswordReset,
   login,
@@ -14,6 +14,6 @@ router.post("/login", login);
 router.post("/register", registerClient);
 router.post("/password-reset/request", requestPasswordReset);
 router.post("/password-reset/confirm", confirmPasswordReset);
-router.post("/logout", authenticateJwt, logout);
+router.post("/logout", authenticateJwtAllowUnverified, logout);
 
 export default router;

@@ -66,7 +66,7 @@ test("mobile list controls keep global queries visible and secondary filters gro
     read("src/pages/ReportsPage.jsx"), read("src/pages/ProductsPage.jsx"),
     read("src/pages/UsersPage.jsx"), read("src/pages/DashboardPage.jsx"),
   ]);
-  assert.match(sales, /max-w-\[536px\]/);
+  assert.match(sales, /max-w-(?:\[536px\]|134)/);
   assert.match(logistics, /Mostrar pedidos entregados/);
   assert.match(logistics, /Mostrar pedidos en curso/);
   assert.doesNotMatch(logistics, /label: "En curso"/);
@@ -78,6 +78,22 @@ test("mobile list controls keep global queries visible and secondary filters gro
   assert.doesNotMatch(users, /MobileTableTools/);
   assert.match(users, /Filtrar usuarios por rol/);
   assert.match(dashboard, /auto-rows-fr/);
+});
+
+test("mobile table counts, exclusive quick filters and compact commerce layouts stay wired", async () => {
+  const [count, products, sales, orderCard, cart] = await Promise.all([
+    read("src/components/TableRecordCount.jsx"), read("src/pages/ProductsPage.jsx"),
+    read("src/pages/SalesPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
+    read("src/pages/ClientCartPage.jsx"),
+  ]);
+  assert.match(count, /max-\[720px\]:hidden/);
+  assert.match(count, /Mostrando \{mobileVisibleCount\} de \{mobileTotalCount\}/);
+  assert.match(products, /setLowStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setOutOfStockOnly\(false\)/);
+  assert.match(products, /setOutOfStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setLowStockOnly\(false\)/);
+  assert.doesNotMatch(sales, /disabled=\{salesFilter === "cancelled"\} aria-pressed=\{salesFilter === "partial"\}>\{salesFilter/);
+  assert.match(orderCard, /max-\[680px\]:size-20/);
+  assert.match(orderCard, /max-\[430px\]:size-\[68px\]/);
+  assert.match(cart, /col-start-2 row-start-1 row-span-2/);
 });
 
 test("product detail keeps its quantity and purchase actions in one aligned column", async () => {

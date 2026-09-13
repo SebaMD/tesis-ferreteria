@@ -17,3 +17,4 @@ export * from "./guestOrderAccessTokens.js";
 export * from "./clientProductFavorites.js";
 export * from "./emailVerificationChallenges.js";
 export * from "./passwordResetTokens.js";
+export * from "./customerNotice.js";

@@ -14,6 +14,7 @@ import { getOperationalOrdersRequest } from "../services/orderLogistics.service.
 import { getProductsRequest } from "../services/products.service.js";
 import { getSalesRequest } from "../services/sales.service.js";
 import useAuth from "../hooks/useAuth.js";
+import CustomerNoticeManager from "../components/CustomerNoticeManager.jsx";
 import {
   badgeClass,
   dashboardListRowClass,
@@ -418,6 +419,8 @@ export default function DashboardPage() {
           </section>
         )}
       </div>
+
+      {["ADMIN", "MANAGER"].includes(user?.role) && <CustomerNoticeManager />}
     </section>
   );
 }

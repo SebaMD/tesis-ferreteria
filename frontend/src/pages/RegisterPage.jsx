@@ -7,6 +7,7 @@ import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { isValidPassword, PASSWORD_REQUIREMENTS } from "../helpers/password.js";
 import useAuth from "../hooks/useAuth.js";
+import AuthThemeToggle from "../components/AuthThemeToggle.jsx";
 
 let postRegistrationNavigationPending = false;
 
@@ -87,6 +88,7 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f8f9] px-4 py-8">
+      <AuthThemeToggle />
       <LoadingOverlay active={loading} fullScreen />
       <div className="mx-auto grid w-full max-w-180 gap-6">
         <Link className="mx-auto flex items-center gap-2 text-ink-950 no-underline" to="/catalog">

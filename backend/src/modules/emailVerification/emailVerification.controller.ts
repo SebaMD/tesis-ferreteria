@@ -7,9 +7,11 @@ import {
   requestClientEmailChangeService,
   requestClientEmailVerificationService,
   requestGuestEmailVerificationService,
+  requestInternalEmailVerificationService,
   verifyClientEmailChangeService,
   verifyClientEmailService,
   verifyGuestEmailService,
+  verifyInternalEmailService,
 } from "./emailVerification.service.js";
 import {
   validateEmailRequestBody,
@@ -125,6 +127,33 @@ export async function verifyGuestVerification(req: Request, res: Response) {
         validation.value.pin,
       ),
     );
+  } catch (error) {
+    return handleVerificationError(res, error);
+  }
+}
+
+export async function requestInternalVerification(req: AuthenticatedRequest, res: Response) {
+  try {
+    const validation = validateEmptyBody(req.body);
+    if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    return handleSuccess(
+      res,
+      201,
+      "Codigo de verificacion disponible",
+      await requestInternalEmailVerificationService(clientId(req)),
+    );
+  } catch (error) {
+    return handleVerificationError(res, error);
+  }
+}
+
+export async function verifyInternalVerification(req: AuthenticatedRequest, res: Response) {
+  try {
+    const validation = validatePinBody(req.body);
+    if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    const id = clientId(req);
+    await verifyInternalEmailService(id, validation.value.challengeId, validation.value.pin);
+    return handleSuccess(res, 200, "Correo verificado correctamente", await createSessionForUserId(id));
   } catch (error) {
     return handleVerificationError(res, error);
   }

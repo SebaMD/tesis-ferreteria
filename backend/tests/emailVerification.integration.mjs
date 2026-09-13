@@ -104,16 +104,22 @@ try {
   const pool = new pg.Pool({ connectionString: connection(databaseNames[0]) });
   pools.push(pool);
   await migrate(drizzle(pool), { migrationsFolder: migrationFolder });
-  await pool.query("INSERT INTO roles(name,description) VALUES ('CLIENT','Cliente') ON CONFLICT(name) DO NOTHING");
+  await pool.query("INSERT INTO roles(name,description) VALUES ('CLIENT','Cliente'),('WAREHOUSE','Bodeguero') ON CONFLICT(name) DO NOTHING");
   const historicalPassword = await bcrypt.hash("Email-Test-2026!", 4);
   const historical = (await pool.query(`
     INSERT INTO users(role_id,rut,names,surnames,correo,password)
     VALUES ((SELECT id FROM roles WHERE name='CLIENT'),'12345678-9','Cliente','Historico','historical@example.test',$1)
     RETURNING id
   `, [historicalPassword])).rows[0];
+  const historicalWorker = (await pool.query(`
+    INSERT INTO users(role_id,rut,names,surnames,correo,password)
+    VALUES ((SELECT id FROM roles WHERE name='WAREHOUSE'),'13333333-3','Bodeguero','Historico','historical-worker@example.test',$1)
+    RETURNING id
+  `, [historicalPassword])).rows[0];
   await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
   assert.equal((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [historical.id])).rows[0].email_verified_at, null);
-  console.log("PASS migration 0018 -> 0019 preserves historical CLIENT with email pending verification");
+  assert.ok((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [historicalWorker.id])).rows[0].email_verified_at);
+  console.log("PASS migration 0018 -> latest preserves historical CLIENT pending and backfills historical internal users");
 
   const cleanPool = new pg.Pool({ connectionString: connection(databaseNames[1]) });
   pools.push(cleanPool);
@@ -122,7 +128,7 @@ try {
     (await cleanPool.query("SELECT count(*) FROM drizzle.__drizzle_migrations")).rows[0].count,
     String(journal.entries.length),
   );
-  console.log("PASS clean migrations 0000 -> 0019");
+  console.log("PASS clean migrations 0000 -> latest");
 
   await pool.query(`
     INSERT INTO roles(name,description) VALUES
@@ -202,6 +208,11 @@ try {
     body: { correo: "admin-email-test@example.test", password: "Email-Test-2026!" },
   });
   assert.equal(internalLogin.data.user.role, "ADMIN");
+  const historicalWorkerLogin = await request("POST", "/auth/login", {
+    body: { correo: "historical-worker@example.test", password: "Email-Test-2026!" },
+  });
+  assert.equal(historicalWorkerLogin.data.user.requiresEmailVerification, false);
+  await request("GET", "/products", { token: historicalWorkerLogin.data.token });
   assert.equal(historicalLogin.data.user.emailVerified, false);
   await request("POST", "/online-orders/checkout", {
     token: historicalLogin.data.token,
@@ -217,6 +228,121 @@ try {
   });
   assert.equal(historicalVerified.data.user.emailVerified, true);
   console.log("PASS historical CLIENT can log in and must verify only before a new checkout");
+
+  const managerRoleId = (await pool.query("SELECT id FROM roles WHERE name='MANAGER'")).rows[0].id;
+  const workerCreated = await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: {
+      roleId: managerRoleId,
+      rut: "14444444-4",
+      names: "Gerente Nuevo",
+      surnames: "Verificacion",
+      correo: "New.Worker@Example.Test",
+      password: "Email-Test-2026!",
+      phone: null,
+      status: "ACTIVE",
+    },
+  }, 201);
+  assert.equal(workerCreated.data.emailVerification.sent, true);
+  const workerPin = pinFrom(smtp.messages.at(-1));
+  assert.ok(!JSON.stringify(workerCreated).includes(workerPin));
+  const workerChallenge = workerCreated.data.emailVerification.challengeId;
+  const storedWorkerChallenge = (await pool.query("SELECT purpose,email,pin_hash FROM email_verification_challenges WHERE id=$1", [workerChallenge])).rows[0];
+  assert.equal(storedWorkerChallenge.purpose, "INTERNAL_USER_REGISTRATION");
+  assert.equal(storedWorkerChallenge.email, "new.worker@example.test");
+  assert.notEqual(storedWorkerChallenge.pin_hash, workerPin);
+  const workerLogin = await request("POST", "/auth/login", { body: { correo: "new.worker@example.test", password: "Email-Test-2026!" } });
+  assert.equal(workerLogin.data.user.requiresEmailVerification, true);
+  await request("GET", "/products", { token: workerLogin.data.token }, 403);
+  await request("POST", "/email-verification/internal/verify", {
+    token: historicalWorkerLogin.data.token,
+    body: { challengeId: workerChallenge, pin: workerPin },
+  }, 400);
+  const existingWorkerChallenge = await request("POST", "/email-verification/internal/request", { token: workerLogin.data.token, body: {} }, 201);
+  assert.equal(existingWorkerChallenge.data.challengeId, workerChallenge);
+  const workerVerified = await request("POST", "/email-verification/internal/verify", {
+    token: workerLogin.data.token,
+    body: { challengeId: workerChallenge, pin: workerPin },
+  });
+  assert.equal(workerVerified.data.user.requiresEmailVerification, false);
+  await request("GET", "/products", { token: workerVerified.data.token });
+  await request("POST", "/email-verification/internal/verify", {
+    token: workerLogin.data.token,
+    body: { challengeId: workerChallenge, pin: workerPin },
+  }, 409);
+  console.log("PASS new internal user receives HMAC PIN, is backend-gated, owner-bound and one-use");
+
+  const cashierRoleId = (await pool.query("SELECT id FROM roles WHERE name='CASHIER'")).rows[0].id;
+  const cashierCreated = await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: { roleId: cashierRoleId, rut: "16666666-6", names: "Cajero Nuevo", surnames: "Verificacion", correo: "cashier.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
+  }, 201);
+  const cashierLogin = await request("POST", "/auth/login", { body: { correo: "cashier.verify@example.test", password: "Email-Test-2026!" } });
+  assert.equal(cashierLogin.data.user.requiresEmailVerification, true);
+  await request("POST", "/email-verification/internal/request", { token: cashierLogin.data.token, body: {} }, 201);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 400);
+  }
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 429);
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 429);
+  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [cashierCreated.data.emailVerification.challengeId]);
+  const cashierResent = await request("POST", "/email-verification/internal/request", { token: cashierLogin.data.token, body: {} }, 201);
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: pinFrom(smtp.messages.at(-2)) } }, 429);
+  const cashierVerified = await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierResent.data.challengeId, pin: pinFrom(smtp.messages.at(-1)) } });
+  assert.equal(cashierVerified.data.user.requiresEmailVerification, false);
+
+  const warehouseRoleId = (await pool.query("SELECT id FROM roles WHERE name='WAREHOUSE'")).rows[0].id;
+  const warehouseCreated = await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: { roleId: warehouseRoleId, rut: "17777777-7", names: "Bodeguero Nuevo", surnames: "Verificacion", correo: "warehouse.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
+  }, 201);
+  const warehouseLogin = await request("POST", "/auth/login", { body: { correo: "warehouse.verify@example.test", password: "Email-Test-2026!" } });
+  assert.equal(warehouseLogin.data.user.requiresEmailVerification, true);
+  const warehousePin = pinFrom(smtp.messages.at(-1));
+  await pool.query("UPDATE email_verification_challenges SET created_at=now()-interval '20 minutes', expires_at=now()-interval '1 second' WHERE id=$1", [warehouseCreated.data.emailVerification.challengeId]);
+  await request("POST", "/email-verification/internal/verify", { token: warehouseLogin.data.token, body: { challengeId: warehouseCreated.data.emailVerification.challengeId, pin: warehousePin } }, 410);
+  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [warehouseCreated.data.emailVerification.challengeId]);
+  const warehouseResent = await request("POST", "/email-verification/internal/request", { token: warehouseLogin.data.token, body: {} }, 201);
+  const warehouseVerified = await request("POST", "/email-verification/internal/verify", { token: warehouseLogin.data.token, body: { challengeId: warehouseResent.data.challengeId, pin: pinFrom(smtp.messages.at(-1)) } });
+  assert.equal(warehouseVerified.data.user.requiresEmailVerification, false);
+  console.log("PASS MANAGER/CASHIER/WAREHOUSE creation, cooldown, five-attempt block, resend and expiry");
+
+  assert.equal((await request("GET", "/customer-notice")).data, null);
+  await request("PUT", "/customer-notice/configuration", {
+    token: historicalWorkerLogin.data.token,
+    body: { title: "No autorizado", message: "No debe guardarse", active: true },
+  }, 403);
+  await request("PUT", "/customer-notice/configuration", {
+    token: workerVerified.data.token,
+    body: { title: "Horario especial", message: "Hoy atenderemos hasta las 17:00.", active: true },
+  });
+  const publicNotice = await request("GET", "/customer-notice");
+  assert.equal(publicNotice.data.title, "Horario especial");
+  assert.equal(publicNotice.data.message, "Hoy atenderemos hasta las 17:00.");
+  assert.equal(typeof publicNotice.data.version, "string");
+  assert.deepEqual(Object.keys(publicNotice.data).sort(), ["message", "title", "version"]);
+  await request("PUT", "/customer-notice/configuration", {
+    token: internalLogin.data.token,
+    body: { title: "Horario especial", message: "Hoy atenderemos hasta las 17:00.", active: false },
+  });
+  assert.equal((await request("GET", "/customer-notice")).data, null);
+  console.log("PASS notice is public only when active, exposes safe DTO and is editable only by ADMIN/MANAGER");
+
+  const workerEmailChanged = await request("PATCH", `/users/${workerCreated.data.id}`, {
+    token: internalLogin.data.token,
+    body: { correo: "worker.changed@example.test" },
+  });
+  assert.equal(workerEmailChanged.data.emailVerification.sent, true);
+  assert.equal((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [workerCreated.data.id])).rows[0].email_verified_at, null);
+  await request("GET", "/products", { token: workerVerified.data.token }, 403);
+  const changedWorkerPin = pinFrom(smtp.messages.at(-1));
+  const changedWorkerVerified = await request("POST", "/email-verification/internal/verify", {
+    token: workerVerified.data.token,
+    body: { challengeId: workerEmailChanged.data.emailVerification.challengeId, pin: changedWorkerPin },
+  });
+  assert.equal(changedWorkerVerified.data.user.correo, "worker.changed@example.test");
+  assert.equal(changedWorkerVerified.data.user.requiresEmailVerification, false);
+  console.log("PASS changing an internal email clears verification, backend-gates the old session and verifies only the new address");
 
   const registered = await register("11222333-9", "New.Client@Example.Test");
   assert.equal(registered.data.user.emailVerified, false);
@@ -333,10 +459,13 @@ try {
     body: checkoutBody("guest-verified-00001", { ...guestBase, guestEmail, guestEmailConfirmation: guestEmail }),
   }, 201);
   assert.ok(guestCheckout.data.guestAccessToken);
-  await request("POST", "/online-orders/guest/checkout", {
+  const repeatedGuestCheckout = await request("POST", "/online-orders/guest/checkout", {
     guestSession: guestA,
     body: checkoutBody("guest-verified-00001", { ...guestBase, guestEmail, guestEmailConfirmation: guestEmail }),
-  }, 409);
+  }, 201);
+  assert.equal(repeatedGuestCheckout.data.orderId, guestCheckout.data.orderId);
+  assert.equal(repeatedGuestCheckout.data.paymentId, guestCheckout.data.paymentId);
+  assert.equal(repeatedGuestCheckout.data.token, guestCheckout.data.token);
   assert.equal((await pool.query("SELECT count(*) FROM online_orders WHERE guest_session_hash IS NOT NULL")).rows[0].count, "1");
   const guestOrderOwner = (await pool.query("SELECT client_id,guest_email FROM online_orders WHERE id=$1", [guestCheckout.data.orderId])).rows[0];
   assert.equal(guestOrderOwner.client_id, null);
@@ -403,6 +532,21 @@ try {
   const failedRegistration = await register("22222222-2", "register-smtp-failure@example.test");
   assert.equal(failedRegistration.data.emailVerification.sent, false);
   assert.equal((await pool.query("SELECT count(*) FROM email_verification_challenges WHERE email='register-smtp-failure@example.test'")).rows[0].count, "0");
+  const failedWorker = await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: {
+      roleId: managerRoleId,
+      rut: "15555555-5",
+      names: "Gerente SMTP",
+      surnames: "Temporal",
+      correo: "worker-smtp-failure@example.test",
+      password: "Email-Test-2026!",
+      phone: null,
+      status: "ACTIVE",
+    },
+  }, 201);
+  assert.equal(failedWorker.data.emailVerification.sent, false);
+  assert.equal((await pool.query("SELECT count(*) FROM email_verification_challenges WHERE email='worker-smtp-failure@example.test'")).rows[0].count, "0");
   await pool.query("UPDATE email_verification_challenges SET last_sent_at=$2 WHERE user_id=$1 AND purpose='CLIENT_EMAIL_CHANGE'", [registered.data.user.id, new Date(Date.now() - 61_000)]);
   await request("POST", "/email-verification/client/email-change/request", { token: changed.data.token, body: { email: "change-smtp-failure@example.test" } }, 503);
   assert.equal((await pool.query("SELECT correo FROM users WHERE id=$1", [registered.data.user.id])).rows[0].correo, newEmail);

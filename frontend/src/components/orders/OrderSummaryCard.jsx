@@ -29,7 +29,7 @@ export default function OrderSummaryCard({
       id={`order-${order.id}`}
     >
       <div className="grid grid-cols-[104px_minmax(0,1fr)_auto] items-stretch gap-4 p-4 max-[680px]:grid-cols-[80px_minmax(0,1fr)] max-[680px]:gap-3 max-[430px]:grid-cols-[68px_minmax(0,1fr)] max-[430px]:p-3">
-        <div className="grid min-h-24 place-items-center overflow-hidden rounded-md bg-slate-100 max-[430px]:min-h-18">
+        <div className="grid min-h-24 place-items-center overflow-hidden rounded-md bg-slate-100 max-[680px]:size-20 max-[680px]:min-h-0 max-[680px]:shrink-0 max-[680px]:self-start max-[430px]:size-[68px]">
           <OrderProductImage src={primaryItem?.productImageUrl} alt={primaryItem?.productName || "Producto del pedido"} />
         </div>
 

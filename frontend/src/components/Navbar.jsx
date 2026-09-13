@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
 import BrandLogo from "./BrandLogo.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 
 const pageNames = {
   "/dashboard": "Inicio",
@@ -31,6 +32,7 @@ export default function Navbar({ onToggleSidebar }) {
         <strong className="text-sm text-ink-950">{pageNames[location.pathname] || "FERRETERIA FYF"}</strong>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[720px]:gap-2">
+        <ThemeToggle />
         <span className="inline-flex min-h-7 items-center gap-1.75 rounded-full border border-[#f3d1a7] bg-rust-50 px-2.5 text-[11px] font-bold text-rust-600 max-[720px]:hidden"><i className="size-1.5 rounded-full bg-rust-500" />{ROLE_NAMES[user?.role] || user?.role}</span>
         <span className="inline-flex size-9 items-center justify-center rounded-[5px] bg-ink-950 text-xs font-bold text-white">{initials || "FS"}</span>
         <span className="grid gap-0.5 max-[720px]:hidden">

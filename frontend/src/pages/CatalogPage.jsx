@@ -7,6 +7,7 @@ import ProductCard from "../components/ProductCard.jsx";
 import AppModal from "../components/AppModal.jsx";
 import CatalogFilters from "../components/CatalogFilters.jsx";
 import BackToTop from "../components/BackToTop.jsx";
+import AppSelect from "../components/AppSelect.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, filterAndSortCatalog, getCatalogBrands } from "../helpers/catalogFilters.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
@@ -62,6 +63,7 @@ export default function CatalogPage() {
     ...current,
     [field]: event.target.value,
   }));
+  const setFilterValue = (field, value) => setFilters((current) => ({ ...current, [field]: value }));
 
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
@@ -97,16 +99,11 @@ export default function CatalogPage() {
               </label>
               <label className="grid min-w-0 gap-1 text-xs font-semibold">
                 Categoría
-                <select className="min-h-11 w-full text-xs" value={filters.categoryId} onChange={changeFilter("categoryId")}>
-                  <option value="">Todas</option>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
+                <AppSelect className="text-xs" value={filters.categoryId} onChange={(value) => setFilterValue("categoryId", value)} ariaLabel="Filtrar por categoría" options={[{ value: "", label: "Todas" }, ...categories.map((category) => ({ value: category.id, label: category.name }))]} />
               </label>
               <label className="grid min-w-0 gap-1 text-xs font-semibold min-[1024px]:col-start-3">
                 Ordenar por
-                <select value={order} onChange={(event) => setOrder(event.target.value)} className="min-h-11 w-full text-xs">
-                  {CATALOG_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
+                <AppSelect className="text-xs" value={order} onChange={setOrder} ariaLabel="Ordenar catálogo" options={CATALOG_SORT_OPTIONS.map(([value, label]) => ({ value, label }))} />
               </label>
               <button className="min-h-11 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
                 <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}

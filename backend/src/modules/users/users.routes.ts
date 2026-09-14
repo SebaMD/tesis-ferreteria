@@ -9,9 +9,12 @@ import {
   getUserRoles,
   getUsers,
   updateCashierSchedule,
+  updateMyClientProfile,
 } from "./users.controller.js";
 
 const router = Router();
+
+router.patch("/me/profile", authenticateJwt, verifyRoles(["CLIENT"]), updateMyClientProfile);
 
 router.use(authenticateJwt);
 router.use(verifyRoles(["ADMIN"]));

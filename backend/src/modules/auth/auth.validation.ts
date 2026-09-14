@@ -1,13 +1,13 @@
 import { isValidEmail, normalizeEmail } from "../../utils/email.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
 
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 export const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 export const PASSWORD_REQUIREMENTS_MESSAGE = "La contrasena debe tener 8 a 128 caracteres, una mayuscula, un numero y un caracter especial";
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 
 export type LoginBody = {
-  correo: string;
+  identifier: string;
   password: string;
 };
 
@@ -40,31 +40,7 @@ export function normalizeName(name = "") {
   return String(name).trim().replace(/\s+/g, " ");
 }
 
-export function normalizeRut(rut = "") {
-  return String(rut).trim().replace(/\./g, "").toUpperCase();
-}
-
-export function isValidRut(rut = "") {
-  const normalizedRut = normalizeRut(rut);
-  const match = normalizedRut.match(/^(\d{7,8})-([\dK])$/);
-  if (!match) return false;
-
-  const body = match[1];
-  const verifierDigit = match[2];
-
-  let sum = 0;
-  let multiplier = 2;
-
-  for (let i = body.length - 1; i >= 0; i -= 1) {
-    sum += Number(body[i]) * multiplier;
-    multiplier = multiplier === 7 ? 2 : multiplier + 1;
-  }
-
-  const remainder = 11 - (sum % 11);
-  const expectedDigit = remainder === 11 ? "0" : remainder === 10 ? "K" : String(remainder);
-
-  return verifierDigit === expectedDigit;
-}
+export { isValidRut, normalizeRut };
 
 export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -73,18 +49,26 @@ export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
 
   const input = body as Record<string, unknown>;
 
-  if (typeof input.correo !== "string") {
-    return { success: false, error: "El correo debe ser texto" };
+  const fields = Object.keys(input);
+  if (fields.some((field) => !["identifier", "correo", "password"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+
+  const rawIdentifier = input.identifier ?? input.correo;
+  if (typeof rawIdentifier !== "string") {
+    return { success: false, error: "El correo o RUT debe ser texto" };
   }
 
   if (typeof input.password !== "string") {
     return { success: false, error: "La contrasena debe ser texto" };
   }
 
-  const correo = normalizeEmail(input.correo);
+  const identifier = rawIdentifier.includes("@")
+    ? normalizeEmail(rawIdentifier)
+    : normalizeRut(rawIdentifier);
 
-  if (!isValidEmail(correo)) {
-    return { success: false, error: "Debe ingresar un correo valido" };
+  if (rawIdentifier.includes("@") ? !isValidEmail(identifier) : !isValidRut(identifier)) {
+    return { success: false, error: "Debe ingresar un correo o RUT valido" };
   }
 
   if (input.password.length < 1) {
@@ -94,7 +78,7 @@ export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
   return {
     success: true,
     value: {
-      correo,
+      identifier,
       password: input.password,
     },
   };
@@ -129,7 +113,7 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
   const surnames = normalizeName(input.surnames);
   const correo = normalizeEmail(input.correo);
 
-  if (!RUT_REGEX.test(rut) || !isValidRut(rut)) {
+  if (!isValidRut(rut)) {
     return { success: false, error: "El RUT no es valido" };
   }
 

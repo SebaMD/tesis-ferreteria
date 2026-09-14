@@ -36,6 +36,16 @@ export async function getClientDeliveryAddressRequest() {
   return response.data.data || null;
 }
 
+export async function saveClientDeliveryAddressRequest(data) {
+  const response = await api.put("/online-orders/delivery-address", data);
+  return response.data.data;
+}
+
+export async function deleteClientDeliveryAddressRequest() {
+  const response = await api.delete("/online-orders/delivery-address");
+  return response.data.data;
+}
+
 export async function getMyOnlineOrderByIdRequest(orderId) {
   const response = await api.get(`/online-orders/${orderId}`);
   return response.data.data;

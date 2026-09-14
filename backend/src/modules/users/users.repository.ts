@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { rolesTable, usersTable, type NewUser } from "../../db/schema/index.js";
+import { compactRut } from "../../utils/rut.js";
 
 const publicUserColumns = {
     id: usersTable.id,
@@ -60,6 +61,19 @@ export async function findUserById(id: number) {
         .limit(1);
 
     return user;
+}
+
+export async function findOtherUserByRut(rut: string, excludedUserId?: number) {
+    const normalizedCondition = eq(
+        sql<string>`regexp_replace(upper(${usersTable.rut}), '[.\\s-]', '', 'g')`,
+        compactRut(rut),
+    );
+    const [user] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(excludedUserId ? and(normalizedCondition, ne(usersTable.id, excludedUserId)) : normalizedCondition)
+        .limit(1);
+    return user ?? null;
 }
 
 export async function createUser(data: NewUser) {

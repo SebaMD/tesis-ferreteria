@@ -205,7 +205,7 @@ const initialUserEmails = [
 ];
 
 const inactiveDemoUser = {
-  rut: "24681357-9",
+  rut: "24681357-4",
   names: "Cajero",
   surnames: "Inactivo",
   correo: "cajero.inactivo@gmail.com",

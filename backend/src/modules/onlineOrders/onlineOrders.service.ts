@@ -29,6 +29,7 @@ import {
   createOnlineOrder,
   createOnlineOrderItems,
   createOnlinePayment,
+  deleteClientDeliveryAddress,
   cancelOtherOpenPayments,
   claimPaymentReconciliationLease,
   deferSupersededProcessingPayment,
@@ -89,6 +90,7 @@ import {
   type OrderCommercialModel,
 } from "./orderCommercialModel.js";
 import type {
+  ClientDeliveryAddressBody,
   CreateCheckoutBody,
   CreateGuestCheckoutBody,
 } from "./onlineOrders.validation.js";
@@ -528,6 +530,20 @@ export async function createGuestCheckoutService(
 
 export async function getClientDeliveryAddressService(clientId: number) {
   return findClientDeliveryAddress(clientId);
+}
+
+export async function saveClientDeliveryAddressService(clientId: number, data: ClientDeliveryAddressBody) {
+  const client = await db.transaction(async (tx) => findActiveClientForUpdate(tx, clientId));
+  assertActiveClient(client);
+  await db.transaction((tx) => upsertClientDeliveryAddress(tx, { clientId, ...data }));
+  return findClientDeliveryAddress(clientId);
+}
+
+export async function deleteClientDeliveryAddressService(clientId: number) {
+  const client = await db.transaction(async (tx) => findActiveClientForUpdate(tx, clientId));
+  assertActiveClient(client);
+  await deleteClientDeliveryAddress(clientId);
+  return { deleted: true };
 }
 
 export async function retryOnlineOrderPaymentService(clientId: number, orderId: number) {

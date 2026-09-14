@@ -86,6 +86,7 @@ export async function findActiveVerificationChallenge(
 ) {
   const [row] = await db.select({
     challengeId: emailVerificationChallengesTable.id,
+    email: emailVerificationChallengesTable.email,
     expiresAt: emailVerificationChallengesTable.expiresAt,
     lastSentAt: emailVerificationChallengesTable.lastSentAt,
   }).from(emailVerificationChallengesTable)

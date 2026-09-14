@@ -1,9 +1,10 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { SESSION_SECRET } from "../../config/configEnv.js";
+import { compactRut } from "../../utils/rut.js";
 import {
   createAuthUser,
-  findAuthUserByCorreo,
+  findAuthUserByIdentifier,
   findAuthUserById,
   findRoleByName,
   findUserByRutOrCorreo,
@@ -20,7 +21,7 @@ export class AuthError extends Error {
   }
 }
 
-type AuthUser = NonNullable<Awaited<ReturnType<typeof findAuthUserByCorreo>>>;
+type AuthUser = NonNullable<Awaited<ReturnType<typeof findAuthUserByIdentifier>>>;
 
 function createAuthenticatedSession(user: AuthUser) {
   if (!SESSION_SECRET) {
@@ -69,7 +70,7 @@ export async function createSessionForUserId(userId: number) {
 }
 
 export async function loginService(data: LoginBody) {
-  const user = await findAuthUserByCorreo(data.correo);
+  const user = await findAuthUserByIdentifier(data.identifier);
 
   if (!user) {
     throw new Error("Credenciales incorrectas");
@@ -91,7 +92,7 @@ export async function loginService(data: LoginBody) {
 export async function registerClientService(data: RegisterBody) {
   const existingUser = await findUserByRutOrCorreo(data.rut, data.correo);
 
-  if (existingUser?.rut === data.rut) {
+  if (existingUser && compactRut(existingUser.rut) === compactRut(data.rut)) {
     throw new AuthError("El RUT ya esta registrado", 409);
   }
 
@@ -134,5 +135,5 @@ export async function registerClientService(data: RegisterBody) {
     throw error;
   }
 
-  return loginService({ correo: data.correo, password: data.password });
+  return loginService({ identifier: data.correo, password: data.password });
 }

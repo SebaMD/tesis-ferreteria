@@ -3,7 +3,6 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import BrandLogo from "./BrandLogo.jsx";
-import ThemeToggle from "./ThemeToggle.jsx";
 import useCustomerNotice from "../hooks/useCustomerNotice.js";
 
 function navClass({ isActive }) {
@@ -48,7 +47,6 @@ export default function ClientNavbar() {
               <Info size={17} /><span className="max-[860px]:hidden">Información</span>
             </button>
           )}
-          <ThemeToggle />
           {isAuthenticated && !isClient && (
             <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/dashboard">
               <LayoutDashboard size={17} />

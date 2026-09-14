@@ -13,8 +13,9 @@ import {
   getUserRolesService,
   getUsersService,
   updateCashierScheduleService,
+  updateClientProfileService,
 } from "./users.service.js";
-import { validateCashierScheduleBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
+import { validateCashierScheduleBody, validateClientProfileBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -119,6 +120,7 @@ export async function createUser(req: Request, res: Response) {
     if (duplicateMessage) return handleErrorClient(res, 409, duplicateMessage);
 
     const message = getErrorMessage(error);
+    if (message === "El RUT ya está registrado") return handleErrorClient(res, 409, message);
     if (
       message === "Debe seleccionar un rol valido" ||
       message === "No se puede cambiar el rol de un usuario administrador" ||
@@ -128,6 +130,24 @@ export async function createUser(req: Request, res: Response) {
     }
 
     return handleErrorServer(res, 500, "Error al crear usuario", message);
+  }
+}
+
+export async function updateMyClientProfile(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientProfileBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+    return handleSuccess(
+      res,
+      200,
+      "Perfil actualizado exitosamente",
+      await updateClientProfileService(req.user.id, validation.value),
+    );
+  } catch (error) {
+    return handleErrorClient(res, 403, getErrorMessage(error));
   }
 }
 
@@ -156,6 +176,7 @@ export async function editUser(req: AuthenticatedRequest, res: Response) {
 
     const duplicateMessage = uniqueUserMessage(error);
     if (duplicateMessage) return handleErrorClient(res, 409, duplicateMessage);
+    if (message === "El RUT ya está registrado") return handleErrorClient(res, 409, message);
 
     if (
       message === "Debe seleccionar un rol valido" ||

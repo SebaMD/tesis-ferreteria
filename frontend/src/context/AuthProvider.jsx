@@ -21,7 +21,8 @@ export default function AuthProvider({ children }) {
 
   const login = useCallback(async (credentials) => {
     const data = await loginRequest(credentials);
-    return replaceSession(data);
+    replaceSession(data);
+    return data;
   }, [replaceSession]);
 
   const logout = useCallback(async () => {

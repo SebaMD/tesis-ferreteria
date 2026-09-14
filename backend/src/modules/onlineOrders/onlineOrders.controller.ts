@@ -13,10 +13,12 @@ import {
   continueGuestOnlineOrderPaymentService,
   createCheckoutService,
   createGuestCheckoutService,
+  deleteClientDeliveryAddressService,
   findOrderIdByPaymentReturnService,
   getClientOrderByIdService,
   getClientOrderDeliveryProofService,
   getClientDeliveryAddressService,
+  saveClientDeliveryAddressService,
   getClientOrderReceiptService,
   getClientOrdersService,
   getGuestDeviceOrderReceiptService,
@@ -36,6 +38,7 @@ import type { OrderCommercialModel } from "./orderCommercialModel.js";
 import {
   validateCreateCheckoutBody,
   validateCreateGuestCheckoutBody,
+  validateClientDeliveryAddressBody,
 } from "./onlineOrders.validation.js";
 import { ensureGuestDeviceCookie } from "./guestDeviceCookie.js";
 
@@ -381,6 +384,38 @@ export async function getDeliveryAddressController(req: AuthenticatedRequest, re
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo obtener la direccion de despacho", message(error));
+  }
+}
+
+export async function saveDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientDeliveryAddressBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho guardada exitosamente",
+      await saveClientDeliveryAddressService(requireClient(req), validation.value),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) return handleErrorClient(res, error.statusCode, error.message);
+    return handleErrorServer(res, 500, "No se pudo guardar la direccion", message(error));
+  }
+}
+
+export async function deleteDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho eliminada exitosamente",
+      await deleteClientDeliveryAddressService(requireClient(req)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) return handleErrorClient(res, error.statusCode, error.message);
+    return handleErrorServer(res, 500, "No se pudo eliminar la direccion", message(error));
   }
 }
 

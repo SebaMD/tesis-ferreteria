@@ -8,6 +8,7 @@ import {
   continuePaymentController,
   createCheckoutController,
   createGuestCheckoutController,
+  deleteDeliveryAddressController,
   getDeliveryAddressController,
   getGuestDeviceOrderDeliveryProofController,
   getGuestOrderController,
@@ -20,6 +21,7 @@ import {
   getMyOrderDeliveryProofController,
   getMyOrderReceiptController,
   getMyOrdersController,
+  saveDeliveryAddressController,
   retryPaymentController,
   retryGuestPaymentController,
   webpayReturnController,
@@ -45,6 +47,8 @@ router.use(verifyRoles(["CLIENT"]));
 
 router.get("/", getMyOrdersController);
 router.get("/delivery-address", getDeliveryAddressController);
+router.put("/delivery-address", saveDeliveryAddressController);
+router.delete("/delivery-address", deleteDeliveryAddressController);
 router.post("/checkout", createCheckoutController);
 router.post("/:id/continue-payment", continuePaymentController);
 router.post("/:id/retry-payment", retryPaymentController);

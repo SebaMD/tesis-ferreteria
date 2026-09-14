@@ -108,12 +108,12 @@ try {
   const historicalPassword = await bcrypt.hash("Email-Test-2026!", 4);
   const historical = (await pool.query(`
     INSERT INTO users(role_id,rut,names,surnames,correo,password)
-    VALUES ((SELECT id FROM roles WHERE name='CLIENT'),'12345678-9','Cliente','Historico','historical@example.test',$1)
+    VALUES ((SELECT id FROM roles WHERE name='CLIENT'),'12.345.678-5','Cliente','Historico','historical@example.test',$1)
     RETURNING id
   `, [historicalPassword])).rows[0];
   const historicalWorker = (await pool.query(`
     INSERT INTO users(role_id,rut,names,surnames,correo,password)
-    VALUES ((SELECT id FROM roles WHERE name='WAREHOUSE'),'13333333-3','Bodeguero','Historico','historical-worker@example.test',$1)
+    VALUES ((SELECT id FROM roles WHERE name='WAREHOUSE'),'13333333-9','Bodeguero','Historico','historical-worker@example.test',$1)
     RETURNING id
   `, [historicalPassword])).rows[0];
   await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
@@ -204,6 +204,16 @@ try {
   const historicalLogin = await request("POST", "/auth/login", {
     body: { correo: "HISTORICAL@example.test", password: "Email-Test-2026!" },
   });
+  await request("POST", "/auth/register", {
+    body: {
+      rut: "12 345 678 5",
+      names: "Cliente",
+      surnames: "Duplicado",
+      correo: "historical-rut-duplicate@example.test",
+      password: "Email-Test-2026!",
+      phone: null,
+    },
+  }, 409);
   const internalLogin = await request("POST", "/auth/login", {
     body: { correo: "admin-email-test@example.test", password: "Email-Test-2026!" },
   });
@@ -230,11 +240,12 @@ try {
   console.log("PASS historical CLIENT can log in and must verify only before a new checkout");
 
   const managerRoleId = (await pool.query("SELECT id FROM roles WHERE name='MANAGER'")).rows[0].id;
+  const workerMailCountBeforeCreate = smtp.messages.length;
   const workerCreated = await request("POST", "/users", {
     token: internalLogin.data.token,
     body: {
       roleId: managerRoleId,
-      rut: "14444444-4",
+      rut: "14.444.444-2",
       names: "Gerente Nuevo",
       surnames: "Verificacion",
       correo: "New.Worker@Example.Test",
@@ -243,65 +254,87 @@ try {
       status: "ACTIVE",
     },
   }, 201);
-  assert.equal(workerCreated.data.emailVerification.sent, true);
+  assert.equal(workerCreated.data.rut, "14444444-2");
+  assert.equal(workerCreated.data.emailVerification, undefined);
+  assert.equal(smtp.messages.length, workerMailCountBeforeCreate);
+  assert.equal((await pool.query("SELECT count(*) FROM email_verification_challenges WHERE user_id=$1", [workerCreated.data.id])).rows[0].count, "0");
+  assert.equal((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [workerCreated.data.id])).rows[0].email_verified_at, null);
+  const workerLogin = await request("POST", "/auth/login", { body: { identifier: "14 444 444 2", password: "Email-Test-2026!" } });
+  assert.equal(workerLogin.data.user.requiresEmailVerification, true);
+  assert.equal(workerLogin.data.emailVerification.sent, true);
   const workerPin = pinFrom(smtp.messages.at(-1));
   assert.ok(!JSON.stringify(workerCreated).includes(workerPin));
-  const workerChallenge = workerCreated.data.emailVerification.challengeId;
+  assert.ok(!JSON.stringify(workerLogin).includes(workerPin));
+  const workerChallenge = workerLogin.data.emailVerification.challengeId;
   const storedWorkerChallenge = (await pool.query("SELECT purpose,email,pin_hash FROM email_verification_challenges WHERE id=$1", [workerChallenge])).rows[0];
   assert.equal(storedWorkerChallenge.purpose, "INTERNAL_USER_REGISTRATION");
   assert.equal(storedWorkerChallenge.email, "new.worker@example.test");
   assert.notEqual(storedWorkerChallenge.pin_hash, workerPin);
-  const workerLogin = await request("POST", "/auth/login", { body: { correo: "new.worker@example.test", password: "Email-Test-2026!" } });
-  assert.equal(workerLogin.data.user.requiresEmailVerification, true);
+  const workerMailCountAfterFirstLogin = smtp.messages.length;
+  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [workerChallenge]);
+  const repeatedWorkerLogin = await request("POST", "/auth/login", { body: { correo: "new.worker@example.test", password: "Email-Test-2026!" } });
+  assert.equal(repeatedWorkerLogin.data.emailVerification.challengeId, workerChallenge);
+  assert.equal(smtp.messages.length, workerMailCountAfterFirstLogin);
   await request("GET", "/products", { token: workerLogin.data.token }, 403);
   await request("POST", "/email-verification/internal/verify", {
     token: historicalWorkerLogin.data.token,
     body: { challengeId: workerChallenge, pin: workerPin },
   }, 400);
   const existingWorkerChallenge = await request("POST", "/email-verification/internal/request", { token: workerLogin.data.token, body: {} }, 201);
-  assert.equal(existingWorkerChallenge.data.challengeId, workerChallenge);
-  const workerVerified = await request("POST", "/email-verification/internal/verify", {
+  assert.notEqual(existingWorkerChallenge.data.challengeId, workerChallenge);
+  await request("POST", "/email-verification/internal/verify", {
     token: workerLogin.data.token,
     body: { challengeId: workerChallenge, pin: workerPin },
+  }, 409);
+  const workerResentPin = pinFrom(smtp.messages.at(-1));
+  const workerVerified = await request("POST", "/email-verification/internal/verify", {
+    token: workerLogin.data.token,
+    body: { challengeId: existingWorkerChallenge.data.challengeId, pin: workerResentPin },
   });
   assert.equal(workerVerified.data.user.requiresEmailVerification, false);
   await request("GET", "/products", { token: workerVerified.data.token });
   await request("POST", "/email-verification/internal/verify", {
     token: workerLogin.data.token,
-    body: { challengeId: workerChallenge, pin: workerPin },
+    body: { challengeId: existingWorkerChallenge.data.challengeId, pin: workerResentPin },
   }, 409);
-  console.log("PASS new internal user receives HMAC PIN, is backend-gated, owner-bound and one-use");
+  await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: { roleId: managerRoleId, rut: "14444444-2", names: "Duplicado", surnames: "Formato", correo: "duplicate-rut@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
+  }, 409);
+  await request("POST", "/auth/login", { body: { identifier: "14444444-3", password: "Email-Test-2026!" } }, 400);
+  console.log("PASS worker first login sends once, reuses active PIN, is backend-gated, RUT-normalized, owner-bound and one-use");
 
   const cashierRoleId = (await pool.query("SELECT id FROM roles WHERE name='CASHIER'")).rows[0].id;
-  const cashierCreated = await request("POST", "/users", {
+  await request("POST", "/users", {
     token: internalLogin.data.token,
-    body: { roleId: cashierRoleId, rut: "16666666-6", names: "Cajero Nuevo", surnames: "Verificacion", correo: "cashier.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
+    body: { roleId: cashierRoleId, rut: "16666666-K", names: "Cajero Nuevo", surnames: "Verificacion", correo: "cashier.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
   }, 201);
   const cashierLogin = await request("POST", "/auth/login", { body: { correo: "cashier.verify@example.test", password: "Email-Test-2026!" } });
   assert.equal(cashierLogin.data.user.requiresEmailVerification, true);
-  await request("POST", "/email-verification/internal/request", { token: cashierLogin.data.token, body: {} }, 201);
+  const cashierChallenge = cashierLogin.data.emailVerification.challengeId;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 400);
+    await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierChallenge, pin: "999999" } }, 400);
   }
-  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 429);
-  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: "999999" } }, 429);
-  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [cashierCreated.data.emailVerification.challengeId]);
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierChallenge, pin: "999999" } }, 429);
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierChallenge, pin: "999999" } }, 429);
+  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [cashierChallenge]);
   const cashierResent = await request("POST", "/email-verification/internal/request", { token: cashierLogin.data.token, body: {} }, 201);
-  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierCreated.data.emailVerification.challengeId, pin: pinFrom(smtp.messages.at(-2)) } }, 429);
+  await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierChallenge, pin: pinFrom(smtp.messages.at(-2)) } }, 429);
   const cashierVerified = await request("POST", "/email-verification/internal/verify", { token: cashierLogin.data.token, body: { challengeId: cashierResent.data.challengeId, pin: pinFrom(smtp.messages.at(-1)) } });
   assert.equal(cashierVerified.data.user.requiresEmailVerification, false);
 
   const warehouseRoleId = (await pool.query("SELECT id FROM roles WHERE name='WAREHOUSE'")).rows[0].id;
-  const warehouseCreated = await request("POST", "/users", {
+  await request("POST", "/users", {
     token: internalLogin.data.token,
-    body: { roleId: warehouseRoleId, rut: "17777777-7", names: "Bodeguero Nuevo", surnames: "Verificacion", correo: "warehouse.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
+    body: { roleId: warehouseRoleId, rut: "17777777-3", names: "Bodeguero Nuevo", surnames: "Verificacion", correo: "warehouse.verify@example.test", password: "Email-Test-2026!", phone: null, status: "ACTIVE" },
   }, 201);
   const warehouseLogin = await request("POST", "/auth/login", { body: { correo: "warehouse.verify@example.test", password: "Email-Test-2026!" } });
   assert.equal(warehouseLogin.data.user.requiresEmailVerification, true);
+  const warehouseChallenge = warehouseLogin.data.emailVerification.challengeId;
   const warehousePin = pinFrom(smtp.messages.at(-1));
-  await pool.query("UPDATE email_verification_challenges SET created_at=now()-interval '20 minutes', expires_at=now()-interval '1 second' WHERE id=$1", [warehouseCreated.data.emailVerification.challengeId]);
-  await request("POST", "/email-verification/internal/verify", { token: warehouseLogin.data.token, body: { challengeId: warehouseCreated.data.emailVerification.challengeId, pin: warehousePin } }, 410);
-  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [warehouseCreated.data.emailVerification.challengeId]);
+  await pool.query("UPDATE email_verification_challenges SET created_at=now()-interval '20 minutes', expires_at=now()-interval '1 second' WHERE id=$1", [warehouseChallenge]);
+  await request("POST", "/email-verification/internal/verify", { token: warehouseLogin.data.token, body: { challengeId: warehouseChallenge, pin: warehousePin } }, 410);
+  await pool.query("UPDATE email_verification_challenges SET last_sent_at=now()-interval '61 seconds' WHERE id=$1", [warehouseChallenge]);
   const warehouseResent = await request("POST", "/email-verification/internal/request", { token: warehouseLogin.data.token, body: {} }, 201);
   const warehouseVerified = await request("POST", "/email-verification/internal/verify", { token: warehouseLogin.data.token, body: { challengeId: warehouseResent.data.challengeId, pin: pinFrom(smtp.messages.at(-1)) } });
   assert.equal(warehouseVerified.data.user.requiresEmailVerification, false);
@@ -332,16 +365,58 @@ try {
     token: internalLogin.data.token,
     body: { correo: "worker.changed@example.test" },
   });
-  assert.equal(workerEmailChanged.data.emailVerification.sent, true);
+  assert.equal(workerEmailChanged.data.emailVerification, undefined);
   assert.equal((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [workerCreated.data.id])).rows[0].email_verified_at, null);
   await request("GET", "/products", { token: workerVerified.data.token }, 403);
+  const changedWorkerLogin = await request("POST", "/auth/login", { body: { correo: "worker.changed@example.test", password: "Email-Test-2026!" } });
+  assert.equal(changedWorkerLogin.data.emailVerification.sent, true);
   const changedWorkerPin = pinFrom(smtp.messages.at(-1));
   const changedWorkerVerified = await request("POST", "/email-verification/internal/verify", {
-    token: workerVerified.data.token,
-    body: { challengeId: workerEmailChanged.data.emailVerification.challengeId, pin: changedWorkerPin },
+    token: changedWorkerLogin.data.token,
+    body: { challengeId: changedWorkerLogin.data.emailVerification.challengeId, pin: changedWorkerPin },
   });
   assert.equal(changedWorkerVerified.data.user.correo, "worker.changed@example.test");
   assert.equal(changedWorkerVerified.data.user.requiresEmailVerification, false);
+
+  const pendingEmailWorker = await request("POST", "/users", {
+    token: internalLogin.data.token,
+    body: {
+      roleId: managerRoleId,
+      rut: "18888888-7",
+      names: "Gerente Pendiente",
+      surnames: "Cambio Correo",
+      correo: "pending.old@example.test",
+      password: "Email-Test-2026!",
+      phone: null,
+      status: "ACTIVE",
+    },
+  }, 201);
+  const pendingOldLogin = await request("POST", "/auth/login", {
+    body: { correo: "pending.old@example.test", password: "Email-Test-2026!" },
+  });
+  const pendingOldChallenge = pendingOldLogin.data.emailVerification.challengeId;
+  const pendingOldPin = pinFrom(smtp.messages.at(-1));
+  await request("PATCH", `/users/${pendingEmailWorker.data.id}`, {
+    token: internalLogin.data.token,
+    body: { correo: "pending.new@example.test" },
+  });
+  const pendingNewLogin = await request("POST", "/auth/login", {
+    body: { correo: "pending.new@example.test", password: "Email-Test-2026!" },
+  });
+  assert.notEqual(pendingNewLogin.data.emailVerification.challengeId, pendingOldChallenge);
+  assert.match(smtp.messages.at(-1), /pending\.new@example\.test/i);
+  await request("POST", "/email-verification/internal/verify", {
+    token: pendingNewLogin.data.token,
+    body: { challengeId: pendingOldChallenge, pin: pendingOldPin },
+  }, 409);
+  const pendingNewVerified = await request("POST", "/email-verification/internal/verify", {
+    token: pendingNewLogin.data.token,
+    body: {
+      challengeId: pendingNewLogin.data.emailVerification.challengeId,
+      pin: pinFrom(smtp.messages.at(-1)),
+    },
+  });
+  assert.equal(pendingNewVerified.data.user.requiresEmailVerification, false);
   console.log("PASS changing an internal email clears verification, backend-gates the old session and verifies only the new address");
 
   const registered = await register("11222333-9", "New.Client@Example.Test");
@@ -373,16 +448,46 @@ try {
     body: { correo: "new.client@example.test", password: "Email-Test-2026!" },
   });
   assert.equal(verifiedLogin.data.user.emailVerified, true);
+  const profileUpdated = await request("PATCH", "/users/me/profile", {
+    token: verified.data.token,
+    body: { phone: "9 8765 4321" },
+  });
+  assert.equal(profileUpdated.data.user.phone, "+56987654321");
+  await request("PATCH", "/users/me/profile", {
+    token: verified.data.token,
+    body: { phone: "+56987654321", clientId: historical.id },
+  }, 400);
+  const savedAddress = await request("PUT", "/online-orders/delivery-address", {
+    token: profileUpdated.data.token,
+    body: {
+      recipientName: "Cliente Verificacion",
+      phone: "+56987654321",
+      address: "Avenida Prueba 123",
+      commune: "Santa Juana",
+      reference: "Porton azul",
+      latitude: -36.606,
+      longitude: -72.103,
+    },
+  });
+  assert.equal(savedAddress.data.address, "Avenida Prueba 123");
+  assert.equal((await request("GET", "/online-orders/delivery-address", { token: profileUpdated.data.token })).data.reference, "Porton azul");
+  assert.equal((await request("GET", "/online-orders/delivery-address", { token: historicalVerified.data.token })).data, null);
+  await request("PUT", "/online-orders/delivery-address", {
+    token: profileUpdated.data.token,
+    body: { ...savedAddress.data, clientId: historical.id },
+  }, 400);
   await request("POST", "/email-verification/client/verify", {
     token: verified.data.token,
     body: { challengeId: registrationChallenge, pin: registrationPin },
   }, 409);
   const firstClientCheckout = await request("POST", "/online-orders/checkout", {
-    token: verified.data.token,
+    token: profileUpdated.data.token,
     body: checkoutBody("client-verified-0001"),
   }, 201);
   assert.ok(firstClientCheckout.data.orderId);
-  console.log("PASS new CLIENT is unverified, gate creates no reservation, verification is one-use, verified checkout starts");
+  await request("DELETE", "/online-orders/delivery-address", { token: profileUpdated.data.token });
+  assert.equal((await request("GET", "/online-orders/delivery-address", { token: profileUpdated.data.token })).data, null);
+  console.log("PASS new CLIENT is gated until verification and can persist its own phone/address profile without cross-client identifiers");
 
   const attemptsUser = await register("55666777-2", "attempts@example.test");
   const attemptsPin = pinFrom(smtp.messages.at(-1));
@@ -536,7 +641,7 @@ try {
     token: internalLogin.data.token,
     body: {
       roleId: managerRoleId,
-      rut: "15555555-5",
+      rut: "15555555-6",
       names: "Gerente SMTP",
       surnames: "Temporal",
       correo: "worker-smtp-failure@example.test",
@@ -545,7 +650,13 @@ try {
       status: "ACTIVE",
     },
   }, 201);
-  assert.equal(failedWorker.data.emailVerification.sent, false);
+  assert.equal(failedWorker.data.emailVerification, undefined);
+  assert.equal((await pool.query("SELECT count(*) FROM email_verification_challenges WHERE email='worker-smtp-failure@example.test'")).rows[0].count, "0");
+  const failedWorkerLogin = await request("POST", "/auth/login", {
+    body: { correo: "worker-smtp-failure@example.test", password: "Email-Test-2026!" },
+  });
+  assert.equal(failedWorkerLogin.data.user.requiresEmailVerification, true);
+  assert.equal(failedWorkerLogin.data.emailVerification.sent, false);
   assert.equal((await pool.query("SELECT count(*) FROM email_verification_challenges WHERE email='worker-smtp-failure@example.test'")).rows[0].count, "0");
   await pool.query("UPDATE email_verification_challenges SET last_sent_at=$2 WHERE user_id=$1 AND purpose='CLIENT_EMAIL_CHANGE'", [registered.data.user.id, new Date(Date.now() - 61_000)]);
   await request("POST", "/email-verification/client/email-change/request", { token: changed.data.token, body: { email: "change-smtp-failure@example.test" } }, 503);

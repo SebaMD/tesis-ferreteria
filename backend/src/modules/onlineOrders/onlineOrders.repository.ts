@@ -68,6 +68,14 @@ export async function upsertClientDeliveryAddress(
   return savedAddress;
 }
 
+export async function deleteClientDeliveryAddress(clientId: number) {
+  const [deleted] = await db
+    .delete(clientDeliveryAddressesTable)
+    .where(eq(clientDeliveryAddressesTable.clientId, clientId))
+    .returning({ clientId: clientDeliveryAddressesTable.clientId });
+  return deleted ?? null;
+}
+
 const orderColumns = {
   id: onlineOrdersTable.id,
   clientId: onlineOrdersTable.clientId,

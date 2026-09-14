@@ -256,7 +256,10 @@ export async function requestGuestEmailVerificationService(guestSessionId: strin
   return issueChallenge({ type: "GUEST", guestSessionHash }, "GUEST_CHECKOUT", email);
 }
 
-export async function requestInternalEmailVerificationService(userId: number) {
+export async function requestInternalEmailVerificationService(
+  userId: number,
+  options: { reuseActive?: boolean } = {},
+) {
   const user = await db.transaction(async (tx) => assertActiveInternalUser(
     await findVerificationUserForUpdate(tx, userId),
   ));
@@ -267,9 +270,9 @@ export async function requestInternalEmailVerificationService(userId: number) {
   const owner: VerificationOwner = { type: "USER", userId };
   const active = await findActiveVerificationChallenge(owner, "INTERNAL_USER_REGISTRATION");
   const now = Date.now();
-  if (active && active.expiresAt.getTime() > now) {
+  if (active && active.email === user.correo && active.expiresAt.getTime() > now) {
     const resendAt = new Date(active.lastSentAt.getTime() + EMAIL_VERIFICATION_RESEND_SECONDS * 1000);
-    if (resendAt.getTime() > now) {
+    if (options.reuseActive || resendAt.getTime() > now) {
       return {
         sent: true,
         challengeId: active.challengeId,

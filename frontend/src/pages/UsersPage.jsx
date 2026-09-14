@@ -11,6 +11,8 @@ import AppSelect from "../components/AppSelect.jsx";
 import { compareByNewest, formatDate } from "../helpers/formatters.js";
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
+import { normalizeChileanMobilePhone } from "../helpers/phone.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
   badgeClass,
   codeCellClass,
@@ -70,9 +72,7 @@ const WORK_SHIFT_TIME_CONFIG = {
 };
 const NAME_REGEX = /^[\p{L} ]+$/u;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
-const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 const VALID_STATUSES = ["ACTIVE", "INACTIVE"];
 
 function normalizeText(value) {
@@ -83,19 +83,8 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeRut(value) {
-  return String(value || "").trim().replace(/\./g, "").toUpperCase();
-}
-
 function normalizePhone(value) {
-  const phone = String(value || "").trim();
-  if (!phone) return null;
-
-  const compactPhone = phone.replace(/[\s().-]/g, "");
-  if (!PHONE_REGEX.test(compactPhone)) return null;
-  if (compactPhone.startsWith("+56")) return compactPhone;
-  if (compactPhone.startsWith("56")) return `+${compactPhone}`;
-  return `+56${compactPhone}`;
+  return normalizeChileanMobilePhone(value);
 }
 
 function validateUserForm(form, { isEditing, isAdminStatusLocked }) {
@@ -116,8 +105,8 @@ function validateUserForm(form, { isEditing, isAdminStatusLocked }) {
   }
 
   if (!rut) return { success: false, message: "El RUT es obligatorio." };
-  if (!RUT_REGEX.test(rut)) {
-    return { success: false, message: "El RUT debe ir sin puntos y con guion. Ejemplo: 12345678-9." };
+  if (!isValidRut(rut)) {
+    return { success: false, message: "Ingresa un RUT chileno válido." };
   }
 
   if (!correo) return { success: false, message: "El correo electrónico es obligatorio." };
@@ -431,17 +420,16 @@ export default function UsersPage() {
 
     try {
       setSubmitting(true);
-      let savedUser;
       if (isEditing) {
-        savedUser = await updateUserRequest(editingUserId, payload);
+        await updateUserRequest(editingUserId, payload);
       } else {
-        savedUser = await createUserRequest(payload);
+        await createUserRequest(payload);
       }
       toast.success(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
-      if (savedUser?.emailVerification?.sent === true) {
-        toast.info("Se envió un código de verificación al correo del trabajador.");
-      } else if (savedUser?.emailVerification?.sent === false) {
-        toast.warning(savedUser.emailVerification.message || "El usuario quedó creado, pero no se pudo enviar el código. Podrá reenviarlo al iniciar sesión.");
+      if (!isEditing && ["MANAGER", "CASHIER", "WAREHOUSE"].includes(formValue.roleName)) {
+        toast.info("Deberá verificar su correo al iniciar sesión por primera vez.");
+      } else if (isEditing && ["MANAGER", "CASHIER", "WAREHOUSE"].includes(formValue.roleName) && editingUser?.correo !== formValue.correo) {
+        toast.info("El nuevo correo deberá verificarse en el próximo inicio de sesión.");
       }
       resetForm();
       await loadUsers();
@@ -587,7 +575,8 @@ export default function UsersPage() {
               <input
                 value={form.rut}
                 onChange={(event) => setForm((current) => ({ ...current, rut: event.target.value }))}
-                placeholder="12345678-9"
+                onBlur={() => setForm((current) => ({ ...current, rut: normalizeRut(current.rut) }))}
+                placeholder="10120345-K"
                 required
               />
             </label>

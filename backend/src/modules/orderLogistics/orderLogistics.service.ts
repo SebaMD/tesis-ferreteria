@@ -1,5 +1,6 @@
 import { db } from "../../db/index.js";
-import { isValidRut, normalizeName, normalizeRut } from "../auth/auth.validation.js";
+import { normalizeName } from "../auth/auth.validation.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
 import {
   notifyClientOrderBestEffort,
   type ClientOrderMailEvent,

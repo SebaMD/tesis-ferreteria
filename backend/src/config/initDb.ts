@@ -46,7 +46,7 @@ export async function createInitialUsers() {
   const users: Array<typeof usersTable.$inferInsert> = [
     {
       roleId: roleByName.get("ADMIN")!,
-      rut: "12345678-9",
+      rut: "12345678-5",
       names: "Administrador",
       surnames: "Sistema",
       correo: "admin@gmail.com",
@@ -57,7 +57,7 @@ export async function createInitialUsers() {
     },
     {
       roleId: roleByName.get("MANAGER")!,
-      rut: "11222333-4",
+      rut: "11222333-9",
       names: "Gerente",
       surnames: "Sistema",
       correo: "gerente@gmail.com",
@@ -68,7 +68,7 @@ export async function createInitialUsers() {
     },
     {
       roleId: roleByName.get("CASHIER")!,
-      rut: "55666777-8",
+      rut: "55666777-2",
       names: "Cajero",
       surnames: "Mañana",
       correo: "cajero@gmail.com",
@@ -83,7 +83,7 @@ export async function createInitialUsers() {
     },
     {
       roleId: roleByName.get("CASHIER")!,
-      rut: "13579246-8",
+      rut: "13579246-2",
       names: "Cajero",
       surnames: "Tarde",
       correo: "cajero.tarde@gmail.com",
@@ -98,7 +98,7 @@ export async function createInitialUsers() {
     },
     {
       roleId: roleByName.get("WAREHOUSE")!,
-      rut: "98765432-1",
+      rut: "98765432-5",
       names: "Bodeguero",
       surnames: "Sistema",
       correo: "bodeguero@gmail.com",

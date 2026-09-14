@@ -1,10 +1,13 @@
 export function normalizeRut(value = "") {
-  return String(value).trim().replace(/\./g, "").toUpperCase();
+  const raw = String(value).trim().toUpperCase();
+  const compact = raw.replace(/[.\s-]/g, "");
+  const match = compact.match(/^(\d{7,8})([\dK])$/);
+  return match ? `${match[1]}-${match[2]}` : raw.replace(/[.\s]/g, "");
 }
 
 export function isValidRut(value = "") {
   const match = normalizeRut(value).match(/^(\d{7,8})-([\dK])$/);
-  if (!match) return false;
+  if (!match || Number(match[1]) === 0) return false;
 
   let sum = 0;
   let multiplier = 2;

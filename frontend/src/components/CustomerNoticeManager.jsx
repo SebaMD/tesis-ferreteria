@@ -8,7 +8,7 @@ import {
   updateCustomerNoticeConfigurationRequest,
 } from "../services/customerNotice.service.js";
 
-export default function CustomerNoticeManager() {
+export default function CustomerNoticeManager({ embedded = false }) {
   const { refreshNotice } = useCustomerNotice();
   const [form, setForm] = useState({ title: "", message: "", active: false });
   const [loading, setLoading] = useState(true);
@@ -43,7 +43,7 @@ export default function CustomerNoticeManager() {
   };
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.05)] max-[720px]:p-4">
+    <section className={embedded ? "grid gap-1" : "rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.05)] max-[720px]:p-4"}>
       <div className="mb-4 flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-md bg-rust-50 text-rust-600"><Megaphone size={20} /></span>
         <div>

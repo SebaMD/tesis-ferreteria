@@ -314,6 +314,10 @@
   background-color: #232c38 !important;
 }
 
+.dark .bg-slate-50 {
+  background-color: #1c2530 !important;
+}
+
 .dark .bg-rust-50 {
   background-color: #3a2718 !important;
 }

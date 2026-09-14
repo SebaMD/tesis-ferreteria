@@ -5,34 +5,14 @@ import {
   deleteUserById,
   findRoleById,
   findRoles,
+  findOtherUserByRut,
   findUserById,
   findUsers,
   updateUserById,
   updateUserWorkScheduleById,
 } from "./users.repository.js";
-import type { CashierScheduleBody, CreateUserBody, EditUserBody } from "./users.validation.js";
-import {
-  EmailVerificationError,
-  requestInternalEmailVerificationService,
-} from "../emailVerification/emailVerification.service.js";
-
-const INTERNAL_VERIFICATION_ROLES = new Set(["MANAGER", "CASHIER", "WAREHOUSE"]);
-
-async function trySendInternalVerification(userId: number) {
-  try {
-    return {
-      sent: true,
-      ...(await requestInternalEmailVerificationService(userId)),
-    };
-  } catch (error) {
-    return {
-      sent: false,
-      message: error instanceof EmailVerificationError
-        ? error.message
-        : "El usuario fue guardado, pero no se pudo enviar el codigo de verificacion",
-    };
-  }
-}
+import type { CashierScheduleBody, ClientProfileBody, CreateUserBody, EditUserBody } from "./users.validation.js";
+import { createSessionForUserId } from "../auth/auth.service.js";
 
 export async function getUsersService() {
   return findUsers();
@@ -63,15 +43,16 @@ export async function createUserService(data: CreateUserBody) {
     throw new Error("No se puede cambiar el estado de un usuario administrador");
   }
 
+  if (await findOtherUserByRut(data.rut)) {
+    throw new Error("El RUT ya está registrado");
+  }
+
   const user = await createUser({
     ...data,
     emailVerifiedAt: role.name === "ADMIN" ? new Date() : null,
     password: await bcrypt.hash(data.password, 10),
   });
 
-  if (INTERNAL_VERIFICATION_ROLES.has(role.name)) {
-    return { ...user, emailVerification: await trySendInternalVerification(user.id) };
-  }
   return user;
 }
 
@@ -114,6 +95,9 @@ export async function editUserService(id: number, data: EditUserBody, authentica
 
   const targetRole = nextRole?.name ?? user.roleName;
   const emailChanged = userData.correo !== undefined && userData.correo !== user.correo;
+  if (userData.rut !== undefined && userData.rut !== user.rut && await findOtherUserByRut(userData.rut, id)) {
+    throw new Error("El RUT ya está registrado");
+  }
   if (emailChanged) {
     Object.assign(userData, { emailVerifiedAt: targetRole === "ADMIN" ? new Date() : null });
   }
@@ -124,12 +108,17 @@ export async function editUserService(id: number, data: EditUserBody, authentica
     throw new Error("Usuario no encontrado");
   }
 
-  const movedToInternalRole = INTERNAL_VERIFICATION_ROLES.has(targetRole)
-    && !INTERNAL_VERIFICATION_ROLES.has(user.roleName);
-  if (INTERNAL_VERIFICATION_ROLES.has(targetRole) && (emailChanged || movedToInternalRole)) {
-    return { ...updatedUser, emailVerification: await trySendInternalVerification(updatedUser.id) };
-  }
   return updatedUser;
+}
+
+export async function updateClientProfileService(userId: number, data: ClientProfileBody) {
+  const user = await findUserById(userId);
+  if (!user || user.roleName !== "CLIENT" || user.status !== "ACTIVE") {
+    throw new Error("La cuenta de cliente no está activa");
+  }
+  const updated = await updateUserById(userId, { phone: data.phone });
+  if (!updated) throw new Error("Usuario no encontrado");
+  return createSessionForUserId(userId);
 }
 
 export async function updateCashierScheduleService(id: number, data: CashierScheduleBody) {

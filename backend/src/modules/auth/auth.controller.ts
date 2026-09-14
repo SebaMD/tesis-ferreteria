@@ -20,6 +20,7 @@ import {
 import {
   EmailVerificationError,
   requestClientEmailVerificationService,
+  requestInternalEmailVerificationService,
 } from "../emailVerification/emailVerification.service.js";
 
 function getErrorMessage(error: unknown) {
@@ -35,6 +36,25 @@ export async function login(req: Request, res: Response) {
     }
 
     const data = await loginService(validation.value);
+    if (data.user.requiresEmailVerification) {
+      try {
+        const challenge = await requestInternalEmailVerificationService(data.user.id, { reuseActive: true });
+        return handleSuccess(res, 200, "Inicio de sesion exitoso", {
+          ...data,
+          emailVerification: { sent: true, ...challenge },
+        });
+      } catch (verificationError) {
+        return handleSuccess(res, 200, "Inicio de sesion exitoso", {
+          ...data,
+          emailVerification: {
+            sent: false,
+            message: verificationError instanceof EmailVerificationError
+              ? verificationError.message
+              : "No se pudo enviar el codigo de verificacion. Intenta reenviarlo desde la pantalla de verificacion.",
+          },
+        });
+      }
+    }
     return handleSuccess(res, 200, "Inicio de sesion exitoso", data);
   } catch (error) {
     return handleErrorClient(res, 401, getErrorMessage(error));

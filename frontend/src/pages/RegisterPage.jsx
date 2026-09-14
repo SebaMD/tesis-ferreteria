@@ -6,8 +6,8 @@ import { getApiError } from "../api/httpClient.js";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { isValidPassword, PASSWORD_REQUIREMENTS } from "../helpers/password.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
-import AuthThemeToggle from "../components/AuthThemeToggle.jsx";
 
 let postRegistrationNavigationPending = false;
 
@@ -50,6 +50,12 @@ export default function RegisterPage() {
       return;
     }
 
+    const rut = normalizeRut(form.rut);
+    if (!isValidRut(rut)) {
+      toast.error("Ingresa un RUT chileno válido");
+      return;
+    }
+
     if (form.password !== form.confirmPassword) {
       toast.error("Las contraseñas no coinciden");
       return;
@@ -59,7 +65,7 @@ export default function RegisterPage() {
       setLoading(true);
       postRegistrationNavigationPending = true;
       const session = await registerClient({
-        rut: form.rut,
+        rut,
         names: form.names,
         surnames: form.surnames,
         correo: form.correo,
@@ -88,7 +94,6 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f8f9] px-4 py-8">
-      <AuthThemeToggle />
       <LoadingOverlay active={loading} fullScreen />
       <div className="mx-auto grid w-full max-w-180 gap-6">
         <Link className="mx-auto flex items-center gap-2 text-ink-950 no-underline" to="/catalog">
@@ -119,7 +124,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
             <label>
               RUT
-              <input value={form.rut} onChange={(event) => updateField("rut", event.target.value)} placeholder="12345678-9" autoComplete="off" required />
+              <input value={form.rut} onChange={(event) => updateField("rut", event.target.value)} onBlur={() => updateField("rut", normalizeRut(form.rut))} placeholder="10120345-K" autoComplete="off" required />
             </label>
             <label>
               Teléfono (opcional)

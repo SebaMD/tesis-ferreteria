@@ -27,15 +27,15 @@ function ThemedToaster() {
 
 export default function Root() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <ThemeProvider>
         <CartProvider>
           <CustomerNoticeProvider>
             <ThemedToaster />
             <FavoritesProvider><App /></FavoritesProvider>
           </CustomerNoticeProvider>
         </CartProvider>
-      </AuthProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }

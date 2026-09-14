@@ -1,4 +1,5 @@
-import { isValidRut, normalizeName, normalizeRut } from "../auth/auth.validation.js";
+import { normalizeName } from "../auth/auth.validation.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
 import { normalizePhone } from "../users/users.validation.js";
 import {
   canonicalizeDeliveryCommune,

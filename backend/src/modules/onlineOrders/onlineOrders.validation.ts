@@ -31,6 +31,16 @@ export type CreateGuestCheckoutBody = CreateCheckoutBody & {
   emailVerificationChallengeId: number;
 };
 
+export type ClientDeliveryAddressBody = {
+  recipientName: string;
+  phone: string;
+  address: string;
+  commune: string;
+  reference: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 type ValidationResult<T> =
   | { success: true; value: T }
   | { success: false; error: string };
@@ -54,6 +64,79 @@ function optionalText(value: unknown, field: string, maxLength: number) {
     return { success: false as const, error: `${field} no puede superar ${maxLength} caracteres` };
   }
   return { success: true as const, value: normalized };
+}
+
+function validateDeliveryFields(input: Record<string, unknown>, required = true) {
+  const recipientName = optionalText(input.deliveryRecipientName, "El nombre del destinatario", 240);
+  if (!recipientName.success) return recipientName;
+  const phone = optionalText(input.deliveryPhone, "El telefono de contacto", 20);
+  if (!phone.success) return phone;
+  const address = optionalText(input.deliveryAddress, "La direccion", 300);
+  if (!address.success) return address;
+  const commune = optionalText(input.deliveryCommune, "La comuna", 120);
+  if (!commune.success) return commune;
+  const reference = optionalText(input.deliveryReference, "La referencia", 500);
+  if (!reference.success) return reference;
+  const coordinates = validateCoordinatePair(input.deliveryLatitude, input.deliveryLongitude);
+  if (!coordinates.success) return coordinates;
+
+  if (required && !recipientName.value) {
+    return { success: false as const, error: "El nombre del destinatario es obligatorio para despacho" };
+  }
+  if (required && !phone.value) {
+    return { success: false as const, error: "El telefono de contacto es obligatorio para despacho" };
+  }
+  if (phone.value && !/^[+0-9()\s-]{7,20}$/.test(phone.value)) {
+    return { success: false as const, error: "El telefono de contacto no es valido" };
+  }
+  if (required && !address.value) {
+    return { success: false as const, error: "La direccion es obligatoria para despacho" };
+  }
+  if ((required || commune.value) && (!commune.value || !canonicalizeDeliveryCommune(commune.value))) {
+    return {
+      success: false as const,
+      error: `Por ahora los despachos solo estan disponibles en ${DELIVERY_COMMUNE}`,
+    };
+  }
+
+  return {
+    success: true as const,
+    value: {
+      recipientName: recipientName.value,
+      phone: phone.value,
+      address: address.value,
+      commune: DELIVERY_COMMUNE,
+      reference: reference.value,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+    },
+  };
+}
+
+export function validateClientDeliveryAddressBody(body: unknown): ValidationResult<ClientDeliveryAddressBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe enviar una direccion valida" };
+  }
+  const input = body as Record<string, unknown>;
+  const allowed = new Set(["recipientName", "phone", "address", "commune", "reference", "latitude", "longitude"]);
+  if (Object.keys(input).some((field) => !allowed.has(field))) {
+    return { success: false, error: "La direccion contiene campos no permitidos" };
+  }
+  const validation = validateDeliveryFields({
+    deliveryRecipientName: input.recipientName,
+    deliveryPhone: input.phone,
+    deliveryAddress: input.address,
+    deliveryCommune: input.commune,
+    deliveryReference: input.reference,
+    deliveryLatitude: input.latitude,
+    deliveryLongitude: input.longitude,
+  });
+  if (!validation.success) return validation;
+  const { recipientName, phone, address, ...rest } = validation.value;
+  if (!recipientName || !phone || !address) {
+    return { success: false, error: "La direccion guardada debe incluir destinatario, telefono y direccion" };
+  }
+  return { success: true, value: { recipientName, phone, address, ...rest } };
 }
 
 export function validateCreateCheckoutBody(body: unknown): ValidationResult<CreateCheckoutBody> {
@@ -106,42 +189,9 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     return { success: false, error: "La opcion de guardar la direccion no es valida" };
   }
 
-  const recipientName = optionalText(input.deliveryRecipientName, "El nombre del destinatario", 240);
-  if (!recipientName.success) return recipientName;
-  const phone = optionalText(input.deliveryPhone, "El telefono de contacto", 20);
-  if (!phone.success) return phone;
-  const address = optionalText(input.deliveryAddress, "La direccion", 300);
-  if (!address.success) return address;
-  const commune = optionalText(input.deliveryCommune, "La comuna", 120);
-  if (!commune.success) return commune;
-  const reference = optionalText(input.deliveryReference, "La referencia", 500);
-  if (!reference.success) return reference;
-  const coordinates = validateCoordinatePair(
-    input.deliveryLatitude,
-    input.deliveryLongitude,
-  );
-  if (!coordinates.success) return coordinates;
-
-  if (input.deliveryType === "DELIVERY") {
-    if (!recipientName.value) {
-      return { success: false, error: "El nombre del destinatario es obligatorio para despacho" };
-    }
-    if (!phone.value) {
-      return { success: false, error: "El telefono de contacto es obligatorio para despacho" };
-    }
-    if (!/^[+0-9()\s-]{7,20}$/.test(phone.value)) {
-      return { success: false, error: "El telefono de contacto no es valido" };
-    }
-    if (!address.value) {
-      return { success: false, error: "La direccion es obligatoria para despacho" };
-    }
-    if (!commune.value || !canonicalizeDeliveryCommune(commune.value)) {
-      return {
-        success: false,
-        error: `Por ahora los despachos solo estan disponibles en ${DELIVERY_COMMUNE}`,
-      };
-    }
-  }
+  const deliveryValidation = validateDeliveryFields(input, input.deliveryType === "DELIVERY");
+  if (!deliveryValidation.success) return deliveryValidation;
+  const delivery = input.deliveryType === "DELIVERY" ? deliveryValidation : null;
 
   const productIds = new Set<number>();
   const items: OnlineOrderItemInput[] = [];
@@ -178,13 +228,13 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
       checkoutKey: input.checkoutKey.trim(),
       items,
       deliveryType: input.deliveryType,
-      deliveryRecipientName: input.deliveryType === "DELIVERY" ? recipientName.value : null,
-      deliveryPhone: input.deliveryType === "DELIVERY" ? phone.value : null,
-      deliveryAddress: input.deliveryType === "DELIVERY" ? address.value : null,
-      deliveryCommune: input.deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null,
-      deliveryReference: input.deliveryType === "DELIVERY" ? reference.value : null,
-      deliveryLatitude: input.deliveryType === "DELIVERY" ? coordinates.latitude : null,
-      deliveryLongitude: input.deliveryType === "DELIVERY" ? coordinates.longitude : null,
+      deliveryRecipientName: delivery?.value.recipientName ?? null,
+      deliveryPhone: delivery?.value.phone ?? null,
+      deliveryAddress: delivery?.value.address ?? null,
+      deliveryCommune: delivery?.value.commune ?? null,
+      deliveryReference: delivery?.value.reference ?? null,
+      deliveryLatitude: delivery?.value.latitude ?? null,
+      deliveryLongitude: delivery?.value.longitude ?? null,
       saveDeliveryAddress: input.deliveryType === "DELIVERY"
         && input.saveDeliveryAddress === true,
     },

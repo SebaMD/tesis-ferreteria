@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LockKeyhole, Mail, Store, UserPlus } from "lucide-react";
+import { ContactRound, Eye, EyeOff, LockKeyhole, Store, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -6,15 +6,15 @@ import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
-import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
+import { clearSessionNotice, readSessionNotice, storeInternalVerificationChallenge } from "../helpers/session.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
-import AuthThemeToggle from "../components/AuthThemeToggle.jsx";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, login, user } = useAuth();
-  const [correo, setCorreo] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
@@ -53,10 +53,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const authenticatedUser = await login({ correo, password });
-      navigate(authenticatedUser.requiresEmailVerification
+      const normalizedIdentifier = identifier.includes("@") ? identifier.trim().toLowerCase() : normalizeRut(identifier);
+      if (!identifier.includes("@") && !isValidRut(normalizedIdentifier)) {
+        toast.error("Ingresa un RUT chileno válido");
+        return;
+      }
+      const session = await login({ identifier: normalizedIdentifier, password });
+      if (session.user.requiresEmailVerification) {
+        storeInternalVerificationChallenge(session.user.id, session.emailVerification);
+      }
+      navigate(session.user.requiresEmailVerification
         ? "/verify-work-email"
-        : authenticatedUser.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
+        : session.user.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
@@ -66,7 +74,6 @@ export default function LoginPage() {
 
   return (
     <main className="relative isolate grid h-dvh min-h-0 grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
-      <AuthThemeToggle />
       <LoadingOverlay active={loading} fullScreen />
 
       <section className="relative z-10 grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">
@@ -102,18 +109,21 @@ export default function LoginPage() {
           </div>
 
           <label>
-            Correo electrónico
+            Correo electrónico o RUT
             <span className="relative block">
-              <Mail className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
+              <ContactRound className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
               <input
                 className="pl-9.75"
-                type="email"
-                value={correo}
+                type="text"
+                value={identifier}
                 onChange={(event) => {
                   clearExpiredSessionMessage();
-                  setCorreo(event.target.value);
+                  setIdentifier(event.target.value);
                 }}
-                placeholder="correo@ejemplo.cl"
+                onBlur={() => {
+                  if (identifier && !identifier.includes("@")) setIdentifier(normalizeRut(identifier));
+                }}
+                placeholder="correo@ejemplo.cl o 10120345-K"
                 autoComplete="username"
                 required
               />

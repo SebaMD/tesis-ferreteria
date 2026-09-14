@@ -1,8 +1,8 @@
 import type { NewUser } from "../../db/schema/index.js";
 import { isValidEmail, normalizeEmail } from "../../utils/email.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
 
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -21,6 +21,7 @@ export type CashierScheduleBody = {
   shiftEndTime: string;
   shiftNote: string | null;
 };
+export type ClientProfileBody = { phone: string | null };
 
 type ValidationResult<T> =
   | {
@@ -31,10 +32,6 @@ type ValidationResult<T> =
       success: false;
       error: string;
     };
-
-export function normalizeRut(value: string) {
-  return value.trim().replace(/\./g, "").toUpperCase();
-}
 
 export { normalizeEmail };
 
@@ -79,8 +76,8 @@ export function validateEditUserBody(body: unknown): ValidationResult<EditUserBo
   if (input.rut !== undefined) {
     if (typeof input.rut !== "string") return { success: false, error: "El RUT debe ser texto" };
     const rut = normalizeRut(input.rut);
-    if (!RUT_REGEX.test(rut)) {
-      return { success: false, error: "El RUT debe ir sin puntos y con guion (ej: 12345678-9)" };
+    if (!isValidRut(rut)) {
+      return { success: false, error: "El RUT no es valido" };
     }
     value.rut = rut;
   }
@@ -205,6 +202,27 @@ export function validateCreateUserBody(body: unknown): ValidationResult<CreateUs
       status: result.value.status ?? "ACTIVE",
     },
   };
+}
+
+export function validateClientProfileBody(body: unknown): ValidationResult<ClientProfileBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe enviar el telefono" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "phone")) {
+    return { success: false, error: "Solo puede modificar el telefono desde este perfil" };
+  }
+  if (input.phone === null || input.phone === "") {
+    return { success: true, value: { phone: null } };
+  }
+  if (typeof input.phone !== "string") {
+    return { success: false, error: "El telefono debe ser texto" };
+  }
+  const phone = normalizePhone(input.phone);
+  if (!phone) {
+    return { success: false, error: "El teléfono debe ser un móvil chileno válido. Ejemplo: +56912345678" };
+  }
+  return { success: true, value: { phone } };
 }
 
 export function validateCashierScheduleBody(body: unknown): ValidationResult<CashierScheduleBody> {

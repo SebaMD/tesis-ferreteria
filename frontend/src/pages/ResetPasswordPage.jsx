@@ -8,7 +8,6 @@ import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { isValidPassword, PASSWORD_REQUIREMENTS } from "../helpers/password.js";
 import { confirmPasswordResetRequest } from "../services/auth.service.js";
-import AuthThemeToggle from "../components/AuthThemeToggle.jsx";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -50,7 +49,6 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="relative isolate grid min-h-dvh place-items-center overflow-hidden bg-[#f7f8f9] px-4 py-8">
-      <AuthThemeToggle />
       <LoadingOverlay active={loading} fullScreen />
       <img className="pointer-events-none absolute inset-0 h-full w-full object-cover brightness-125" src={loginBackground} alt="" aria-hidden="true" />
       <section className="relative z-1 grid w-full max-w-115 gap-5 rounded-lg border-2 border-rust-500 bg-white p-7 shadow-[0_14px_38px_rgba(16,21,31,0.12)] max-[520px]:p-5">

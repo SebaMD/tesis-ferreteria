@@ -20,7 +20,6 @@ const pageNames = {
 export default function Navbar({ onToggleSidebar }) {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const initials = `${user?.names?.[0] || ""}${user?.surnames?.[0] || ""}`.toUpperCase();
   const [profileOpen, setProfileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const canManageNotice = ["ADMIN", "MANAGER"].includes(user?.role);
@@ -38,17 +37,12 @@ export default function Navbar({ onToggleSidebar }) {
         <strong className="text-sm text-ink-950">{pageNames[location.pathname] || "FERRETERIA FYF"}</strong>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[720px]:gap-2">
+        <button className="inline-flex size-10 min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950" type="button" onClick={() => setProfileOpen(true)} title="Mi perfil" aria-label="Abrir mi perfil"><UserRound size={18} /></button>
         {canManageNotice && (
           <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:border-rust-400 hover:bg-rust-50 hover:text-rust-700" type="button" onClick={() => setNoticeOpen(true)} title="Aviso a clientes" aria-label="Administrar aviso a clientes">
             <Megaphone size={18} />
           </button>
         )}
-        <span className="inline-flex min-h-7 items-center gap-1.75 rounded-full border border-[#f3d1a7] bg-rust-50 px-2.5 text-[11px] font-bold text-rust-600 max-[720px]:hidden"><i className="size-1.5 rounded-full bg-rust-500" />{ROLE_NAMES[user?.role] || user?.role}</span>
-        <button className="inline-flex size-10 min-h-10 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 p-0 text-xs font-bold text-white hover:bg-ink-700" type="button" onClick={() => setProfileOpen(true)} title="Mi perfil" aria-label="Abrir mi perfil">{initials || "FS"}</button>
-        <span className="grid gap-0.5 max-[720px]:hidden">
-          <strong className="text-xs text-ink-950">{user?.names} {user?.surnames}</strong>
-          <small className="text-[10px] text-slate-500">{user?.correo}</small>
-        </span>
         <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950" type="button" onClick={logout} title="Cerrar sesión" aria-label="Cerrar sesión">
           <LogOut size={18} />
         </button>
@@ -59,7 +53,7 @@ export default function Navbar({ onToggleSidebar }) {
       <AppModal open={profileOpen} onClose={() => setProfileOpen(false)} title="Mi perfil" description="Información de tu cuenta y preferencias de visualización.">
         <div className="grid gap-5">
           <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ink-950 text-sm font-bold text-white">{initials || <UserRound size={20} />}</span>
+            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ink-950 text-white"><UserRound size={22} /></span>
             <div className="min-w-0"><strong className="block truncate text-base text-ink-950">{user?.names} {user?.surnames}</strong><span className="text-xs font-bold text-rust-600">{ROLE_NAMES[user?.role] || user?.role}</span></div>
           </div>
           <dl className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">

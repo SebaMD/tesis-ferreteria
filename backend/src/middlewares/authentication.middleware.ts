@@ -47,28 +47,35 @@ export function authenticateJwtAllowUnverified(req: AuthenticatedRequest, res: R
 }
 
 export async function authenticateJwt(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const user = readJwt(req, res);
-  if (!user) return;
-  req.user = user;
+  const tokenUser = readJwt(req, res);
+  if (!tokenUser) return;
 
-  if (["MANAGER", "CASHIER", "WAREHOUSE"].includes(user.role)) {
-    try {
-      const current = await findAuthUserById(user.id);
-      if (!current || current.status !== "ACTIVE") {
-        res.status(401).json({ message: "La cuenta no esta activa" });
-        return;
-      }
-      if (!current.emailVerifiedAt) {
-        res.status(403).json({
-          code: "EMAIL_VERIFICATION_REQUIRED",
-          message: "Debes verificar tu correo antes de usar el sistema interno",
-        });
-        return;
-      }
-    } catch {
-      res.status(500).json({ message: "No se pudo validar el acceso de la cuenta" });
+  try {
+    const current = await findAuthUserById(tokenUser.id);
+    if (!current || current.status !== "ACTIVE") {
+      res.status(401).json({ message: "La cuenta no esta activa" });
       return;
     }
+
+    req.user = {
+      id: current.id,
+      correo: current.correo,
+      rut: current.rut,
+      roleId: current.roleId,
+      role: current.roleName,
+      status: current.status,
+    };
+
+    if (["MANAGER", "CASHIER", "WAREHOUSE"].includes(current.roleName) && !current.emailVerifiedAt) {
+      res.status(403).json({
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Debes verificar tu correo antes de usar el sistema interno",
+      });
+      return;
+    }
+  } catch {
+    res.status(500).json({ message: "No se pudo validar el acceso de la cuenta" });
+    return;
   }
 
   return next();

@@ -76,6 +76,17 @@ function currentStepIndex(order, steps) {
   return Math.max(steps.findIndex((step) => step.key === order.status), 0);
 }
 
+export function OrderProgressCurrentIcon({ order, size = 23 }) {
+  const iconProps = { size, "aria-hidden": true };
+  if (order.status === "PAID") return <CheckCircle2 {...iconProps} />;
+  if (order.status === "PREPARING") return <PackageOpen {...iconProps} />;
+  if (order.status === "READY_FOR_PICKUP") return <Store {...iconProps} />;
+  if (order.status === "READY_FOR_DELIVERY") return <PackageCheck {...iconProps} />;
+  if (order.status === "OUT_FOR_DELIVERY") return <Truck {...iconProps} />;
+  if (order.status === "DELIVERED") return <Check {...iconProps} />;
+  return <Clock3 {...iconProps} />;
+}
+
 export default function OrderProgressTimeline({ order }) {
   if (PAYMENT_ONLY_STATUSES.has(order.status)) {
     const status = getOnlineOrderStatus(order.status);
@@ -96,17 +107,27 @@ export default function OrderProgressTimeline({ order }) {
   return (
     <ol className="m-0 grid list-none gap-0 p-0" aria-label="Progreso del pedido">
       {steps.map((step, index) => {
-        const Icon = step.icon;
-        const completed = index < currentIndex || order.status === "DELIVERED";
-        const current = index === currentIndex && order.status !== "DELIVERED";
+        const completed = index < currentIndex;
+        const current = index === currentIndex;
         const active = completed || current;
+        const StepIcon = step.icon;
+        const accessibleState = completed ? "completado" : current ? "actual" : "pendiente";
         return (
           <li className="relative grid grid-cols-[36px_minmax(0,1fr)] gap-3 pb-5 last:pb-0" key={step.key}>
             {index < steps.length - 1 && (
               <span className={`absolute top-8 bottom-0 left-4.25 w-0.5 ${index < currentIndex ? "bg-positive-600" : "bg-slate-200"}`} aria-hidden="true" />
             )}
-            <span className={`relative z-1 grid size-9 place-items-center rounded-full border-2 ${active ? "border-positive-600 bg-positive-600 text-white" : "border-slate-300 bg-white text-slate-400"}`}>
-              <Icon size={17} aria-hidden="true" />
+            <span
+              className={`relative z-1 grid size-9 place-items-center rounded-full border-2 ${completed ? "border-positive-600 bg-positive-600 text-white" : current ? "border-rust-500 bg-rust-50 text-rust-600" : "border-slate-300 bg-white text-slate-400"}`}
+              role="img"
+              aria-label={`${step.label}: ${accessibleState}`}
+            >
+              <StepIcon size={17} aria-hidden="true" />
+              {completed && (
+                <span className="absolute -right-1 -bottom-1 grid size-3.5 place-items-center rounded-full border border-white bg-positive-600 text-white" aria-hidden="true">
+                  <Check size={9} strokeWidth={3} />
+                </span>
+              )}
             </span>
             <div className="min-w-0 pt-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">

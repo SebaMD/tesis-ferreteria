@@ -45,7 +45,7 @@ function emptyAddress(user) {
   };
 }
 
-function AccordionSection({ id, title, Icon, open, onToggle, children }) {
+function AccordionSection({ id, title, Icon, open, onToggle, attention = false, children }) {
   return (
     <section className="client-account-section overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <button
@@ -57,6 +57,7 @@ function AccordionSection({ id, title, Icon, open, onToggle, children }) {
       >
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-rust-50 text-rust-600"><Icon size={18} /></span>
         <strong className="flex-1 text-base">{title}</strong>
+        {attention && <span className="grid size-5 shrink-0 place-items-center rounded-full bg-rust-500 text-[11px] font-black text-white" role="img" aria-label="Tu perfil requiere atención">!</span>}
         <ChevronDown className={`transition-transform ${open ? "rotate-180" : ""}`} size={19} />
       </button>
       {open && <div className="border-t border-slate-200 p-5 max-[520px]:p-4" id={id}>{children}</div>}
@@ -66,10 +67,11 @@ function AccordionSection({ id, title, Icon, open, onToggle, children }) {
 
 export default function ClientAccountPage() {
   const { user, replaceSession } = useAuth();
-  const [profileOpen, setProfileOpen] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [changeEmail, setChangeEmail] = useState("");
+  const [editingEmail, setEditingEmail] = useState(false);
   const [editingPhone, setEditingPhone] = useState(false);
   const [phone, setPhone] = useState(user.phone || "");
   const [savingPhone, setSavingPhone] = useState(false);
@@ -79,6 +81,13 @@ export default function ClientAccountPage() {
   const [addressLoading, setAddressLoading] = useState(true);
   const [savingAddress, setSavingAddress] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const emailVerified = Boolean(user.emailVerifiedAt || user.emailVerified);
+
+  const cancelEmailChange = () => {
+    setNewEmail("");
+    setChangeEmail("");
+    setEditingEmail(false);
+  };
 
   useEffect(() => {
     let active = true;
@@ -182,19 +191,37 @@ export default function ClientAccountPage() {
         </section>
       )}
 
-      <AccordionSection id="client-profile-section" title="Mi perfil" Icon={UserRound} open={profileOpen} onToggle={() => setProfileOpen((current) => !current)}>
+      <AccordionSection id="client-profile-section" title="Mi perfil" Icon={UserRound} open={profileOpen} onToggle={() => setProfileOpen((current) => !current)} attention={!emailVerified}>
         <div className="grid gap-5">
           <div className="flex items-center gap-4 border-b border-slate-200 pb-5"><span className="grid size-14 place-items-center rounded-full bg-rust-50 text-rust-600"><UserRound size={27} /></span><div><strong className="block text-lg text-ink-950">{user.names} {user.surnames}</strong><span className="text-xs font-bold text-positive-600">Cuenta activa</span></div></div>
           <dl className="grid grid-cols-2 gap-4 max-[620px]:grid-cols-1">
             <div className="client-account-surface rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><ShieldCheck size={16} /> RUT</dt><dd className="mt-2 ml-0 font-semibold text-ink-950">{user.rut}</dd></div>
-            <div className="client-account-surface rounded-[5px] bg-slate-50 p-4"><dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Mail size={16} /> Correo</dt><dd className="mt-2 ml-0 break-all font-semibold text-ink-950">{user.correo}</dd><span className={`mt-1 block text-xs font-bold ${user.emailVerifiedAt || user.emailVerified ? "text-positive-600" : "text-amber-700"}`}>{user.emailVerifiedAt || user.emailVerified ? "Correo verificado" : "Correo pendiente de verificación"}</span></div>
+            <div className={`client-account-surface rounded-[5px] bg-slate-50 p-4 ${(editingEmail || changeEmail) ? "col-span-2 max-[620px]:col-span-1" : ""}`}>
+              <dt className="flex items-center justify-between gap-2 text-xs font-bold text-slate-500">
+                <span className="flex items-center gap-2"><Mail size={16} /> Correo</span>
+                {!editingEmail && !changeEmail && <button className="size-9 min-h-9 border-slate-300 bg-white p-0 text-ink-700" type="button" onClick={() => setEditingEmail(true)} aria-label="Editar correo"><Pencil size={15} /></button>}
+              </dt>
+              <dd className="mt-2 ml-0 break-all font-semibold text-ink-950">{user.correo}</dd>
+              <span className={`mt-1 block text-xs font-bold ${emailVerified ? "text-positive-600" : "text-amber-700"}`}>{emailVerified ? "Correo verificado" : "Correo pendiente de verificación"}</span>
+              {editingEmail && !changeEmail && (
+                <form className="mt-4 grid gap-3" onSubmit={(event) => { event.preventDefault(); setChangeEmail(newEmail.trim().toLowerCase()); }}>
+                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">Nuevo correo electrónico<input type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} required /></label>
+                  <div className="flex flex-wrap gap-2 max-[480px]:*:w-full"><button type="submit" disabled={!newEmail.trim()}>Continuar</button><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={cancelEmailChange}>Cancelar</button></div>
+                </form>
+              )}
+              {changeEmail && (
+                <div className="mt-4 grid gap-3">
+                  <EmailVerificationPanel key={changeEmail} email={changeEmail} requestCode={() => requestClientEmailChange(changeEmail)} verifyCode={verifyClientEmailChange} onVerified={(session) => { replaceSession(session); cancelEmailChange(); }} title="Verifica el nuevo correo" description="Tu correo actual se mantendrá hasta que verifiques el nuevo." />
+                  <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[480px]:w-full" type="button" onClick={cancelEmailChange}>Cancelar cambio</button>
+                </div>
+              )}
+            </div>
             <div className="client-account-surface rounded-[5px] bg-slate-50 p-4">
               <dt className="flex items-center justify-between gap-2 text-xs font-bold text-slate-500"><span className="flex items-center gap-2"><Phone size={16} /> Teléfono</span>{!editingPhone && <button className="size-9 min-h-9 border-slate-300 bg-white p-0 text-ink-700" type="button" onClick={() => setEditingPhone(true)} aria-label="Editar teléfono"><Pencil size={15} /></button>}</dt>
               {editingPhone ? <form className="mt-3 grid gap-2" onSubmit={savePhone}><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+56912345678" autoComplete="tel" /><div className="flex gap-2"><button type="submit" disabled={savingPhone}><Save size={15} /> Guardar</button><button className="border-slate-300 bg-white text-ink-700" type="button" disabled={savingPhone} onClick={() => { setPhone(user.phone || ""); setEditingPhone(false); }}><X size={15} /> Cancelar</button></div></form> : <dd className="mt-2 ml-0 font-semibold text-ink-950">{user.phone || "No registrado"}</dd>}
             </div>
             <div className="client-account-surface rounded-[5px] bg-slate-50 p-4"><dt className="text-xs font-bold text-slate-500">Apariencia</dt><dd className="mt-2 ml-0"><ThemeToggle showLabel /></dd><span className="mt-2 block text-xs text-slate-500">Se guarda para esta cuenta en este navegador.</span></div>
           </dl>
-          <section className="grid gap-3 border-t border-slate-200 pt-5"><div><h2 className="m-0 text-base font-bold text-ink-950">Cambiar correo</h2><p className="mt-1 mb-0 text-xs leading-5 text-slate-500">Tu correo actual se mantendrá hasta que verifiques el nuevo.</p></div>{!changeEmail ? <form className="flex items-end gap-2 max-[620px]:grid" onSubmit={(event) => { event.preventDefault(); setChangeEmail(newEmail.trim().toLowerCase()); }}><label className="grid min-w-0 flex-1 gap-1.5 text-xs font-bold text-slate-600">Nuevo correo electrónico<input type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} required /></label><button type="submit" disabled={!newEmail.trim()}>Continuar</button></form> : <div className="grid gap-3"><EmailVerificationPanel key={changeEmail} email={changeEmail} requestCode={() => requestClientEmailChange(changeEmail)} verifyCode={verifyClientEmailChange} onVerified={(session) => { replaceSession(session); setNewEmail(""); setChangeEmail(""); }} title="Verifica el nuevo correo" description="El cambio se aplicará únicamente después de ingresar el código correcto." /><button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => setChangeEmail("")}>Cancelar cambio</button></div>}</section>
         </div>
       </AccordionSection>
 

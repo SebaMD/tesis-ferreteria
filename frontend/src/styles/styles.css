@@ -351,20 +351,20 @@
 }
 
 .customer-info-action {
-  border-color: var(--color-rust-500);
-  background: var(--color-rust-50);
+  border-color: transparent;
+  background: transparent;
   color: #8a3d05;
 }
 
 .customer-info-action:not(:disabled):hover {
-  border-color: var(--color-rust-600);
+  border-color: transparent;
   background: #ffedd5;
   color: #78350f;
 }
 
 .dark .customer-info-action {
-  border-color: #b45309;
-  background: #3a2718;
+  border-color: transparent;
+  background: transparent;
   color: #fdba74;
 }
 

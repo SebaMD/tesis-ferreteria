@@ -1,4 +1,5 @@
-import { MapPin, Store, Truck } from "lucide-react";
+import { ChevronDown, MapPin, Store, Truck } from "lucide-react";
+import { useState } from "react";
 import AppModal from "../AppModal.jsx";
 import DeliveryMap from "../DeliveryMap.jsx";
 import { formatClp, formatDate } from "../../helpers/formatters.js";
@@ -7,8 +8,7 @@ import {
   getOnlineOrderDeliveryType,
   getOnlineOrderStatus,
 } from "../../helpers/onlineOrders.js";
-import { badgeClass } from "../../helpers/uiClasses.js";
-import OrderProgressTimeline from "./OrderProgressTimeline.jsx";
+import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgressTimeline.jsx";
 import OrderProductImage from "./OrderProductImage.jsx";
 import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
 
@@ -26,30 +26,133 @@ function hasCoordinates(order) {
     && Number.isFinite(Number(order?.deliveryLongitude));
 }
 
+function AccordionContent({ id, open, children }) {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${open ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"}`}
+      id={id}
+      aria-hidden={!open}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className="border-t border-slate-200 p-4 max-[430px]:p-3">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function AccordionChevron({ open }) {
+  return (
+    <ChevronDown
+      className={`shrink-0 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+      size={19}
+      aria-hidden="true"
+    />
+  );
+}
+
+function StatusAccordion({ id, status, icon, open, onToggle, children }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <button
+        className="grid min-h-14 w-full gap-3 rounded-none border-0 bg-white px-4 py-4 text-left text-ink-950 hover:bg-slate-50 focus-visible:relative focus-visible:z-1 max-[430px]:px-3"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={id}
+      >
+        <span className="flex min-w-0 items-start gap-3">
+          <span className="grid size-12 shrink-0 place-items-center rounded-full border border-rust-200 bg-rust-50 text-rust-600 max-[430px]:size-11">
+            {icon}
+          </span>
+          <span className="grid min-w-0 flex-1 gap-0.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase">Estado actual</span>
+            <strong className="text-base text-ink-950">{status.label}</strong>
+            <span className="text-xs leading-5 text-slate-600">{status.description}</span>
+          </span>
+        </span>
+        <span className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-rust-600">
+          {open ? "Ver menos" : "Ver más"}
+          <AccordionChevron open={open} />
+        </span>
+      </button>
+      <AccordionContent id={id} open={open}>{children}</AccordionContent>
+    </section>
+  );
+}
+
+function DetailAccordion({ id, title, summary, open, onToggle, children }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <button
+        className="flex min-h-14 w-full items-center gap-3 rounded-none border-0 bg-white px-4 py-3 text-left text-ink-950 hover:bg-slate-50 focus-visible:relative focus-visible:z-1 max-[430px]:px-3"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={id}
+      >
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+          <strong className="text-sm">{title}</strong>
+          {summary}
+        </span>
+        <AccordionChevron open={open} />
+      </button>
+      <AccordionContent id={id} open={open}>{children}</AccordionContent>
+    </section>
+  );
+}
+
 export default function OrderDetailModal({ order, onClose, requestDeliveryProof }) {
+  const [expandedSections, setExpandedSections] = useState({
+    orderId: null,
+    progress: false,
+    products: false,
+  });
+
   if (!order) return null;
   const status = getOnlineOrderStatus(order.status);
   const delivery = getOnlineOrderDeliveryType(order.deliveryType);
+  const progressOpen = expandedSections.orderId === order.id && expandedSections.progress;
+  const productsOpen = expandedSections.orderId === order.id && expandedSections.products;
+  const productCount = order.items?.length || 0;
+
+  const toggleSection = (section) => {
+    setExpandedSections((current) => {
+      const belongsToCurrentOrder = current.orderId === order.id;
+      return {
+        orderId: order.id,
+        progress: section === "progress"
+          ? !(belongsToCurrentOrder && current.progress)
+          : belongsToCurrentOrder && current.progress,
+        products: section === "products"
+          ? !(belongsToCurrentOrder && current.products)
+          : belongsToCurrentOrder && current.products,
+      };
+    });
+  };
+
+  const handleClose = () => {
+    setExpandedSections({ orderId: null, progress: false, products: false });
+    onClose();
+  };
 
   return (
     <AppModal
       open={Boolean(order)}
       title={`${order.status === "DELIVERED" ? "Detalle de la compra" : "Seguimiento del pedido"} ${formatOnlineOrderFolio(order.id)}`}
       description={delivery.label}
-      onClose={onClose}
+      onClose={handleClose}
       size="large"
     >
       <div className="grid gap-6">
-        <section className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <span className="text-xs font-bold text-slate-500">Estado actual</span>
-              <h3 className="mt-1 mb-0 text-xl text-ink-950">{status.label}</h3>
-            </div>
-            <span className={badgeClass(status.tone)}>{status.label}</span>
-          </div>
+        <StatusAccordion
+          id={`order-progress-${order.id}`}
+          status={status}
+          icon={<OrderProgressCurrentIcon order={order} />}
+          open={progressOpen}
+          onToggle={() => toggleSection("progress")}
+        >
           <OrderProgressTimeline order={order} />
-        </section>
+        </StatusAccordion>
 
         <section className="grid gap-3">
           <h3 className="m-0 text-base text-ink-950">Entrega</h3>
@@ -77,15 +180,17 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
           )}
         </section>
 
-        <section className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="m-0 text-base text-ink-950">Productos</h3>
-            <span className="text-xs text-slate-500">{order.items?.length || 0} {(order.items?.length || 0) === 1 ? "producto" : "productos"}</span>
-          </div>
+        <DetailAccordion
+          id={`order-products-${order.id}`}
+          title="Productos"
+          summary={<span className="text-xs font-semibold text-slate-500">· {productCount} {productCount === 1 ? "producto" : "productos"}</span>}
+          open={productsOpen}
+          onToggle={() => toggleSection("products")}
+        >
           <div className="grid gap-2">
             {(order.items || []).map((item) => (
               <article className="grid grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-slate-200 p-3 max-[430px]:grid-cols-[48px_minmax(0,1fr)]" key={`${order.id}-${item.productId}`}>
-                <div className="grid size-14 place-items-center overflow-hidden rounded-md bg-slate-100 max-[430px]:size-12">
+                <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100 max-[430px]:size-12">
                   <OrderProductImage src={item.productImageUrl} alt={item.productName} fallbackSize={20} />
                 </div>
                 <div className="min-w-0">
@@ -96,7 +201,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
               </article>
             ))}
           </div>
-        </section>
+        </DetailAccordion>
 
         <DeliveryProofViewer
           key={order.id}

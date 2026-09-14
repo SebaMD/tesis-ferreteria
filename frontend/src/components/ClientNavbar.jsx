@@ -34,12 +34,12 @@ export default function ClientNavbar() {
           </Link>
         </div>
 
-        <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full max-[720px]:flex-nowrap max-[720px]:justify-between" aria-label="Navegación de clientes">
+        <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full max-[720px]:flex-nowrap" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
           {isClient && <NavLink className={navClass} to="/orders"><ClipboardList size={15} /><span className="max-[720px]:hidden">Mis pedidos</span><span className="hidden max-[720px]:inline">Pedidos</span></NavLink>}
           {isClient && <NavLink className={navClass} to="/favorites"><Heart className="inline" size={15} /> Favoritos</NavLink>}
           {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
-          <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:size-10" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
+          <Link className="relative ml-auto hidden size-10 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:grid" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
             <ShoppingCart size={20} />
             {totalUnits > 0 && (
               <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
@@ -47,14 +47,22 @@ export default function ClientNavbar() {
               </span>
             )}
           </Link>
-          {notice && (
-            <button className="customer-info-action min-h-10 px-3 max-[860px]:size-10 max-[860px]:shrink-0 max-[860px]:px-0" type="button" onClick={reopenNotice} title="Información de la ferretería" aria-label="Abrir información de la ferretería">
-              <Info size={17} /><span className="max-[860px]:hidden">Información</span>
-            </button>
-          )}
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {notice && (
+            <button className="customer-info-action size-10 min-h-10 shrink-0 border-0 bg-transparent p-0 text-rust-600" type="button" onClick={reopenNotice} title="Información de la ferretería" aria-label="Abrir información de la ferretería">
+              <Info size={19} />
+            </button>
+          )}
+          <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:hidden" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
+            <ShoppingCart size={20} />
+            {totalUnits > 0 && (
+              <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
+                {totalUnits > 99 ? "99+" : totalUnits}
+              </span>
+            )}
+          </Link>
           {isAuthenticated && !isClient && (
             <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/dashboard">
               <LayoutDashboard size={17} />

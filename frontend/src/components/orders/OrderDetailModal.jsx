@@ -53,7 +53,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
 
         <section className="grid gap-3">
           <h3 className="m-0 text-base text-ink-950">Entrega</h3>
-          <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-4 text-sm">
+          <div className="order-delivery-panel flex items-start gap-3 rounded-lg border border-transparent bg-slate-50 p-4 text-sm">
             {order.deliveryType === "DELIVERY" ? <Truck className="shrink-0 text-rust-600" size={20} /> : <Store className="shrink-0 text-rust-600" size={20} />}
             <div className="grid gap-1">
               <strong className="text-ink-950">{delivery.label}</strong>

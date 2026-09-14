@@ -64,7 +64,7 @@ export default function ProductDetailPage() {
             <strong className="font-mono text-3xl text-ink-950">{formatClp(product.price)}</strong>
           </div>
           <p className="m-0 leading-7 text-slate-600">{product.description || "Este producto no tiene una descripción disponible."}</p>
-          <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
+          <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
             <span><strong>Unidad de medida:</strong> {getDisplayUnit(1, product.unitMeasure)}</span>
             <span className={hasStock ? "font-bold text-positive-600" : "font-bold text-critical-600"}>
               {hasStock ? `Stock disponible: ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}

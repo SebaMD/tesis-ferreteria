@@ -6,8 +6,8 @@ import BrandLogo from "./BrandLogo.jsx";
 import useCustomerNotice from "../hooks/useCustomerNotice.js";
 
 function navClass({ isActive }) {
-  return `rounded-[5px] px-3 py-2 text-sm font-bold transition-colors ${
-    isActive ? "bg-rust-50 text-rust-700" : "text-ink-700 hover:bg-slate-100 hover:text-ink-950"
+  return `inline-flex min-h-10 items-center gap-1.5 rounded-[5px] px-3 py-2 text-sm font-bold transition-colors max-[720px]:px-2 max-[720px]:text-xs ${
+    isActive ? "bg-rust-50 text-rust-600" : "text-ink-700 hover:bg-slate-100 hover:text-ink-950"
   }`;
 }
 
@@ -34,19 +34,27 @@ export default function ClientNavbar() {
           </Link>
         </div>
 
-        <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full" aria-label="Navegación de clientes">
+        <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full max-[720px]:flex-nowrap max-[720px]:justify-between" aria-label="Navegación de clientes">
           <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
-          {isClient && <NavLink className={navClass} to="/orders"><ClipboardList className="inline" size={15} /> Mis pedidos</NavLink>}
+          {isClient && <NavLink className={navClass} to="/orders"><ClipboardList size={15} /><span className="max-[720px]:hidden">Mis pedidos</span><span className="hidden max-[720px]:inline">Pedidos</span></NavLink>}
           {isClient && <NavLink className={navClass} to="/favorites"><Heart className="inline" size={15} /> Favoritos</NavLink>}
           {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
-        </nav>
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:size-10" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
+            <ShoppingCart size={20} />
+            {totalUnits > 0 && (
+              <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
+                {totalUnits > 99 ? "99+" : totalUnits}
+              </span>
+            )}
+          </Link>
           {notice && (
-            <button className="min-h-10 border-rust-300 bg-rust-50 px-3 text-rust-700 hover:bg-rust-100 max-[860px]:size-10 max-[860px]:px-0" type="button" onClick={reopenNotice} title="Información de la ferretería" aria-label="Abrir información de la ferretería">
+            <button className="customer-info-action min-h-10 px-3 max-[860px]:size-10 max-[860px]:shrink-0 max-[860px]:px-0" type="button" onClick={reopenNotice} title="Información de la ferretería" aria-label="Abrir información de la ferretería">
               <Info size={17} /><span className="max-[860px]:hidden">Información</span>
             </button>
           )}
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {isAuthenticated && !isClient && (
             <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/dashboard">
               <LayoutDashboard size={17} />
@@ -64,15 +72,6 @@ export default function ClientNavbar() {
               </Link>
             </>
           )}
-
-          <Link className="relative grid size-11 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
-            <ShoppingCart size={20} />
-            {totalUnits > 0 && (
-              <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
-                {totalUnits > 99 ? "99+" : totalUnits}
-              </span>
-            )}
-          </Link>
 
           {isClient && (
             <Link className="relative grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta · correo pendiente de verificación"} aria-label={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta, correo pendiente de verificación"}>

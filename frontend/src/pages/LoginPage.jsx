@@ -162,7 +162,7 @@ export default function LoginPage() {
             ¿Olvidaste tu contraseña?
           </Link>
 
-          <button className="mt-0.5 w-full" type="submit" disabled={loading}>
+          <button className="login-submit-button mt-0.5 w-full" type="submit" disabled={loading}>
             Ingresar
           </button>
           <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">

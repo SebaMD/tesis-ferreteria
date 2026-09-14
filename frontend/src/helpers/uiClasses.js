@@ -20,7 +20,7 @@ const badgeBase = "status-badge relative inline-flex min-h-[27px] items-center r
 
 const badgeTones = {
   success: "bg-positive-50 text-positive-600",
-  info: "bg-sky-50 text-sky-700",
+  info: "status-badge--info bg-sky-50 text-sky-700",
   warning: "bg-rust-50 text-rust-600",
   critical: "bg-critical-50 text-critical-600",
   neutral: "bg-slate-100 text-ink-700",

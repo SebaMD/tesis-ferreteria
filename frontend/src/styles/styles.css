@@ -330,6 +330,85 @@
   background-color: #3b1b20 !important;
 }
 
+.dark .bg-blue-50 {
+  background-color: #12304a !important;
+}
+
+.dark .text-blue-900 {
+  color: #dbeafe !important;
+}
+
+.dark .text-positive-600 {
+  color: #4ade80 !important;
+}
+
+.dark .text-critical-600 {
+  color: #f87171 !important;
+}
+
+.dark .text-rust-600 {
+  color: #fb923c !important;
+}
+
+.customer-info-action {
+  border-color: var(--color-rust-500);
+  background: var(--color-rust-50);
+  color: #8a3d05;
+}
+
+.customer-info-action:not(:disabled):hover {
+  border-color: var(--color-rust-600);
+  background: #ffedd5;
+  color: #78350f;
+}
+
+.dark .customer-info-action {
+  border-color: #b45309;
+  background: #3a2718;
+  color: #fdba74;
+}
+
+.dark .customer-info-action:not(:disabled):hover {
+  background: #4a2f1b;
+  color: #fed7aa;
+}
+
+.dark .product-availability-panel,
+.dark .order-delivery-panel,
+.dark .client-account-surface {
+  border-color: #465260 !important;
+  background: #1c2530 !important;
+  color: #eef1f4;
+}
+
+.dark .client-account-section,
+.dark .client-account-trigger {
+  border-color: #3d4856 !important;
+  background: #171e28 !important;
+  color: #eef1f4 !important;
+}
+
+.dark .client-account-trigger:not(:disabled):hover {
+  background: #232c38 !important;
+}
+
+.dark .login-submit-button {
+  border-color: #526174 !important;
+  background: #354152 !important;
+  color: #ffffff !important;
+}
+
+.dark .login-submit-button:not(:disabled):hover {
+  border-color: #64748b !important;
+  background: #465466 !important;
+}
+
+.dark .status-badge--info {
+  border: 1px solid #28557a;
+  background: #12304a !important;
+  color: #bfdbfe !important;
+}
+
 .dark .text-ink-950,
 .dark .text-ink-900,
 .dark .text-ink-700 {

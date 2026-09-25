@@ -73,17 +73,17 @@ export async function loginService(data: LoginBody) {
   const user = await findAuthUserByIdentifier(data.identifier);
 
   if (!user) {
-    throw new Error("Credenciales incorrectas");
+    throw new AuthError("Credenciales incorrectas", 401);
   }
 
   const isPasswordValid = await bcrypt.compare(data.password, user.password);
 
   if (!isPasswordValid) {
-    throw new Error("Credenciales incorrectas");
+    throw new AuthError("Credenciales incorrectas", 401);
   }
 
   if (user.status === "INACTIVE") {
-    throw new Error("Tu cuenta esta inactiva. Contacta a administracion");
+    throw new AuthError("Tu cuenta esta inactiva. Contacta a administracion", 401);
   }
 
   return createAuthenticatedSession(user);

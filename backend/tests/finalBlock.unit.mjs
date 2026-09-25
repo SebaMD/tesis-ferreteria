@@ -11,12 +11,28 @@ const { validateClientProfileBody } = await import("../dist/modules/users/users.
 const { validateClientDeliveryAddressBody } = await import("../dist/modules/onlineOrders/onlineOrders.validation.js");
 const { isValidRut, normalizeRut } = await import("../dist/utils/rut.js");
 
-assert.deepEqual(validateCustomerNotice({ title: " Horario   especial ", message: "Hoy cerramos a las 17:00.\nGracias.", active: true }), {
-  success: true,
-  value: { title: "Horario especial", message: "Hoy cerramos a las 17:00.\nGracias.", active: true },
+const validNotice = validateCustomerNotice({
+  title: " Horario   especial ",
+  message: "Hoy cerramos a las 17:00.\nGracias.",
+  isActive: true,
+  sortOrder: 2,
+  displaySeconds: 8,
+  startsAt: "2026-09-24T10:00:00.000Z",
+  endsAt: null,
 });
-assert.equal(validateCustomerNotice({ title: "", message: "", active: true }).success, false);
-assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", active: false, userId: 7 }).success, false);
+assert.equal(validNotice.success, true);
+assert.equal(validNotice.value.title, "Horario especial");
+assert.equal(validNotice.value.message, "Hoy cerramos a las 17:00.\nGracias.");
+assert.equal(validNotice.value.isActive, true);
+assert.equal(validNotice.value.sortOrder, 2);
+assert.equal(validNotice.value.displaySeconds, 8);
+assert.equal(validNotice.value.startsAt.toISOString(), "2026-09-24T10:00:00.000Z");
+assert.equal(validNotice.value.endsAt, null);
+for (const displaySeconds of [2, 31, 7.5]) {
+  assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, sortOrder: 0, displaySeconds, startsAt: null, endsAt: null }).success, false);
+}
+assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, sortOrder: 0, displaySeconds: 7, startsAt: "2026-09-25T10:00:00.000Z", endsAt: "2026-09-24T10:00:00.000Z" }).success, false);
+assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: false, sortOrder: 0, displaySeconds: 7, startsAt: null, endsAt: null, userId: 7 }).success, false);
 
 const base = { challengeId: 9, email: "worker@example.test", pin: "004219" };
 const internalHash = hashVerificationPin({ ...base, purpose: "INTERNAL_USER_REGISTRATION" });

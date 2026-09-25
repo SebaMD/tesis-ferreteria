@@ -2,37 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPublicCustomerNoticeRequest } from "../services/customerNotice.service.js";
 import CustomerNoticeContext from "./CustomerNoticeContext.js";
 
-const DISMISSED_NOTICE_KEY = "fyf-dismissed-notice-version";
-
 export default function CustomerNoticeProvider({ children }) {
-  const [notice, setNotice] = useState(null);
-  const [open, setOpen] = useState(false);
+  const [notices, setNotices] = useState([]);
 
-  const refreshNotice = useCallback(async ({ revealChanged = true } = {}) => {
+  const refreshNotices = useCallback(async () => {
     try {
       const current = await getPublicCustomerNoticeRequest();
-      setNotice(current);
-      const dismissedVersion = sessionStorage.getItem(DISMISSED_NOTICE_KEY);
-      setOpen(Boolean(current && revealChanged && current.version !== dismissedVersion));
+      setNotices(current);
       return current;
     } catch {
-      setNotice(null);
-      setOpen(false);
-      return null;
+      setNotices([]);
+      return [];
     }
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    refreshNotice();
-  }, [refreshNotice]);
+    refreshNotices();
+  }, [refreshNotices]);
 
-  const closeNotice = useCallback(() => {
-    if (notice?.version) sessionStorage.setItem(DISMISSED_NOTICE_KEY, notice.version);
-    setOpen(false);
-  }, [notice]);
-  const reopenNotice = useCallback(() => setOpen(Boolean(notice)), [notice]);
-  const value = useMemo(() => ({ notice, open, closeNotice, reopenNotice, refreshNotice }), [closeNotice, notice, open, refreshNotice, reopenNotice]);
+  const value = useMemo(() => ({ notices, refreshNotices }), [notices, refreshNotices]);
 
   return <CustomerNoticeContext.Provider value={value}>{children}</CustomerNoticeContext.Provider>;
 }

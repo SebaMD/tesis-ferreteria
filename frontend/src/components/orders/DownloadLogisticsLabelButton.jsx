@@ -4,10 +4,9 @@ import { toast } from "sonner";
 import { getApiError } from "../../api/httpClient.js";
 import { downloadPdf } from "../../helpers/receiptDownload.js";
 
-export default function DownloadLogisticsLabelButton({ order, type, requestLabel }) {
+export default function DownloadLogisticsLabelButton({ order, requestLabel }) {
   const [downloading, setDownloading] = useState(false);
-  const documentName = type === "DISPATCH_LABEL" ? "etiqueta de despacho" : "etiqueta de preparación";
-  const filenamePrefix = type === "DISPATCH_LABEL" ? "etiqueta-despacho" : "etiqueta-preparacion";
+  const documentName = "etiqueta de preparación";
 
   const handleDownload = async () => {
     if (downloading) return;
@@ -15,7 +14,7 @@ export default function DownloadLogisticsLabelButton({ order, type, requestLabel
     try {
       await downloadPdf(
         () => requestLabel(order),
-        `${filenamePrefix}-${order.folio}.pdf`,
+        `etiqueta-preparacion-${order.folio}.pdf`,
       );
       toast.success(`${documentName[0].toUpperCase()}${documentName.slice(1)} descargada`);
     } catch (error) {
@@ -33,9 +32,7 @@ export default function DownloadLogisticsLabelButton({ order, type, requestLabel
       disabled={downloading}
     >
       {downloading ? <LoaderCircle className="animate-spin" size={17} /> : <Download size={17} />}
-      {downloading
-        ? "Descargando..."
-        : type === "DISPATCH_LABEL" ? "Etiqueta de despacho" : "Etiqueta de preparación"}
+      {downloading ? "Descargando..." : "Etiqueta de preparación"}
     </button>
   );
 }

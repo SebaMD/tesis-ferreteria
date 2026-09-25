@@ -340,26 +340,50 @@ try {
   assert.equal(warehouseVerified.data.user.requiresEmailVerification, false);
   console.log("PASS MANAGER/CASHIER/WAREHOUSE creation, cooldown, five-attempt block, resend and expiry");
 
-  assert.equal((await request("GET", "/customer-notice")).data, null);
-  await request("PUT", "/customer-notice/configuration", {
+  assert.deepEqual((await request("GET", "/customer-notice")).data, []);
+  await request("POST", "/customer-notice/configuration", {
     token: historicalWorkerLogin.data.token,
-    body: { title: "No autorizado", message: "No debe guardarse", active: true },
+    body: {
+      title: "No autorizado",
+      message: "No debe guardarse",
+      isActive: true,
+      sortOrder: 0,
+      displaySeconds: 7,
+      startsAt: null,
+      endsAt: null,
+    },
   }, 403);
-  await request("PUT", "/customer-notice/configuration", {
+  const createdNotice = await request("POST", "/customer-notice/configuration", {
     token: workerVerified.data.token,
-    body: { title: "Horario especial", message: "Hoy atenderemos hasta las 17:00.", active: true },
-  });
+    body: {
+      title: "Horario especial",
+      message: "Hoy atenderemos hasta las 17:00.",
+      isActive: true,
+      sortOrder: 0,
+      displaySeconds: 7,
+      startsAt: null,
+      endsAt: null,
+    },
+  }, 201);
   const publicNotice = await request("GET", "/customer-notice");
-  assert.equal(publicNotice.data.title, "Horario especial");
-  assert.equal(publicNotice.data.message, "Hoy atenderemos hasta las 17:00.");
-  assert.equal(typeof publicNotice.data.version, "string");
-  assert.deepEqual(Object.keys(publicNotice.data).sort(), ["message", "title", "version"]);
-  await request("PUT", "/customer-notice/configuration", {
+  assert.equal(publicNotice.data.length, 1);
+  assert.equal(publicNotice.data[0].title, "Horario especial");
+  assert.equal(publicNotice.data[0].message, "Hoy atenderemos hasta las 17:00.");
+  assert.deepEqual(Object.keys(publicNotice.data[0]).sort(), ["displaySeconds", "id", "message", "title"]);
+  await request("PUT", `/customer-notice/configuration/${createdNotice.data.id}`, {
     token: internalLogin.data.token,
-    body: { title: "Horario especial", message: "Hoy atenderemos hasta las 17:00.", active: false },
+    body: {
+      title: "Horario especial",
+      message: "Hoy atenderemos hasta las 17:00.",
+      isActive: false,
+      sortOrder: 0,
+      displaySeconds: 7,
+      startsAt: null,
+      endsAt: null,
+    },
   });
-  assert.equal((await request("GET", "/customer-notice")).data, null);
-  console.log("PASS notice is public only when active, exposes safe DTO and is editable only by ADMIN/MANAGER");
+  assert.deepEqual((await request("GET", "/customer-notice")).data, []);
+  console.log("PASS notices are public only when visible, expose safe DTOs and are editable only by ADMIN/MANAGER");
 
   const workerEmailChanged = await request("PATCH", `/users/${workerCreated.data.id}`, {
     token: internalLogin.data.token,
@@ -567,10 +591,11 @@ try {
   const repeatedGuestCheckout = await request("POST", "/online-orders/guest/checkout", {
     guestSession: guestA,
     body: checkoutBody("guest-verified-00001", { ...guestBase, guestEmail, guestEmailConfirmation: guestEmail }),
-  }, 201);
-  assert.equal(repeatedGuestCheckout.data.orderId, guestCheckout.data.orderId);
-  assert.equal(repeatedGuestCheckout.data.paymentId, guestCheckout.data.paymentId);
-  assert.equal(repeatedGuestCheckout.data.token, guestCheckout.data.token);
+  }, 409);
+  assert.equal(
+    repeatedGuestCheckout.message,
+    "La sesion anterior de Webpay ya no puede reutilizarse. Revisa el seguimiento del pedido.",
+  );
   assert.equal((await pool.query("SELECT count(*) FROM online_orders WHERE guest_session_hash IS NOT NULL")).rows[0].count, "1");
   const guestOrderOwner = (await pool.query("SELECT client_id,guest_email FROM online_orders WHERE id=$1", [guestCheckout.data.orderId])).rows[0];
   assert.equal(guestOrderOwner.client_id, null);
@@ -587,7 +612,7 @@ try {
     headers: { "Content-Type": "application/json", "X-Guest-Order-Token": guestCheckout.data.guestAccessToken },
   });
   assert.equal(retry.status, 200, await retry.text());
-  console.log("PASS guest PIN is session/email-bound, consumed once on order creation, replay blocked, legitimate retry needs no PIN");
+  console.log("PASS guest PIN is session/email-bound, checkout session reuse and replay are blocked, legitimate retry needs no PIN");
 
   const concurrentSession = randomBytes(32).toString("base64url");
   const concurrentChallenge = await request("POST", "/email-verification/guest/request", { guestSession: concurrentSession, body: { email: "concurrent@example.test" } }, 201);

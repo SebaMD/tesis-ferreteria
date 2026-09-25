@@ -56,8 +56,12 @@ export function getPreparationLabelRequest(origin, orderId) {
   });
 }
 
-export function getDispatchLabelRequest(origin, orderId) {
-  return api.get(`${logisticsPath(origin, orderId)}/dispatch-label`, {
-    responseType: "blob",
-  });
+export async function getLogisticsHandoffRequest(token) {
+  const response = await api.get("/order-logistics/scan", { params: { token } });
+  return response.data.data;
+}
+
+export async function takeLogisticsHandoffRequest(token) {
+  const response = await api.post("/order-logistics/scan/start-delivery", { token });
+  return response.data.data;
 }

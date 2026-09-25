@@ -3,17 +3,20 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 process.env.DATABASE_URL ||= "postgresql://postgres@127.0.0.1:55440/postgres";
+process.env.LOGISTICS_QR_SECRET ||= "block4b-logistics-qr-secret-at-least-32-characters";
 
 const {
   allowedDocuments,
   presentLogisticsTask,
 } = await import("../dist/modules/orderLogistics/orderLogistics.service.js");
 const {
-  buildDispatchLabelModel,
   buildPreparationLabelModel,
 } = await import("../dist/modules/orderLogistics/logisticsLabelModels.js");
+const {
+  createLogisticsHandoffToken,
+  verifyLogisticsHandoffToken,
+} = await import("../dist/modules/orderLogistics/logisticsHandoffToken.js");
 const { renderPreparationLabelPdf } = await import("../dist/modules/orderLogistics/preparationLabelPdf.js");
-const { renderDispatchLabelPdf } = await import("../dist/modules/orderLogistics/dispatchLabelPdf.js");
 
 const warehouseA = { id: 101, role: "WAREHOUSE" };
 const warehouseB = { id: 202, role: "WAREHOUSE" };
@@ -105,7 +108,7 @@ const assignedView = presentLogisticsTask(assignedDelivery, warehouseB);
 assert.equal(assignedView.deliveryAddress, "Calle Privada 123");
 assert.equal(assignedView.deliveryPhone, "+56922222222");
 assert.equal(Object.hasOwn(assignedView, "customerEmail"), false);
-assert.deepEqual(assignedView.availableDocuments, ["DISPATCH_LABEL"]);
+assert.deepEqual(assignedView.availableDocuments, []);
 assertNoBuyerPrivateData(presentLogisticsTask(assignedDelivery, warehouseA));
 assert.deepEqual(allowedDocuments(assignedDelivery, warehouseA), []);
 
@@ -127,6 +130,12 @@ for (const administrativeUser of [admin, manager]) {
 }
 console.log("PASS privacidad por estado, rol y responsable del reparto");
 
+const handoffToken = createLogisticsHandoffToken("ONLINE", paid.id);
+const handoffPayload = verifyLogisticsHandoffToken(handoffToken);
+assert.deepEqual(handoffPayload, { v: 1, p: "LOGISTICS_HANDOFF", o: "ONLINE", i: paid.id });
+assert.equal(verifyLogisticsHandoffToken(`${handoffToken.slice(0, -1)}x`), null);
+assert.doesNotMatch(handoffToken, /Privada|\+569|example|Portón/);
+
 const preparationModel = buildPreparationLabelModel({
   ...paid,
   items: Array.from({ length: 70 }, (_, index) => ({
@@ -137,23 +146,18 @@ const preparationModel = buildPreparationLabelModel({
     unitPrice: "1.00",
     subtotal: "1.00",
   })),
-});
+}, `http://localhost:5173/logistics/scan?token=${handoffToken}`);
 assert.doesNotMatch(JSON.stringify(preparationModel), /Privada 123|\+569|example\.test|Portón/);
 assert.match(preparationModel.items[1].quantityLabel, /cajas/);
-
-const dispatchModel = buildDispatchLabelModel(assignedDelivery);
-assert.equal(dispatchModel.address, "Calle Privada 123");
-assert.doesNotMatch(JSON.stringify(dispatchModel), /example\.test|WEBPAY|11111111/);
+assert.match(preparationModel.handoffUrl, /\/logistics\/scan\?token=/);
 
 const preparationPdf = await renderPreparationLabelPdf(preparationModel);
-const dispatchPdf = await renderDispatchLabelPdf(dispatchModel);
 assert.equal(preparationPdf.subarray(0, 5).toString(), "%PDF-");
-assert.equal(dispatchPdf.subarray(0, 5).toString(), "%PDF-");
 assert.ok((preparationPdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length >= 2);
+assert.match(preparationPdf.toString("latin1"), /\/Subtype\s*\/Image/);
 
 if (process.env.BLOCK4B_PDF_OUTPUT_DIR) {
   await mkdir(process.env.BLOCK4B_PDF_OUTPUT_DIR, { recursive: true });
   await writeFile(join(process.env.BLOCK4B_PDF_OUTPUT_DIR, "etiqueta-preparacion.pdf"), preparationPdf);
-  await writeFile(join(process.env.BLOCK4B_PDF_OUTPUT_DIR, "etiqueta-despacho.pdf"), dispatchPdf);
 }
-console.log("PASS etiquetas PDF separadas, multipágina y sin datos ajenos a su finalidad");
+console.log("PASS etiqueta de preparación multipágina con QR firmado y sin datos privados");

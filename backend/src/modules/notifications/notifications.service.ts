@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { logServerError } from "../../utils/helpers.js";
 import {
   FRONTEND_URL,
   MAIL_ENABLED,
@@ -40,10 +41,6 @@ export class MailDeliveryError extends Error {
 
 let transporter: Transporter | null = null;
 let configurationWarningPrinted = false;
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Error desconocido";
-}
 
 function mailConfigurationIssues() {
   const issues: string[] = [];
@@ -99,7 +96,7 @@ async function sendMailBestEffort(to: string, content: MailContent) {
       html: content.html,
     });
   } catch (error) {
-    console.error(`No se pudo enviar el correo "${content.subject}": ${errorMessage(error)}`);
+    logServerError("No se pudo enviar el correo informativo", error);
   }
 }
 
@@ -236,6 +233,6 @@ export async function notifyWarehousesBestEffort(input: {
       emails.map((email) => sendMailBestEffort(email, warehouseContent(input.folio, input.event))),
     );
   } catch (error) {
-    console.error(`No se pudieron obtener destinatarios WAREHOUSE: ${errorMessage(error)}`);
+    logServerError("No se pudieron obtener destinatarios WAREHOUSE", error);
   }
 }

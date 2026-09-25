@@ -1,9 +1,10 @@
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import morgan from "morgan";
 import cors from "cors";
 import path from "path";
 import routes from "./modules/index.js";
 import { UPLOADS_ROOT } from "./config/configEnv.js";
+import { handleErrorClient, handleErrorServer } from "./utils/helpers.js";
 
 const app = express();
 
@@ -32,5 +33,24 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/api", routes);
+
+const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
+  const status = typeof error === "object" && error !== null && "status" in error
+    ? Number(error.status)
+    : 500;
+  if (error instanceof SyntaxError && status === 400) {
+    handleErrorClient(res, 400, "El cuerpo de la solicitud no contiene JSON valido");
+    return;
+  }
+
+  handleErrorServer(res, 500, "Error no controlado en la solicitud", error);
+};
+
+app.use(errorHandler);
 
 export default app;

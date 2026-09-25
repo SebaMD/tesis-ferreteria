@@ -10,3 +10,8 @@ export async function getSalesReportRequest(filters) {
   const response = await api.get("/reports/sales", { params: cleanParams(filters) });
   return response.data.data;
 }
+
+export async function getManagerStatisticsRequest(filters) {
+  const response = await api.get("/reports/manager-statistics", { params: cleanParams(filters) });
+  return response.data.data;
+}

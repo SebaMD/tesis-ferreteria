@@ -4,7 +4,6 @@ Arquitectura Definida inicialmente:
 
 - **Backend**: Node.js, Express
 - **Frontend**: React
-- **Python**: 3.12
 - **Base de datos**: PostgreSQL 16
 
 ## Ejecutar docker compose

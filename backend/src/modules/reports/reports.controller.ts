@@ -5,7 +5,12 @@ import {
   getSalesByCashierReportService,
   getSalesReportService,
 } from "./reports.service.js";
-import { validateDailyReportQuery, validateSalesReportQuery } from "./reports.validation.js";
+import { getManagerStatisticsService } from "./managerStatistics.service.js";
+import {
+  validateDailyReportQuery,
+  validateManagerStatisticsQuery,
+  validateSalesReportQuery,
+} from "./reports.validation.js";
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
@@ -44,5 +49,19 @@ export async function getSalesByCashierReport(req: Request, res: Response) {
     return handleSuccess(res, 200, "Reporte por cajero obtenido exitosamente", report);
   } catch (error) {
     return handleErrorServer(res, 500, "Error al obtener el reporte por cajero", message(error));
+  }
+}
+
+export async function getManagerStatistics(req: Request, res: Response) {
+  try {
+    const validation = validateManagerStatisticsQuery(req.query);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parámetros inválidos", validation.error);
+    }
+
+    const statistics = await getManagerStatisticsService(validation.value);
+    return handleSuccess(res, 200, "Estadísticas obtenidas exitosamente", statistics);
+  } catch (error) {
+    return handleErrorServer(res, 500, "Error al obtener las estadísticas", error);
   }
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
-const [select, app, root, noticeProvider, protectedRoute, clientNavbar, styles, navbar, dashboard, account, login, register, internalVerification, themeProvider] = await Promise.all([
+const [select, app, root, noticeProvider, protectedRoute, clientNavbar, styles, navbar, dashboard, account, login, register, internalVerification, themeProvider, carousel] = await Promise.all([
   read("src/components/AppSelect.jsx"),
   read("src/App.jsx"),
   read("src/pages/Root.jsx"),
@@ -17,6 +17,7 @@ const [select, app, root, noticeProvider, protectedRoute, clientNavbar, styles, 
   read("src/pages/RegisterPage.jsx"),
   read("src/pages/InternalEmailVerificationPage.jsx"),
   read("src/context/ThemeProvider.jsx"),
+  read("src/components/CatalogNoticeCarousel.jsx"),
 ]);
 
 assert.match(select, /options\.length > 6/);
@@ -35,13 +36,16 @@ assert.match(app, /verify-work-email/);
 assert.match(protectedRoute, /requiresEmailVerification/);
 assert.match(root, /ThemeProvider/);
 assert.match(root, /CustomerNoticeProvider/);
-assert.match(noticeProvider, /sessionStorage/);
-assert.match(noticeProvider, /current\.version !== dismissedVersion/);
-assert.match(clientNavbar, /Información de la ferretería/);
+assert.match(noticeProvider, /refreshNotices/);
+assert.match(noticeProvider, /notices/);
+assert.doesNotMatch(noticeProvider, /sessionStorage|open|dismissedVersion/);
+assert.doesNotMatch(clientNavbar, /Información de la ferretería|reopenNotice/);
+assert.match(carousel, /aria-roledescription="carrusel"/);
+assert.match(carousel, /aria-current/);
 assert.match(styles, /\.dark \.app-select-popup/);
-assert.match(styles, /customer-notice-panel/);
+assert.match(styles, /catalog-notice-track/);
 assert.match(navbar, /CustomerNoticeManager/);
-assert.match(navbar, /Administrar aviso a clientes/);
+assert.match(navbar, /Administrar avisos a clientes/);
 assert.match(navbar, /Abrir mi perfil/);
 assert.match(navbar, /ThemeToggle showLabel/);
 assert.doesNotMatch(dashboard, /CustomerNoticeManager/);
@@ -70,5 +74,5 @@ assert.equal(isValidRut("10120345-1"), false);
 assert.equal(normalizeChileanMobilePhone("9 1234 5678"), "+56912345678");
 
 console.log("PASS reusable searchable AppSelect accessibility/portal/height contract and migrated native selects");
-console.log("PASS worker verification routing, versioned public notice and persisted global theme wiring");
+console.log("PASS worker verification routing, catalog notice carousel and persisted global theme wiring");
 console.log("PASS centralized RUT/phone helpers, relocated notice/theme controls and client account sections");

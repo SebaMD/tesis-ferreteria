@@ -99,3 +99,45 @@ export function validateSalesReportQuery(query: unknown): ValidationResult<Repor
 
   return { success: true, value };
 }
+
+export function validateManagerStatisticsQuery(
+  query: unknown,
+  now = new Date(),
+): ValidationResult<ReportDateRange> {
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    return { success: false, error: "Debe indicar un rango de fechas" };
+  }
+
+  const input = query as Record<string, unknown>;
+  const parsedFrom = parseDate(input.from, "La fecha desde");
+  if (!parsedFrom.success) return parsedFrom;
+
+  const parsedTo = parseDate(input.to, "La fecha hasta");
+  if (!parsedTo.success) return parsedTo;
+
+  if (parsedFrom.value.date > parsedTo.value.date) {
+    return { success: false, error: "La fecha desde no puede ser posterior a la fecha hasta" };
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (parsedTo.value.date > today) {
+    return { success: false, error: "La fecha hasta no puede ser futura" };
+  }
+
+  const rangeDays = Math.round(
+    (parsedTo.value.date.getTime() - parsedFrom.value.date.getTime()) / 86_400_000,
+  ) + 1;
+  if (rangeDays > 366) {
+    return { success: false, error: "El rango no puede superar 366 días" };
+  }
+
+  return {
+    success: true,
+    value: {
+      from: parsedFrom.value.date,
+      toExclusive: nextDay(parsedTo.value.date),
+      fromLabel: parsedFrom.value.label,
+      toLabel: parsedTo.value.label,
+    },
+  };
+}

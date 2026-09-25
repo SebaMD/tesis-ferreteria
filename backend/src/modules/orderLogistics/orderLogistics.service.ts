@@ -1,6 +1,8 @@
 import { db } from "../../db/index.js";
+import { FRONTEND_URL } from "../../config/configEnv.js";
 import { normalizeName } from "../auth/auth.validation.js";
 import { isValidRut, normalizeRut } from "../../utils/rut.js";
+import { logServerError } from "../../utils/helpers.js";
 import {
   notifyClientOrderBestEffort,
   type ClientOrderMailEvent,
@@ -14,10 +16,11 @@ import {
   saveImageFile,
 } from "../../utils/imageFiles.js";
 import { resolveDeliveryProofFile } from "./deliveryProofFile.js";
+import { buildPreparationLabelModel } from "./logisticsLabelModels.js";
 import {
-  buildDispatchLabelModel,
-  buildPreparationLabelModel,
-} from "./logisticsLabelModels.js";
+  createLogisticsHandoffToken,
+  verifyLogisticsHandoffToken,
+} from "./logisticsHandoffToken.js";
 import {
   findDeliveryProofPath,
   findLogisticsTaskById,
@@ -44,7 +47,7 @@ export type LogisticsAction =
   | "START_DELIVERY"
   | "COMPLETE_DELIVERY";
 
-export type LogisticsDocument = "PREPARATION_LABEL" | "DISPATCH_LABEL";
+export type LogisticsDocument = "PREPARATION_LABEL";
 
 export type DeliveryEvidenceInput = {
   receiverName?: unknown;
@@ -91,15 +94,6 @@ export function allowedDocuments(task: LogisticsTask, user: { id: number; role: 
   ) {
     if (["PAID", "PREPARING", "READY_FOR_PICKUP", "READY_FOR_DELIVERY"].includes(task.status)) {
       documents.push("PREPARATION_LABEL");
-    }
-  }
-
-  if (task.deliveryType === "DELIVERY") {
-    if (
-      (administrative && ["READY_FOR_DELIVERY", "OUT_FOR_DELIVERY", "DELIVERED"].includes(task.status))
-      || (task.status === "OUT_FOR_DELIVERY" && task.deliveryStartedBy === user.id)
-    ) {
-      documents.push("DISPATCH_LABEL");
     }
   }
 
@@ -416,7 +410,7 @@ export async function transitionLogisticsOrderService(
             nextStatus,
           ))?.url;
         } catch (error) {
-          console.error("No se pudo generar el enlace de seguimiento invitado:", error);
+          logServerError("No se pudo generar el enlace de seguimiento invitado", error);
         }
       }
       void (async () => {
@@ -478,17 +472,61 @@ export async function getPreparationLabelService(
   taskId: number,
   user: { id: number; role: string },
 ) {
-  return buildPreparationLabelModel(
-    await logisticsDocumentTask(origin, taskId, user, "PREPARATION_LABEL"),
-  );
+  const task = await logisticsDocumentTask(origin, taskId, user, "PREPARATION_LABEL");
+  const handoffUrl = task.deliveryType === "DELIVERY"
+    ? buildLogisticsHandoffUrl(createLogisticsHandoffToken(origin, taskId))
+    : null;
+  return buildPreparationLabelModel(task, handoffUrl);
 }
 
-export async function getDispatchLabelService(
-  origin: LogisticsOrigin,
-  taskId: number,
+function buildLogisticsHandoffUrl(token: string) {
+  const handoffUrl = new URL("/logistics/scan", FRONTEND_URL);
+  handoffUrl.searchParams.set("token", token);
+  return handoffUrl.toString();
+}
+
+function verifiedHandoffPayload(token: unknown) {
+  const payload = verifyLogisticsHandoffToken(token);
+  if (!payload) {
+    throw new OrderLogisticsError("El código QR no es válido o fue alterado.", 400);
+  }
+  return payload;
+}
+
+async function logisticsHandoffTask(token: unknown) {
+  const payload = verifiedHandoffPayload(token);
+  const task = await findLogisticsTaskById(payload.o, payload.i);
+  if (!task) throw new OrderLogisticsError("La tarea logística no fue encontrada.", 404);
+  if (task.deliveryType !== "DELIVERY") {
+    throw new OrderLogisticsError("El código QR no corresponde a un despacho a domicilio.", 409);
+  }
+  if (task.status !== "READY_FOR_DELIVERY" && task.status !== "OUT_FOR_DELIVERY") {
+    throw new OrderLogisticsError("El pedido no se encuentra disponible para iniciar o continuar su reparto.", 409);
+  }
+  return { payload, task };
+}
+
+export async function getLogisticsHandoffService(
+  token: unknown,
   user: { id: number; role: string },
 ) {
-  return buildDispatchLabelModel(
-    await logisticsDocumentTask(origin, taskId, user, "DISPATCH_LABEL"),
-  );
+  if (user.role !== "WAREHOUSE") {
+    throw new OrderLogisticsError("Esta operación es exclusiva de BODEGUERO.", 403);
+  }
+  const { task } = await logisticsHandoffTask(token);
+  return presentLogisticsTask(task, user);
+}
+
+export async function takeLogisticsHandoffService(
+  token: unknown,
+  user: { id: number; role: string },
+) {
+  if (user.role !== "WAREHOUSE") {
+    throw new OrderLogisticsError("Esta operación es exclusiva de BODEGUERO.", 403);
+  }
+  const { payload, task } = await logisticsHandoffTask(token);
+  if (task.status === "OUT_FOR_DELIVERY" && task.deliveryStartedBy === user.id) {
+    return presentLogisticsTask(task, user);
+  }
+  return transitionLogisticsOrderService(payload.o, payload.i, user.id, "START_DELIVERY");
 }

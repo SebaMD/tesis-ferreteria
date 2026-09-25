@@ -3,17 +3,17 @@ import type { AuthenticatedRequest } from "../../middlewares/authentication.midd
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { ImageFileError } from "../../utils/imageFiles.js";
 import {
-  getDispatchLabelService,
   getDeliveryProofFileService,
+  getLogisticsHandoffService,
   getLogisticsOrderByIdService,
   getLogisticsOrdersService,
   getPreparationLabelService,
   parseLogisticsOrigin,
   type LogisticsAction,
   OrderLogisticsError,
+  takeLogisticsHandoffService,
   transitionLogisticsOrderService,
 } from "./orderLogistics.service.js";
-import { renderDispatchLabelPdf } from "./dispatchLabelPdf.js";
 import { renderPreparationLabelPdf } from "./preparationLabelPdf.js";
 
 function parseId(value: unknown) {
@@ -77,6 +77,32 @@ export async function getLogisticsOrderByIdController(
     );
   } catch (error) {
     return handleControllerError(res, error, "No se pudo obtener la tarea logistica");
+  }
+}
+
+export async function getLogisticsHandoffController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Tarea de reparto obtenida exitosamente",
+      await getLogisticsHandoffService(req.query.token, authenticatedUser(req)),
+    );
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo resolver el código QR logístico");
+  }
+}
+
+export async function takeLogisticsHandoffController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Reparto tomado exitosamente",
+      await takeLogisticsHandoffService(req.body?.token, authenticatedUser(req)),
+    );
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo tomar el reparto");
   }
 }
 
@@ -147,19 +173,5 @@ export async function getPreparationLabelController(req: AuthenticatedRequest, r
     );
   } catch (error) {
     return handleControllerError(res, error, "No se pudo generar la etiqueta de preparacion");
-  }
-}
-
-export async function getDispatchLabelController(req: AuthenticatedRequest, res: Response) {
-  try {
-    const { origin, taskId } = routeTask(req);
-    const model = await getDispatchLabelService(origin, taskId, authenticatedUser(req));
-    return await sendLabelPdf(
-      res,
-      await renderDispatchLabelPdf(model),
-      `etiqueta-despacho-${model.folio}.pdf`,
-    );
-  } catch (error) {
-    return handleControllerError(res, error, "No se pudo generar la etiqueta de despacho");
   }
 }

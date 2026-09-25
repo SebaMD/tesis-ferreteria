@@ -10,6 +10,14 @@ import { clearSessionNotice, readSessionNotice, storeInternalVerificationChallen
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
 
+const getAuthenticatedDestination = (user, requestedPath) => {
+  if (user?.role === "CLIENT") return requestedPath || "/catalog";
+  if (user?.role === "WAREHOUSE" && requestedPath?.startsWith("/logistics/scan?token=")) {
+    return requestedPath;
+  }
+  return "/dashboard";
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,9 +43,7 @@ export default function LoginPage() {
   if (isAuthenticated) {
     const destination = user?.requiresEmailVerification
       ? "/verify-work-email"
-      : user?.role !== "CLIENT"
-      ? "/dashboard"
-      : requestedPath || "/catalog";
+      : getAuthenticatedDestination(user, requestedPath);
     return <Navigate to={destination} replace />;
   }
 
@@ -64,7 +70,7 @@ export default function LoginPage() {
       }
       navigate(session.user.requiresEmailVerification
         ? "/verify-work-email"
-        : session.user.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard");
+        : getAuthenticatedDestination(session.user, requestedPath));
     } catch (err) {
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {

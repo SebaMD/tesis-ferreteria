@@ -147,7 +147,11 @@ export async function updateMyClientProfile(req: AuthenticatedRequest, res: Resp
       await updateClientProfileService(req.user.id, validation.value),
     );
   } catch (error) {
-    return handleErrorClient(res, 403, getErrorMessage(error));
+    const message = getErrorMessage(error);
+    if (message === "La cuenta de cliente no está activa" || message === "Usuario no encontrado") {
+      return handleErrorClient(res, 403, message);
+    }
+    return handleErrorServer(res, 500, "No se pudo actualizar el perfil", error);
   }
 }
 

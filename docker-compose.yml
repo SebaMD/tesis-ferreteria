@@ -38,6 +38,7 @@ services:
       PORT: ${PORT:-3000}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET debe estar definido}
       EMAIL_VERIFICATION_SECRET: ${EMAIL_VERIFICATION_SECRET:?EMAIL_VERIFICATION_SECRET debe estar definido}
+      LOGISTICS_QR_SECRET: ${LOGISTICS_QR_SECRET:?LOGISTICS_QR_SECRET debe estar definido}
       WEBPAY_ENVIRONMENT: ${WEBPAY_ENVIRONMENT:-integration}
       WEBPAY_COMMERCE_CODE: ${WEBPAY_COMMERCE_CODE:-}
       WEBPAY_API_KEY: ${WEBPAY_API_KEY:-}
@@ -66,7 +67,7 @@ services:
       - backend_network
       - frontend_network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-3000}/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-3000}/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -122,18 +123,6 @@ services:
       - "5173:80"
     networks:
       - frontend_network
-
-  python:
-    build:
-      context: ./python
-      dockerfile: Dockerfile
-      target: production
-    container_name: ferreteria-python
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    networks:
-      - backend_network
 
 networks:
   backend_network:

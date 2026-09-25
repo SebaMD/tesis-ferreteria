@@ -4,11 +4,12 @@ import { authenticateJwt } from "../../middlewares/authentication.middleware.js"
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { MAX_IMAGE_FILE_SIZE } from "../../utils/imageFiles.js";
 import {
-  getDispatchLabelController,
   getDeliveryProofController,
+  getLogisticsHandoffController,
   getLogisticsOrderByIdController,
   getLogisticsOrdersController,
   getPreparationLabelController,
+  takeLogisticsHandoffController,
   transitionLogisticsOrderController,
 } from "./orderLogistics.controller.js";
 
@@ -29,6 +30,16 @@ function parseEvidenceUpload(req: Request, res: Response, next: NextFunction) {
 }
 
 router.use(authenticateJwt);
+router.get(
+  "/scan",
+  verifyRoles(["WAREHOUSE"]),
+  getLogisticsHandoffController,
+);
+router.post(
+  "/scan/start-delivery",
+  verifyRoles(["WAREHOUSE"]),
+  takeLogisticsHandoffController,
+);
 router.get("/", verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]), getLogisticsOrdersController);
 router.get(
   "/:origin/:id/delivery-proof",
@@ -39,11 +50,6 @@ router.get(
   "/:origin/:id/preparation-label",
   verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]),
   getPreparationLabelController,
-);
-router.get(
-  "/:origin/:id/dispatch-label",
-  verifyRoles(["WAREHOUSE", "ADMIN", "MANAGER"]),
-  getDispatchLabelController,
 );
 router.get(
   "/:origin/:id",

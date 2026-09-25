@@ -29,6 +29,8 @@ import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 import InternalEmailVerificationPage from "./pages/InternalEmailVerificationPage.jsx";
+import LogisticsScanPage from "./pages/LogisticsScanPage.jsx";
+import StatisticsPage from "./pages/StatisticsPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -142,6 +144,14 @@ export default function App() {
         }
       />
       <Route
+        path="/logistics/scan"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.logisticsScan}>
+            <LogisticsScanPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
         path="/reports"
         element={
           <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.reports}>
@@ -160,6 +170,14 @@ export default function App() {
       <Route
         path="/"
         element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
+      <Route
+        path="/statistics"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.statistics}>
+            <StatisticsPage />
+          </ProtectedPage>
+        }
       />
       <Route
         path="*"

@@ -3,6 +3,7 @@ import {
   handleErrorClient,
   handleErrorServer,
   handleSuccess,
+  logServerError,
 } from "../../utils/helpers.js";
 import { AuthError, loginService, registerClientService } from "./auth.service.js";
 import {
@@ -57,7 +58,10 @@ export async function login(req: Request, res: Response) {
     }
     return handleSuccess(res, 200, "Inicio de sesion exitoso", data);
   } catch (error) {
-    return handleErrorClient(res, 401, getErrorMessage(error));
+    if (error instanceof AuthError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo iniciar sesion", error);
   }
 }
 
@@ -113,7 +117,7 @@ export async function requestPasswordReset(req: Request, res: Response) {
     res.setHeader("Cache-Control", "no-store");
     return handleSuccess(res, 202, PASSWORD_RESET_GENERIC_MESSAGE);
   } catch (error) {
-    console.error("No se pudo procesar una solicitud de recuperación de contraseña:", getErrorMessage(error));
+    logServerError("No se pudo procesar una solicitud de recuperación de contraseña", error);
     res.setHeader("Cache-Control", "no-store");
     return handleSuccess(res, 202, PASSWORD_RESET_GENERIC_MESSAGE);
   }

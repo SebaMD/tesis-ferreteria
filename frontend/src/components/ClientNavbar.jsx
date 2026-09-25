@@ -1,9 +1,8 @@
-import { ClipboardList, Heart, Info, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import BrandLogo from "./BrandLogo.jsx";
-import useCustomerNotice from "../hooks/useCustomerNotice.js";
 
 function navClass({ isActive }) {
   return `inline-flex min-h-10 items-center gap-1.5 rounded-[5px] px-3 py-2 text-sm font-bold transition-colors max-[720px]:px-2 max-[720px]:text-xs ${
@@ -16,7 +15,6 @@ export default function ClientNavbar() {
   const { isAuthenticated, logout, user } = useAuth();
   const { totalUnits } = useCart();
   const isClient = user?.role === "CLIENT";
-  const { notice, reopenNotice } = useCustomerNotice();
 
   const handleLogout = async () => {
     await logout();
@@ -50,11 +48,6 @@ export default function ClientNavbar() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {notice && (
-            <button className="customer-info-action size-10 min-h-10 shrink-0 border-0 bg-transparent p-0 text-rust-600" type="button" onClick={reopenNotice} title="Información de la ferretería" aria-label="Abrir información de la ferretería">
-              <Info size={19} />
-            </button>
-          )}
           <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:hidden" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
             <ShoppingCart size={20} />
             {totalUnits > 0 && (

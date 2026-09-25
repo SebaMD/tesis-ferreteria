@@ -19,6 +19,7 @@ assert.ok(
 const databaseName = `fyf_block4b_${randomBytes(4).toString("hex")}`;
 const uploadsRoot = resolve("tmp", "block4b-uploads", databaseName);
 const visualMode = process.env.BLOCK4B_VISUAL_SERVER === "1";
+const visualPort = Number.parseInt(process.env.BLOCK4B_VISUAL_PORT || "3000", 10);
 const adminConnection = new pg.Client({ connectionString: adminUrl.href });
 await adminConnection.connect();
 let pool;
@@ -43,8 +44,8 @@ try {
 
   const passwordHash = await bcrypt.hash("Block4B-Test-2026!", 4);
   const insertUser = async (role, rut, names, correo) => (await pool.query(`
-    INSERT INTO users(role_id,rut,names,surnames,correo,password)
-    VALUES ($1,$2,$3,'Pruebas',$4,$5)
+    INSERT INTO users(role_id,rut,names,surnames,correo,password,email_verified_at)
+    VALUES ($1,$2,$3,'Pruebas',$4,$5,NOW())
     RETURNING id,correo,rut
   `, [roles[role], rut, names, correo, passwordHash])).rows[0];
 
@@ -140,6 +141,9 @@ try {
   const preparingOrder = await insertOrder({ clientId: clientA.id, status: "PREPARING", preparationStartedBy: warehouseA.id });
   const readyOrder = await insertOrder({ clientId: clientA.id, status: "READY_FOR_DELIVERY", preparationStartedBy: warehouseA.id });
   const outOrder = await insertOrder({ clientId: clientA.id, status: "OUT_FOR_DELIVERY", preparationStartedBy: warehouseA.id, deliveryStartedBy: warehouseB.id });
+  const visualReadyOrder = visualMode
+    ? await insertOrder({ clientId: clientA.id, status: "READY_FOR_DELIVERY", preparationStartedBy: warehouseA.id })
+    : null;
 
   const proofRelative = (id) => `deliveries/online/${id}/evidence.png`;
   const deliveredClientA = await insertOrder({ clientId: clientA.id, status: "DELIVERED", deliveryStartedBy: warehouseB.id });
@@ -186,17 +190,26 @@ try {
   `, [cashier.id])).rows[0].id;
   await pool.query(`INSERT INTO sale_details(sale_id,product_id,quantity,unit_price,subtotal) VALUES ($1,$2,1,12990,12990)`, [saleId, productId]);
   await pool.query(`
-    INSERT INTO sale_deliveries(sale_id,status,recipient_name,recipient_rut,phone,address,commune,reference)
-    VALUES ($1,'PAID','Cliente POS Privado','99999999-9','+56999999999','Calle POS Privada 99','Santa Juana','Referencia POS')
-  `, [saleId]);
+    INSERT INTO sale_deliveries(
+      sale_id,status,recipient_name,recipient_rut,phone,address,commune,reference,
+      preparation_started_by,preparation_started_at,prepared_by,prepared_at
+    )
+    VALUES (
+      $1,'READY_FOR_DELIVERY','Cliente POS Privado','99999999-9','+56999999999',
+      'Calle POS Privada 99','Santa Juana','Referencia POS',$2,$3,$2,$3
+    )
+  `, [saleId, warehouseA.id, now]);
 
   process.env.DATABASE_URL = databaseUrl.href;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+  process.env.LOGISTICS_QR_SECRET = randomBytes(32).toString("hex");
+  process.env.FRONTEND_URL = "http://localhost:5173";
   process.env.UPLOADS_ROOT = uploadsRoot;
   process.env.MAIL_ENABLED = "false";
   const { default: app } = await import("../dist/app.js");
+  const { createLogisticsHandoffToken } = await import("../dist/modules/orderLogistics/logisticsHandoffToken.js");
   applicationDb = (await import("../dist/db/index.js")).db;
-  server = app.listen(visualMode ? 3000 : 0, "127.0.0.1");
+  server = app.listen(visualMode ? visualPort : 0, "127.0.0.1");
   await new Promise((resolveListening) => server.once("listening", resolveListening));
   const base = `http://127.0.0.1:${server.address().port}/api`;
 
@@ -213,6 +226,7 @@ try {
     warehouseB: { Authorization: bearer(warehouseB, "WAREHOUSE") },
     admin: { Authorization: bearer(adminUser, "ADMIN") },
     manager: { Authorization: bearer(managerUser, "MANAGER") },
+    cashier: { Authorization: bearer(cashier, "CASHIER") },
     clientA: { Authorization: bearer(clientA, "CLIENT") },
     clientB: { Authorization: bearer(clientB, "CLIENT") },
   };
@@ -279,14 +293,66 @@ try {
     /etiqueta-preparacion-P-/,
   );
   assert.equal((await request(`/order-logistics/online/${preparingOrder}/preparation-label`, { headers: authHeaders.warehouseB })).status, 403);
-  await assertPdf(
-    await request(`/order-logistics/online/${outOrder}/dispatch-label`, { headers: authHeaders.warehouseB }),
-    /etiqueta-despacho-P-/,
-  );
-  assert.equal((await request(`/order-logistics/online/${outOrder}/dispatch-label`, { headers: authHeaders.warehouseA })).status, 403);
-  await assertPdf(await request(`/order-logistics/online/${outOrder}/dispatch-label`, { headers: authHeaders.admin }), /etiqueta-despacho-P-/);
-  await assertPdf(await request(`/order-logistics/online/${outOrder}/dispatch-label`, { headers: authHeaders.manager }), /etiqueta-despacho-P-/);
-  console.log("PASS autorización de etiquetas de preparación y despacho");
+  for (const headers of [authHeaders.warehouseA, authHeaders.warehouseB, authHeaders.admin, authHeaders.manager]) {
+    assert.equal((await request(`/order-logistics/online/${outOrder}/dispatch-label`, { headers })).status, 404);
+  }
+  console.log("PASS etiqueta de preparación disponible y endpoint de etiqueta de despacho retirado");
+
+  const handoffToken = createLogisticsHandoffToken("ONLINE", readyOrder);
+  const scanPath = `/order-logistics/scan?token=${encodeURIComponent(handoffToken)}`;
+  assert.equal((await request(scanPath)).status, 401);
+  for (const headers of [authHeaders.clientA, authHeaders.cashier, authHeaders.admin, authHeaders.manager]) {
+    assert.equal((await request(scanPath, { headers })).status, 403);
+  }
+  const unassignedScan = await jsonData(await request(scanPath, { headers: authHeaders.warehouseA }));
+  assert.equal(unassignedScan.folio.startsWith("P-"), true);
+  assert.equal(unassignedScan.deliveryType, "DELIVERY");
+  assert.equal(unassignedScan.allowedActions.includes("START_DELIVERY"), true);
+  for (const field of ["customerName", "customerEmail", "deliveryRecipientName", "deliveryAddress", "deliveryPhone", "deliveryReference", "deliveryLatitude", "deliveryLongitude"]) {
+    assert.equal(Object.hasOwn(unassignedScan, field), false, `${field} no debe revelarse antes de tomar reparto`);
+  }
+  const tamperedToken = `${handoffToken.slice(0, -1)}${handoffToken.endsWith("a") ? "b" : "a"}`;
+  assert.equal((await request(`/order-logistics/scan?token=${encodeURIComponent(tamperedToken)}`, { headers: authHeaders.warehouseA })).status, 400);
+  const invalidStateToken = createLogisticsHandoffToken("ONLINE", paidOrder);
+  assert.equal((await request(`/order-logistics/scan?token=${encodeURIComponent(invalidStateToken)}`, { headers: authHeaders.warehouseA })).status, 409);
+
+  const claimOptions = (headers, token = handoffToken) => ({
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  const claims = await Promise.all([
+    request("/order-logistics/scan/start-delivery", claimOptions(authHeaders.warehouseA)),
+    request("/order-logistics/scan/start-delivery", claimOptions(authHeaders.warehouseB)),
+  ]);
+  assert.deepEqual(claims.map((response) => response.status).sort(), [200, 409]);
+  const winnerIndex = claims[0].status === 200 ? 0 : 1;
+  const winnerHeaders = winnerIndex === 0 ? authHeaders.warehouseA : authHeaders.warehouseB;
+  const loserHeaders = winnerIndex === 0 ? authHeaders.warehouseB : authHeaders.warehouseA;
+  const assignedScan = await jsonData(await request(scanPath, { headers: winnerHeaders }));
+  assert.equal(assignedScan.status, "OUT_FOR_DELIVERY");
+  assert.equal(assignedScan.deliveryAddress, "Pasaje Confidencial 742");
+  assert.equal(assignedScan.deliveryPhone, "+56987654321");
+  const otherWarehouseScan = await jsonData(await request(scanPath, { headers: loserHeaders }));
+  assert.equal(Object.hasOwn(otherWarehouseScan, "deliveryAddress"), false);
+  assert.equal(Object.hasOwn(otherWarehouseScan, "deliveryPhone"), false);
+  assert.equal((await request("/order-logistics/scan/start-delivery", claimOptions(loserHeaders))).status, 409);
+  console.log("PASS QR firmado, roles, ausencia de PII previa, asignación concurrente y PII exclusiva del repartidor");
+
+  const posHandoffToken = createLogisticsHandoffToken("POS", saleId);
+  const posScanPath = `/order-logistics/scan?token=${encodeURIComponent(posHandoffToken)}`;
+  const posBeforeAssignment = await jsonData(await request(posScanPath, { headers: authHeaders.warehouseA }));
+  assert.equal(posBeforeAssignment.origin, "POS");
+  assert.equal(posBeforeAssignment.allowedActions.includes("START_DELIVERY"), true);
+  assert.equal(Object.hasOwn(posBeforeAssignment, "deliveryAddress"), false);
+  const posAssigned = await jsonData(await request(
+    "/order-logistics/scan/start-delivery",
+    claimOptions(authHeaders.warehouseA, posHandoffToken),
+  ));
+  assert.equal(posAssigned.origin, "POS");
+  assert.equal(posAssigned.deliveryAddress, "Calle POS Privada 99");
+  assert.equal(posAssigned.deliveryPhone, "+56999999999");
+  console.log("PASS handoff QR para venta presencial con despacho y origen POS");
 
   const assertImage = async (response) => {
     assert.equal(response.status, 200);
@@ -315,7 +381,9 @@ try {
   console.log("PASS evidencia CLIENT/guest/dispositivo, estados, path traversal y almacenamiento privado");
 
   if (visualMode) {
-    console.log(`VISUAL API http://127.0.0.1:3000 CLIENT=${clientA.correo} WAREHOUSE=${warehouseB.correo} ADMIN=${adminUser.correo} PASSWORD=Block4B-Test-2026! GUEST_TOKEN=${guestTokenA} GUEST_DEVICE=${guestDeviceA}`);
+    const visualHandoffToken = createLogisticsHandoffToken("ONLINE", outOrder);
+    const visualReadyHandoffToken = createLogisticsHandoffToken("ONLINE", visualReadyOrder);
+    console.log(`VISUAL API http://127.0.0.1:${visualPort} CLIENT=${clientA.correo} WAREHOUSE=${warehouseB.correo} ADMIN=${adminUser.correo} PASSWORD=Block4B-Test-2026! GUEST_TOKEN=${guestTokenA} GUEST_DEVICE=${guestDeviceA} HANDOFF_TOKEN=${visualHandoffToken} READY_HANDOFF_TOKEN=${visualReadyHandoffToken}`);
     await new Promise((resolveSignal) => {
       process.once("SIGINT", resolveSignal);
       process.once("SIGTERM", resolveSignal);

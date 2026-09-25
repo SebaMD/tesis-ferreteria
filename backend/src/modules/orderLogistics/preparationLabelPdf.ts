@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import QRCode from "qrcode";
 import type { PreparationLabelModel } from "./logisticsLabelModels.js";
 
 const TABLE_LEFT = 48;
@@ -43,7 +44,16 @@ function ensureRowSpace(document: PDFKit.PDFDocument, rowHeight: number, model: 
 }
 
 export function renderPreparationLabelPdf(model: PreparationLabelModel) {
-  return new Promise<Buffer>((resolve, reject) => {
+  const qrPromise = model.handoffUrl
+    ? QRCode.toBuffer(model.handoffUrl, {
+      type: "png",
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 280,
+    })
+    : Promise.resolve(null);
+
+  return qrPromise.then((qrImage) => new Promise<Buffer>((resolve, reject) => {
     const document = new PDFDocument({
       size: "A4",
       margin: 48,
@@ -74,11 +84,48 @@ export function renderPreparationLabelPdf(model: PreparationLabelModel) {
       document.y = y + rowHeight;
     }
 
-    const noteY = document.y + 14;
+    if (qrImage) {
+      const blockHeight = 132;
+      if (document.y + blockHeight > 752) {
+        document.addPage();
+        document.x = TABLE_LEFT;
+        document.y = 48;
+      } else {
+        document.y += 14;
+      }
+      const qrY = document.y;
+      document.image(qrImage, TABLE_LEFT, qrY, { fit: [110, 110] });
+      document
+        .font("Helvetica-Bold")
+        .fontSize(11)
+        .fillColor("#111827")
+        .text("Continuar despacho desde logística", TABLE_LEFT + 130, qrY + 18, { width: 350 })
+        .moveDown(0.45)
+        .font("Helvetica")
+        .fontSize(9.5)
+        .fillColor("#374151")
+        .text(
+          "Escanear desde el módulo de logística para continuar el despacho.",
+          TABLE_LEFT + 130,
+          document.y,
+          { width: 350 },
+        )
+        .moveDown(0.45)
+        .fontSize(8.5)
+        .fillColor("#6b7280")
+        .text(
+          "El código no contiene datos privados. Se requiere iniciar sesión y tomar el reparto para consultar el destino.",
+          TABLE_LEFT + 130,
+          document.y,
+          { width: 350 },
+        );
+      document.y = qrY + 118;
+    }
+
     document.font("Helvetica").fontSize(8.5).fillColor("#6b7280").text(
-      "Documento operacional. No contiene datos privados de despacho.",
+      "Documento operacional. No contiene dirección, teléfono ni otros datos privados de despacho.",
       TABLE_LEFT,
-      noteY,
+      document.y + 8,
       { width: TABLE_WIDTH, align: "center" },
     );
 
@@ -93,5 +140,5 @@ export function renderPreparationLabelPdf(model: PreparationLabelModel) {
       );
     }
     document.end();
-  });
+  }));
 }

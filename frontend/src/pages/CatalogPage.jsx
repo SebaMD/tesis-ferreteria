@@ -8,6 +8,7 @@ import AppModal from "../components/AppModal.jsx";
 import CatalogFilters from "../components/CatalogFilters.jsx";
 import BackToTop from "../components/BackToTop.jsx";
 import AppSelect from "../components/AppSelect.jsx";
+import CatalogNoticeCarousel from "../components/CatalogNoticeCarousel.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, filterAndSortCatalog, getCatalogBrands } from "../helpers/catalogFilters.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
@@ -68,11 +69,7 @@ export default function CatalogPage() {
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
-      <section className="rounded-lg bg-ink-950 bg-[linear-gradient(120deg,rgba(217,119,6,0.22),transparent_60%)] px-7 py-8 text-white max-[620px]:px-5">
-        <span className="text-xs font-extrabold text-rust-500 uppercase">Catálogo Ferretería FYF</span>
-        <h1 className="mt-2 mb-2 max-w-180 text-3xl font-bold max-[620px]:text-2xl">Encuentra materiales y herramientas para tu próximo proyecto</h1>
-        <p className="m-0 max-w-180 text-sm leading-6 text-slate-300">Consulta precios y disponibilidad para comprar de forma segura mediante Webpay Plus.</p>
-      </section>
+      <CatalogNoticeCarousel />
 
       {loadError && (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">

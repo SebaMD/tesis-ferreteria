@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
-import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
+import {
+  handleErrorClient,
+  handleErrorServer,
+  handleSuccess,
+  logServerError,
+} from "../../utils/helpers.js";
 import { ImageFileError } from "../../utils/imageFiles.js";
 import { WebpayConfigurationError } from "../payments/webpay.service.js";
 import {
@@ -70,7 +75,7 @@ export async function createCheckoutController(req: AuthenticatedRequest, res: R
       return handleErrorClient(res, error.statusCode, error.message);
     }
     if (error instanceof WebpayConfigurationError) {
-      return handleErrorServer(res, 503, error.message);
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
     }
     return handleErrorServer(res, 500, "No se pudo iniciar el checkout", message(error));
   }
@@ -99,7 +104,7 @@ export async function createGuestCheckoutController(req: Request, res: Response)
       return handleErrorClient(res, error.statusCode, error.message);
     }
     if (error instanceof WebpayConfigurationError) {
-      return handleErrorServer(res, 503, error.message);
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
     }
     return handleErrorServer(res, 500, "No se pudo iniciar el checkout invitado", message(error));
   }
@@ -278,7 +283,7 @@ export async function retryGuestPaymentController(req: Request, res: Response) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
     if (error instanceof WebpayConfigurationError) {
-      return handleErrorServer(res, 503, error.message);
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
     }
     return handleErrorServer(res, 500, "No se pudo reintentar el pago invitado", message(error));
   }
@@ -296,7 +301,7 @@ export async function retryPaymentController(req: AuthenticatedRequest, res: Res
       return handleErrorClient(res, error.statusCode, error.message);
     }
     if (error instanceof WebpayConfigurationError) {
-      return handleErrorServer(res, 503, error.message);
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
     }
     return handleErrorServer(res, 500, "No se pudo reintentar el pago", message(error));
   }
@@ -505,7 +510,7 @@ export async function webpayReturnController(req: Request, res: Response) {
     const result = await confirmWebpayPaymentService(tokenWs);
     return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
   } catch (error) {
-    console.error("Error al procesar retorno Webpay:", message(error));
+    logServerError("Error al procesar retorno Webpay", error);
     let orderId: number | null = null;
     try {
       orderId = await findOrderIdByPaymentReturnService({

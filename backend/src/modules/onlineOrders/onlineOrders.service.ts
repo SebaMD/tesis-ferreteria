@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { db, type DbTransaction } from "../../db/index.js";
+import { logServerError } from "../../utils/helpers.js";
 import {
   ONLINE_ORDER_RESERVATION_MINUTES,
   WEBPAY_TIMEOUT_MS,
@@ -1103,7 +1104,7 @@ async function finishProviderResponse(data: {
           commercialModel,
         });
       } catch (error) {
-        console.error("No se pudo enviar la confirmacion del pedido:", error);
+        logServerError("No se pudo enviar la confirmacion del pedido", error);
       }
     })();
     void notifyWarehousesBestEffort({
@@ -1484,7 +1485,7 @@ export async function reconcileDueOnlinePaymentsService(scope: {
     const results = await Promise.allSettled(batch.map(reconcilePaymentCandidate));
     for (const result of results) {
       if (result.status === "rejected") {
-        console.error("No se pudo conciliar un pago Webpay:", result.reason);
+        logServerError("No se pudo conciliar un pago Webpay", result.reason);
       }
     }
   }

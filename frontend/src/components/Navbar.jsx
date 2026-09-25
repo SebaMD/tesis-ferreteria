@@ -39,7 +39,7 @@ export default function Navbar({ onToggleSidebar }) {
       <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[720px]:gap-2">
         <button className="inline-flex size-10 min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950" type="button" onClick={() => setProfileOpen(true)} title="Mi perfil" aria-label="Abrir mi perfil"><UserRound size={18} /></button>
         {canManageNotice && (
-          <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:border-rust-400 hover:bg-rust-50 hover:text-rust-700" type="button" onClick={() => setNoticeOpen(true)} title="Aviso a clientes" aria-label="Administrar aviso a clientes">
+          <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:border-rust-400 hover:bg-rust-50 hover:text-rust-700" type="button" onClick={() => setNoticeOpen(true)} title="Avisos a clientes" aria-label="Administrar avisos a clientes">
             <Megaphone size={18} />
           </button>
         )}
@@ -47,7 +47,7 @@ export default function Navbar({ onToggleSidebar }) {
           <LogOut size={18} />
         </button>
       </div>
-      <AppModal open={noticeOpen} onClose={() => setNoticeOpen(false)} title="Aviso a clientes" description="Configura la información operacional visible en la tienda online." size="large">
+      <AppModal open={noticeOpen} onClose={() => setNoticeOpen(false)} title="Avisos a clientes" description="Configura la información operacional visible en la tienda online." size="large">
         {canManageNotice && <CustomerNoticeManager embedded />}
       </AppModal>
       <AppModal open={profileOpen} onClose={() => setProfileOpen(false)} title="Mi perfil" description="Información de tu cuenta y preferencias de visualización.">

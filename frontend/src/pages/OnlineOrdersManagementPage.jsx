@@ -46,7 +46,6 @@ import {
   getDeliveryProofRequest,
   getOperationalOrderByIdRequest,
   getOperationalOrdersRequest,
-  getDispatchLabelRequest,
   getPreparationLabelRequest,
   startOrderDeliveryRequest,
   startOrderPreparationRequest,
@@ -657,15 +656,7 @@ export default function OnlineOrdersManagementPage() {
                 {availableDocuments.has("PREPARATION_LABEL") && (
                   <DownloadLogisticsLabelButton
                     order={selectedOrder}
-                    type="PREPARATION_LABEL"
                     requestLabel={({ origin, id }) => getPreparationLabelRequest(origin, id)}
-                  />
-                )}
-                {availableDocuments.has("DISPATCH_LABEL") && (
-                  <DownloadLogisticsLabelButton
-                    order={selectedOrder}
-                    type="DISPATCH_LABEL"
-                    requestLabel={({ origin, id }) => getDispatchLabelRequest(origin, id)}
                   />
                 )}
               </section>

@@ -3,6 +3,7 @@ import { authenticateJwt } from "../../middlewares/authentication.middleware.js"
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import {
   createUser,
+  deactivateMyClientAccount,
   deleteUser,
   editUser,
   getUserById,
@@ -15,6 +16,7 @@ import {
 const router = Router();
 
 router.patch("/me/profile", authenticateJwt, verifyRoles(["CLIENT"]), updateMyClientProfile);
+router.post("/me/deactivate", authenticateJwt, verifyRoles(["CLIENT"]), deactivateMyClientAccount);
 
 router.use(authenticateJwt);
 router.use(verifyRoles(["ADMIN"]));

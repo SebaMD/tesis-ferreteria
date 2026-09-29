@@ -4,15 +4,17 @@ import {
   findActiveReservedQuantities,
 } from "../inventory/stockAvailability.repository.js";
 import {
-  createProduct,
+  createProductTx,
   deleteProductById,
   findProductByBarcode,
   findProductByCategoryAndName,
   findProductById,
   findProducts,
-  updateProductById,
+  updateProductByIdTx,
 } from "./products.repository.js";
 import type { EditProductBody, ProductBody } from "./products.validation.js";
+import { assertProductPromotionCompatibilityTx } from "../promotions/promotions.service.js";
+import { PromotionError } from "../promotions/promotions.service.js";
 
 export class ProductError extends Error {
   constructor(
@@ -67,7 +69,25 @@ export async function createProductService(data: ProductBody) {
     throw new ProductError("El codigo de barra ya esta asociado a otro producto", 409);
   }
 
-  return createProduct(data);
+  let createdId: number;
+  try {
+    createdId = await db.transaction(async (tx) => {
+      const product = await createProductTx(tx, data);
+      await assertProductPromotionCompatibilityTx(tx, {
+        productId: product.id,
+        productName: product.name,
+        categoryId: product.categoryId,
+        status: product.status,
+      });
+      return product.id;
+    });
+  } catch (error) {
+    if (error instanceof PromotionError) {
+      throw new ProductError(error.message, error.statusCode);
+    }
+    throw error;
+  }
+  return findProductById(createdId, true);
 }
 
 export async function editProductService(id: number, data: EditProductBody) {
@@ -86,9 +106,26 @@ export async function editProductService(id: number, data: EditProductBody) {
     throw new ProductError("El codigo de barra ya esta asociado a otro producto", 409);
   }
 
-  const product = await updateProductById(id, data);
-  if (!product) throw new ProductError("Producto no encontrado", 404);
-  return product;
+  try {
+    await db.transaction(async (tx) => {
+      const prospective = {
+        productId: id,
+        productName: data.name ?? currentProduct.name,
+        categoryId,
+        status: data.status ?? currentProduct.status,
+      };
+      await assertProductPromotionCompatibilityTx(tx, prospective);
+      if (!await updateProductByIdTx(tx, id, data)) {
+        throw new ProductError("Producto no encontrado", 404);
+      }
+    });
+  } catch (error) {
+    if (error instanceof PromotionError) {
+      throw new ProductError(error.message, error.statusCode);
+    }
+    throw error;
+  }
+  return findProductById(id, true);
 }
 
 export async function deleteProductService(id: number) {

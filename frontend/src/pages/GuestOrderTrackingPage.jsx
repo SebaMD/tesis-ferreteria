@@ -16,6 +16,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import DeliveryProofViewer from "../components/orders/DeliveryProofViewer.jsx";
+import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import {
@@ -209,6 +210,7 @@ export default function GuestOrderTrackingPage() {
               renderSummary={(item) => (
                 <div className="grid min-w-0 gap-2">
                   <strong className="truncate text-sm text-ink-950">{item.productName}</strong>
+                  <OrderItemPromotion item={item} compact />
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span>Cantidad: {item.quantity}</span>
                     <strong className="font-mono">{formatClp(item.subtotal)}</strong>
@@ -229,7 +231,7 @@ export default function GuestOrderTrackingPage() {
                 <tbody>
                   {(order.items || []).map((item) => (
                     <tr key={`${item.productId}-${item.productName}`}>
-                      <td>{item.productName}</td>
+                      <td>{item.productName}<OrderItemPromotion item={item} compact /></td>
                       <td className="text-right font-mono">{item.quantity}</td>
                       <td className="text-right font-mono">{formatClp(item.unitPrice)}</td>
                       <td className="text-right font-mono font-bold">{formatClp(item.subtotal)}</td>

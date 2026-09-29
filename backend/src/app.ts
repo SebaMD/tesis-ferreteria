@@ -20,6 +20,13 @@ app.use(
     maxAge: "7d",
   }),
 );
+app.use(
+  "/uploads/customer-notices",
+  express.static(path.join(UPLOADS_ROOT, "customer-notices"), {
+    dotfiles: "deny",
+    maxAge: "7d",
+  }),
+);
 
 app.use(
   cors({

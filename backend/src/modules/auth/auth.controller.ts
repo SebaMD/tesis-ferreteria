@@ -8,6 +8,8 @@ import {
 import { AuthError, loginService, registerClientService } from "./auth.service.js";
 import {
   validateLoginBody,
+  validateClientReactivationConfirmBody,
+  validateClientReactivationRequestBody,
   validatePasswordResetConfirmBody,
   validatePasswordResetRequestBody,
   validateRegisterBody,
@@ -19,10 +21,25 @@ import {
   requestPasswordResetService,
 } from "./passwordReset.service.js";
 import {
+  confirmClientReactivationService,
   EmailVerificationError,
+  requestClientReactivationService,
   requestClientEmailVerificationService,
   requestInternalEmailVerificationService,
 } from "../emailVerification/emailVerification.service.js";
+
+function handleReactivationError(res: Response, error: unknown) {
+  if (error instanceof EmailVerificationError) {
+    if (error.retryAfterSeconds) res.setHeader("Retry-After", String(error.retryAfterSeconds));
+    return handleErrorClient(
+      res,
+      error.statusCode,
+      error.message,
+      error.retryAfterSeconds ? { retryAfterSeconds: error.retryAfterSeconds } : undefined,
+    );
+  }
+  return handleErrorServer(res, 500, "No se pudo procesar la reactivación de la cuenta", error);
+}
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Error desconocido";
@@ -59,6 +76,13 @@ export async function login(req: Request, res: Response) {
     return handleSuccess(res, 200, "Inicio de sesion exitoso", data);
   } catch (error) {
     if (error instanceof AuthError) {
+      if (error.code) {
+        return res.status(error.statusCode).json({
+          status: "error",
+          code: error.code,
+          message: error.message,
+        });
+      }
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo iniciar sesion", error);
@@ -138,5 +162,41 @@ export async function confirmPasswordReset(req: Request, res: Response) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
     return handleErrorServer(res, 500, "No se pudo actualizar la contrasena", getErrorMessage(error));
+  }
+}
+
+export async function requestClientReactivation(req: Request, res: Response) {
+  const validation = validateClientReactivationRequestBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(
+      res,
+      201,
+      "Código de reactivación enviado",
+      await requestClientReactivationService(validation.value.identifier, validation.value.password),
+    );
+  } catch (error) {
+    return handleReactivationError(res, error);
+  }
+}
+
+export async function confirmClientReactivation(req: Request, res: Response) {
+  const validation = validateClientReactivationConfirmBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    await confirmClientReactivationService(validation.value);
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(
+      res,
+      200,
+      "Cuenta reactivada correctamente. Ya puedes iniciar sesión.",
+    );
+  } catch (error) {
+    return handleReactivationError(res, error);
   }
 }

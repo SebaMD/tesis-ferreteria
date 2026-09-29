@@ -1,11 +1,11 @@
 import { ImageOff } from "lucide-react";
 import { Link } from "react-router-dom";
-import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
 import FavoriteButton from "./FavoriteButton.jsx";
 import useCart from "../hooks/useCart.js";
+import ProductPromotionPrice from "./ProductPromotionPrice.jsx";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
@@ -20,6 +20,7 @@ export default function ProductCard({ product }) {
 
   return (
     <article className="group relative grid min-h-full min-w-0 grid-rows-[220px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_12px_rgba(16,21,31,0.05)] transition hover:-translate-y-0.5 hover:border-rust-200 hover:shadow-[0_8px_24px_rgba(16,21,31,0.09)] max-[600px]:grid-rows-[140px_1fr] max-[380px]:grid-rows-[124px_1fr]">
+      {product.promotion && <span className="absolute top-3 left-3 z-10 rounded-full border border-white/80 bg-rust-600 px-2.5 py-1 text-[11px] font-black text-white shadow-sm max-[600px]:top-2 max-[600px]:left-2">{product.promotion.label}</span>}
       <FavoriteButton product={product} className="absolute top-3 right-3 z-10 max-[600px]:top-2 max-[600px]:right-2 max-[600px]:size-9 max-[600px]:min-h-9" />
       <Link className="grid place-items-center overflow-hidden bg-slate-100 text-slate-500" to={`/catalog/products/${product.id}`} aria-label={`Ver ${product.name}`}>
         {primaryImage ? (
@@ -37,7 +38,7 @@ export default function ProductCard({ product }) {
           <Link className="line-clamp-2 text-base font-bold text-ink-950 no-underline hover:text-rust-600 max-[600px]:text-sm" to={`/catalog/products/${product.id}`}>
             {product.name}
           </Link>
-          <strong className="font-mono text-xl text-ink-950 max-[600px]:text-base">{formatClp(product.price)}</strong>
+          <ProductPromotionPrice product={product} showBadge={false} />
           {product.brand && <span className="truncate text-xs text-slate-500" title={product.brand}>{product.brand}</span>}
           <span className={`line-clamp-2 text-xs font-extrabold ${hasStock ? "text-positive-600" : "text-critical-600"}`}>
             {hasStock ? `Disponible · ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}

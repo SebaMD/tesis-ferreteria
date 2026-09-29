@@ -340,14 +340,13 @@ try {
   assert.equal(warehouseVerified.data.user.requiresEmailVerification, false);
   console.log("PASS MANAGER/CASHIER/WAREHOUSE creation, cooldown, five-attempt block, resend and expiry");
 
-  assert.deepEqual((await request("GET", "/customer-notice")).data, []);
+  assert.deepEqual((await request("GET", "/customer-notice")).data.notices, []);
   await request("POST", "/customer-notice/configuration", {
     token: historicalWorkerLogin.data.token,
     body: {
       title: "No autorizado",
       message: "No debe guardarse",
       isActive: true,
-      sortOrder: 0,
       displaySeconds: 7,
       startsAt: null,
       endsAt: null,
@@ -359,30 +358,28 @@ try {
       title: "Horario especial",
       message: "Hoy atenderemos hasta las 17:00.",
       isActive: true,
-      sortOrder: 0,
       displaySeconds: 7,
       startsAt: null,
       endsAt: null,
     },
   }, 201);
   const publicNotice = await request("GET", "/customer-notice");
-  assert.equal(publicNotice.data.length, 1);
-  assert.equal(publicNotice.data[0].title, "Horario especial");
-  assert.equal(publicNotice.data[0].message, "Hoy atenderemos hasta las 17:00.");
-  assert.deepEqual(Object.keys(publicNotice.data[0]).sort(), ["displaySeconds", "id", "message", "title"]);
+  assert.equal(publicNotice.data.notices.length, 1);
+  assert.equal(publicNotice.data.notices[0].title, "Horario especial");
+  assert.equal(publicNotice.data.notices[0].message, "Hoy atenderemos hasta las 17:00.");
+  assert.deepEqual(Object.keys(publicNotice.data.notices[0]).sort(), ["displaySeconds", "id", "imageUrl", "message", "title"]);
   await request("PUT", `/customer-notice/configuration/${createdNotice.data.id}`, {
     token: internalLogin.data.token,
     body: {
       title: "Horario especial",
       message: "Hoy atenderemos hasta las 17:00.",
       isActive: false,
-      sortOrder: 0,
       displaySeconds: 7,
       startsAt: null,
       endsAt: null,
     },
   });
-  assert.deepEqual((await request("GET", "/customer-notice")).data, []);
+  assert.deepEqual((await request("GET", "/customer-notice")).data.notices, []);
   console.log("PASS notices are public only when visible, expose safe DTOs and are editable only by ADMIN/MANAGER");
 
   const workerEmailChanged = await request("PATCH", `/users/${workerCreated.data.id}`, {
@@ -391,7 +388,7 @@ try {
   });
   assert.equal(workerEmailChanged.data.emailVerification, undefined);
   assert.equal((await pool.query("SELECT email_verified_at FROM users WHERE id=$1", [workerCreated.data.id])).rows[0].email_verified_at, null);
-  await request("GET", "/products", { token: workerVerified.data.token }, 403);
+  await request("GET", "/products", { token: workerVerified.data.token }, 401);
   const changedWorkerLogin = await request("POST", "/auth/login", { body: { correo: "worker.changed@example.test", password: "Email-Test-2026!" } });
   assert.equal(changedWorkerLogin.data.emailVerification.sent, true);
   const changedWorkerPin = pinFrom(smtp.messages.at(-1));

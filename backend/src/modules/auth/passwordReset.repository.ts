@@ -97,7 +97,11 @@ export async function replaceActiveUserPassword(
   now: Date,
 ) {
   const [updated] = await tx.update(usersTable)
-    .set({ password, updatedAt: now })
+    .set({
+      password,
+      authVersion: sql`${usersTable.authVersion} + 1`,
+      updatedAt: now,
+    })
     .where(and(eq(usersTable.id, userId), eq(usersTable.status, "ACTIVE")))
     .returning({ id: usersTable.id });
   return updated ?? null;

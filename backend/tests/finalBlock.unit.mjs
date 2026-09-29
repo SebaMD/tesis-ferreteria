@@ -4,7 +4,11 @@ import { randomBytes } from "node:crypto";
 process.env.EMAIL_VERIFICATION_SECRET = randomBytes(32).toString("hex");
 process.env.DATABASE_URL = "postgresql://unused:unused@127.0.0.1:1/unused";
 
-const { validateCustomerNotice } = await import("../dist/modules/customerNotice/customerNotice.validation.js");
+const {
+  validateCatalogPresentation,
+  validateCustomerNotice,
+  validateCustomerNoticeOrder,
+} = await import("../dist/modules/customerNotice/customerNotice.validation.js");
 const { hashVerificationPin, verificationPinMatches } = await import("../dist/modules/emailVerification/emailVerification.security.js");
 const { validateLoginBody } = await import("../dist/modules/auth/auth.validation.js");
 const { validateClientProfileBody } = await import("../dist/modules/users/users.validation.js");
@@ -15,7 +19,6 @@ const validNotice = validateCustomerNotice({
   title: " Horario   especial ",
   message: "Hoy cerramos a las 17:00.\nGracias.",
   isActive: true,
-  sortOrder: 2,
   displaySeconds: 8,
   startsAt: "2026-09-24T10:00:00.000Z",
   endsAt: null,
@@ -24,15 +27,18 @@ assert.equal(validNotice.success, true);
 assert.equal(validNotice.value.title, "Horario especial");
 assert.equal(validNotice.value.message, "Hoy cerramos a las 17:00.\nGracias.");
 assert.equal(validNotice.value.isActive, true);
-assert.equal(validNotice.value.sortOrder, 2);
 assert.equal(validNotice.value.displaySeconds, 8);
 assert.equal(validNotice.value.startsAt.toISOString(), "2026-09-24T10:00:00.000Z");
 assert.equal(validNotice.value.endsAt, null);
 for (const displaySeconds of [2, 31, 7.5]) {
-  assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, sortOrder: 0, displaySeconds, startsAt: null, endsAt: null }).success, false);
+  assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, displaySeconds, startsAt: null, endsAt: null }).success, false);
 }
-assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, sortOrder: 0, displaySeconds: 7, startsAt: "2026-09-25T10:00:00.000Z", endsAt: "2026-09-24T10:00:00.000Z" }).success, false);
-assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: false, sortOrder: 0, displaySeconds: 7, startsAt: null, endsAt: null, userId: 7 }).success, false);
+assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: true, displaySeconds: 7, startsAt: "2026-09-25T10:00:00.000Z", endsAt: "2026-09-24T10:00:00.000Z" }).success, false);
+assert.equal(validateCustomerNotice({ title: "Aviso", message: "Texto", isActive: false, displaySeconds: 7, startsAt: null, endsAt: null, sortOrder: 7 }).success, false);
+assert.equal(validateCatalogPresentation({ title: "Catálogo", mainText: "Texto principal", secondaryText: "Texto secundario" }).success, true);
+assert.equal(validateCatalogPresentation({ title: "Catálogo", mainText: "", secondaryText: "Texto secundario" }).success, false);
+assert.deepEqual(validateCustomerNoticeOrder({ noticeIds: [3, 1, 2] }), { success: true, value: [3, 1, 2] });
+assert.equal(validateCustomerNoticeOrder({ noticeIds: [1, 1] }).success, false);
 
 const base = { challengeId: 9, email: "worker@example.test", pin: "004219" };
 const internalHash = hashVerificationPin({ ...base, purpose: "INTERNAL_USER_REGISTRATION" });

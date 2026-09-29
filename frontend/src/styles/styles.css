@@ -369,6 +369,12 @@
   background: #232c38 !important;
 }
 
+.dark .client-account-deactivation-warning {
+  border-color: #8a5a16 !important;
+  background: #33270f !important;
+  color: #fde68a !important;
+}
+
 .dark .login-submit-button {
   border-color: #526174 !important;
   background: #354152 !important;
@@ -384,6 +390,12 @@
   border: 1px solid #28557a;
   background: #12304a !important;
   color: #bfdbfe !important;
+}
+
+.dark .customer-notice-editor,
+.dark .customer-notice-presentation {
+  border-color: #b45309 !important;
+  background: #2d241c !important;
 }
 
 .dark .text-ink-950,
@@ -491,10 +503,35 @@
   will-change: transform;
 }
 
+.customer-notice-card {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.customer-notice-card--dragging {
+  position: relative;
+  z-index: 5;
+  transform: translateY(-2px) scale(1.008);
+  box-shadow: 0 14px 30px rgb(16 21 31 / 18%);
+}
+
+.customer-notice-reorder-item--dragging .customer-notice-drag-handle {
+  cursor: grabbing;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-select-trigger svg,
-  .catalog-notice-track {
+  .catalog-notice-track,
+  .catalog-notice-indicator,
+  .customer-notice-card {
     transition: none;
+  }
+
+  .customer-notice-card--dragging {
+    transform: none;
   }
 }
 
@@ -515,6 +552,18 @@
   color: #ffffff !important;
   background: var(--color-critical-600) !important;
   border-color: #dc2626 !important;
+}
+
+.app-toast-action {
+  border: 1px solid #d6dbe1 !important;
+  background: #ffffff !important;
+  color: #18202b !important;
+  box-shadow: 0 1px 3px rgb(16 21 31 / 16%) !important;
+}
+
+.app-toast-action:not(:disabled):hover {
+  border-color: #aeb6c0 !important;
+  background: #f1f3f5 !important;
 }
 
 .app-loading-overlay {

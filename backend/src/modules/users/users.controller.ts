@@ -6,7 +6,9 @@ import {
   handleSuccess,
 } from "../../utils/helpers.js";
 import {
+  ClientAccountError,
   createUserService,
+  deactivateClientAccountService,
   deleteUserService,
   editUserService,
   getUserByIdService,
@@ -15,7 +17,7 @@ import {
   updateCashierScheduleService,
   updateClientProfileService,
 } from "./users.service.js";
-import { validateCashierScheduleBody, validateClientProfileBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
+import { validateCashierScheduleBody, validateClientDeactivationBody, validateClientProfileBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -152,6 +154,27 @@ export async function updateMyClientProfile(req: AuthenticatedRequest, res: Resp
       return handleErrorClient(res, 403, message);
     }
     return handleErrorServer(res, 500, "No se pudo actualizar el perfil", error);
+  }
+}
+
+export async function deactivateMyClientAccount(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientDeactivationBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+    return handleSuccess(
+      res,
+      200,
+      "Cuenta desactivada correctamente",
+      await deactivateClientAccountService(req.user.id, validation.value),
+    );
+  } catch (error) {
+    if (error instanceof ClientAccountError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo desactivar la cuenta", error);
   }
 }
 

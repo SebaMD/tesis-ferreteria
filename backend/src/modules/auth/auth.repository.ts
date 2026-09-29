@@ -15,6 +15,8 @@ const authUserColumns = {
   password: usersTable.password,
   phone: usersTable.phone,
   status: usersTable.status,
+  selfDeactivatedAt: usersTable.selfDeactivatedAt,
+  authVersion: usersTable.authVersion,
   createdAt: usersTable.createdAt,
   updatedAt: usersTable.updatedAt,
 };

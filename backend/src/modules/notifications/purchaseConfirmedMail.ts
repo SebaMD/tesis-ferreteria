@@ -2,6 +2,7 @@ import {
   formatOrderDate,
   formatOrderMoney,
   formatOrderQuantity,
+  formatPromotionSummary,
   type OrderCommercialModel,
 } from "../onlineOrders/orderCommercialModel.js";
 
@@ -29,10 +30,12 @@ export function renderPurchaseConfirmedMail(
   trackingUrl?: string,
 ): RenderedMailContent {
   const safeTrackingUrl = trackingUrl ? escapeMailHtml(trackingUrl) : "";
-  const textItems = model.items.map((item) => (
-    `- ${item.productName}: ${formatOrderQuantity(item.quantity, item.unitMeasure)} · `
+  const textItems = model.items.map((item) => {
+    const promotion = formatPromotionSummary(item);
+    return `- ${item.productName}: ${formatOrderQuantity(item.quantity, item.unitMeasure)} · `
       + `${formatOrderMoney(item.unitPrice)} c/u · ${formatOrderMoney(item.subtotal)}`
-  )).join("\n");
+      + (promotion ? `\n  ${promotion} · -${formatOrderMoney(item.discountAmount)}` : "");
+  }).join("\n");
   const address = model.delivery.type === "DELIVERY" ? deliveryAddress(model) : "";
   const recipient = model.delivery.type === "DELIVERY"
     ? model.delivery.recipientName || model.buyer.name
@@ -51,7 +54,9 @@ export function renderPurchaseConfirmedMail(
     "Productos:",
     textItems,
     "",
-    `Total: ${formatOrderMoney(model.total)}`,
+    `Subtotal a precio normal: ${formatOrderMoney(model.baseSubtotal)}`,
+    `Descuentos: -${formatOrderMoney(model.totalDiscount)}`,
+    `Total pagado: ${formatOrderMoney(model.total)}`,
     `Modalidad: ${model.delivery.label}`,
     ...(recipient ? [`Destinatario: ${recipient}`] : []),
     ...(address ? [`Dirección de entrega: ${address}`] : []),
@@ -62,13 +67,16 @@ export function renderPurchaseConfirmedMail(
     "Este es un comprobante de compra; no corresponde a una boleta, factura ni documento tributario.",
   ].join("\n");
 
-  const itemRows = model.items.map((item) => `
+  const itemRows = model.items.map((item) => {
+    const promotion = formatPromotionSummary(item);
+    return `
     <tr>
-      <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeMailHtml(item.productName)}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeMailHtml(item.productName)}${promotion ? `<br><span style="color:#c2410c;font-size:11px;font-weight:700;">${escapeMailHtml(promotion)} · -${escapeMailHtml(formatOrderMoney(item.discountAmount))}</span>` : ""}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#374151;text-align:right;white-space:nowrap;">${escapeMailHtml(formatOrderQuantity(item.quantity, item.unitMeasure))}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#374151;text-align:right;white-space:nowrap;">${escapeMailHtml(formatOrderMoney(item.unitPrice))}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;text-align:right;white-space:nowrap;font-weight:700;">${escapeMailHtml(formatOrderMoney(item.subtotal))}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   const trackingAction = trackingUrl
     ? `<p style="margin:22px 0 0;text-align:center;"><a href="${safeTrackingUrl}" style="display:inline-block;padding:11px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:5px;font-weight:700;">${model.buyer.type === "GUEST" ? "Ver seguimiento seguro" : "Ver mis compras"}</a></p>`
     : "";
@@ -109,7 +117,9 @@ export function renderPurchaseConfirmedMail(
               <tr><td style="padding:5px 0;color:#4b5563;font-size:14px;">Modalidad</td><td align="right" style="padding:5px 0;font-size:14px;font-weight:700;">${escapeMailHtml(model.delivery.label)}</td></tr>
               ${recipient ? `<tr><td style="padding:5px 0;color:#4b5563;font-size:14px;vertical-align:top;">Destinatario</td><td align="right" style="padding:5px 0;font-size:14px;">${escapeMailHtml(recipient)}</td></tr>` : ""}
               ${address ? `<tr><td style="padding:5px 0;color:#4b5563;font-size:14px;vertical-align:top;">Dirección</td><td align="right" style="padding:5px 0;font-size:14px;">${escapeMailHtml(address)}</td></tr>` : ""}
-              <tr><td style="padding:14px 0 5px;border-top:2px solid #111827;font-size:16px;font-weight:700;">TOTAL</td><td align="right" style="padding:14px 0 5px;border-top:2px solid #111827;font-size:20px;font-weight:800;">${escapeMailHtml(formatOrderMoney(model.total))}</td></tr>
+              <tr><td style="padding:14px 0 5px;border-top:1px solid #e5e7eb;color:#4b5563;font-size:13px;">Subtotal a precio normal</td><td align="right" style="padding:14px 0 5px;border-top:1px solid #e5e7eb;font-size:13px;">${escapeMailHtml(formatOrderMoney(model.baseSubtotal))}</td></tr>
+              <tr><td style="padding:5px 0;color:#4b5563;font-size:13px;">Descuentos</td><td align="right" style="padding:5px 0;color:#c2410c;font-size:13px;font-weight:700;">-${escapeMailHtml(formatOrderMoney(model.totalDiscount))}</td></tr>
+              <tr><td style="padding:14px 0 5px;border-top:2px solid #111827;font-size:16px;font-weight:700;">TOTAL PAGADO</td><td align="right" style="padding:14px 0 5px;border-top:2px solid #111827;font-size:20px;font-weight:800;">${escapeMailHtml(formatOrderMoney(model.total))}</td></tr>
             </table>
 
             ${trackingAction}

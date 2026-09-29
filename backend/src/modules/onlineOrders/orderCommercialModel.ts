@@ -39,7 +39,7 @@ const UNIT_PLURALS: Record<string, string> = {
   tarro: "tarros",
 };
 
-export function formatOrderMoney(value: string) {
+export function formatOrderMoney(value: string | number) {
   return CLP_FORMATTER.format(Number(value));
 }
 
@@ -63,6 +63,11 @@ type CommercialOrderItemSource = {
   quantity: number;
   unitPrice: string;
   subtotal: string;
+  discountAmount?: string;
+  promotionId?: number | null;
+  promotionTypeSnapshot?: "PERCENTAGE_DISCOUNT" | "BUY_2_PAY_1" | null;
+  promotionNameSnapshot?: string | null;
+  promotionValueSnapshot?: number | null;
 };
 
 export type CommercialOrderSource = {
@@ -101,7 +106,15 @@ export type OrderCommercialModel = {
     quantity: number;
     unitPrice: string;
     subtotal: string;
+    discountAmount: string;
+    promotionId: number | null;
+    promotionType: "PERCENTAGE_DISCOUNT" | "BUY_2_PAY_1" | null;
+    promotionName: string | null;
+    promotionValue: number | null;
+    freeUnits: number;
   }>;
+  baseSubtotal: string;
+  totalDiscount: string;
   total: string;
   delivery: {
     type: "PICKUP" | "DELIVERY";
@@ -114,12 +127,39 @@ export type OrderCommercialModel = {
   };
 };
 
+export function formatPromotionSummary(item: OrderCommercialModel["items"][number]) {
+  if (!item.promotionType) return null;
+  if (item.promotionType === "BUY_2_PAY_1") {
+    return `${item.promotionName || "Promocion 2x1"} · 2x1 · ${item.freeUnits} ${item.freeUnits === 1 ? "unidad" : "unidades"} sin costo`;
+  }
+  return `${item.promotionName || "Promocion"} · ${item.promotionValue}% de descuento`;
+}
+
 export function isReceiptEligibleStatus(status: string) {
   return RECEIPT_ELIGIBLE_ORDER_STATUSES.has(status);
 }
 
 export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCommercialModel {
   const deliveryType = order.deliveryType === "DELIVERY" ? "DELIVERY" : "PICKUP";
+  const items = order.items.map((item) => ({
+    productId: item.productId,
+    productName: item.productName,
+    unitMeasure: item.unitMeasure?.trim() || null,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    subtotal: item.subtotal,
+    discountAmount: item.discountAmount ?? "0.00",
+    promotionId: item.promotionId ?? null,
+    promotionType: item.promotionTypeSnapshot ?? null,
+    promotionName: item.promotionNameSnapshot ?? null,
+    promotionValue: item.promotionValueSnapshot ?? null,
+    freeUnits: item.promotionTypeSnapshot === "BUY_2_PAY_1" ? Math.floor(item.quantity / 2) : 0,
+  }));
+  const baseSubtotal = items.reduce(
+    (total, item) => total + Number(item.unitPrice) * item.quantity,
+    0,
+  );
+  const totalDiscount = items.reduce((total, item) => total + Number(item.discountAmount), 0);
 
   return {
     orderId: order.id,
@@ -131,14 +171,9 @@ export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCo
       name: order.buyerName?.trim() || (order.buyerType === "GUEST" ? "Invitado" : "Cliente registrado"),
       email: order.buyerEmail?.trim() || "",
     },
-    items: order.items.map((item) => ({
-      productId: item.productId,
-      productName: item.productName,
-      unitMeasure: item.unitMeasure?.trim() || null,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.subtotal,
-    })),
+    items,
+    baseSubtotal: baseSubtotal.toFixed(2),
+    totalDiscount: totalDiscount.toFixed(2),
     total: order.total,
     delivery: {
       type: deliveryType,

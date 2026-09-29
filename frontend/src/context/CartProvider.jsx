@@ -5,6 +5,7 @@ import { getRemainingCartCapacity, validateCartQuantity } from "../helpers/cartQ
 import { createCartRemovalUndo } from "../helpers/cartUndo.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import CartContext from "./CartContext.js";
+import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
 
@@ -149,7 +150,7 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     items,
     totalUnits: items.reduce((total, item) => total + Number(item.quantity || 0), 0),
     total: items.reduce(
-      (total, item) => total + Number(item.product?.price || 0) * Number(item.quantity || 0),
+      (total, item) => total + getProductPromotionPricing(item.product, item.quantity).finalSubtotal,
       0,
     ),
     addItem,

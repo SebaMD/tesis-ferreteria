@@ -21,6 +21,7 @@ import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActi
 import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
+import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
@@ -559,7 +560,7 @@ export default function OnlineOrdersManagementPage() {
                 <MobileDetailGrid>
                   <MobileDetailField label="Origen"><span className={badgeClass(origin.tone)}>{origin.label}</span></MobileDetailField>
                   <MobileDetailField label="Responsable">{currentResponsible(order)}</MobileDetailField>
-                  {order.customerName && <MobileDetailField label="Cliente / destinatario" wide>{customerName(order)}{order.customerType === "GUEST" ? " · Invitado" : ""}</MobileDetailField>}
+                  {order.customerName && <MobileDetailField label="Cliente / destinatario" wide>{customerName(order)}{order.customerType === "GUEST" && <span className="text-slate-500"> (Invitado)</span>}</MobileDetailField>}
                   {order.customerEmail && <MobileDetailField label="Correo" wide><span className="break-all">{order.customerEmail}</span></MobileDetailField>}
                   <MobileDetailField label="Productos" wide>{productSummary(order)}</MobileDetailField>
                   <MobileDetailField label="Total">{formatClp(order.total)}</MobileDetailField>
@@ -585,9 +586,9 @@ export default function OnlineOrdersManagementPage() {
                     <td><span className={badgeClass(origin.tone)}>{origin.label}</span></td>
                     <td className={dateCellClass}>{formatDate(order.paidAt || order.createdAt, DATE_OPTIONS)}</td>
                     <td>
-                      <span className="flex flex-wrap items-center gap-2">
+                      <span className="block">
                         <strong className="text-ink-950">{customerName(order)}</strong>
-                        {order.customerType === "GUEST" && <span className={badgeClass("neutral")}>Invitado</span>}
+                        {order.customerType === "GUEST" && <span className="text-sm text-slate-500"> (Invitado)</span>}
                       </span>
                       {order.customerEmail && <span className="text-xs text-slate-500">{order.customerEmail}</span>}
                     </td>
@@ -665,7 +666,7 @@ export default function OnlineOrdersManagementPage() {
             <dl className="grid grid-cols-3 gap-3 max-[800px]:grid-cols-2 max-[520px]:grid-cols-1">
               {selectedOrder.customerName && (
                 <DetailField label={selectedOrder.origin === "ONLINE" ? "Comprador" : "Destinatario"}>
-                  {selectedOrder.customerName}{selectedOrder.customerType === "GUEST" ? " · Invitado" : ""}
+                  {selectedOrder.customerName}{selectedOrder.customerType === "GUEST" ? " (Invitado)" : ""}
                 </DetailField>
               )}
               {selectedOrder.customerRut && (
@@ -708,6 +709,7 @@ export default function OnlineOrdersManagementPage() {
                 renderSummary={(item) => (
                   <div className="grid min-w-0 gap-2">
                     <strong className="truncate text-sm text-ink-950">{item.productName}</strong>
+                    <OrderItemPromotion item={item} compact />
                     <div className="flex items-center justify-between gap-3 text-xs">
                       <span className="text-slate-600">Cantidad: {item.quantity}</span>
                       <strong className="font-mono text-ink-950">{formatClp(item.subtotal)}</strong>
@@ -725,7 +727,7 @@ export default function OnlineOrdersManagementPage() {
               <div className={tableScrollClass}>
                 <table>
                   <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
-                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="font-semibold text-ink-950">{item.productName}</td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
+                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="font-semibold text-ink-950">{item.productName}<OrderItemPromotion item={item} compact /></td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
                 </table>
               </div>
                 )}

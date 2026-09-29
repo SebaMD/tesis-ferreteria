@@ -96,6 +96,11 @@ import type {
   CreateGuestCheckoutBody,
 } from "./onlineOrders.validation.js";
 import { consumeVerifiedGuestChallenge } from "../emailVerification/emailVerification.repository.js";
+import {
+  acquirePromotionPricingLock,
+  findActivePromotionsForProductsTx,
+} from "../promotions/promotions.repository.js";
+import { calculatePromotionPricing } from "../promotions/promotionPricing.js";
 
 export class OnlineOrderError extends Error {
   constructor(
@@ -377,9 +382,15 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
       }
 
       const productIds = data.items.map((item) => item.productId);
+      await acquirePromotionPricingLock(tx);
       const products = await lockProductsForAvailability(tx, productIds);
       const productById = new Map(products.map((product) => [product.id, product]));
       const reservedByProduct = await findActiveReservedQuantities(tx, productIds);
+      const promotionsByProduct = await findActivePromotionsForProductsTx(
+        tx,
+        productIds,
+        new Date(),
+      );
 
       const orderItems = data.items.map((item) => {
         const product = productById.get(item.productId);
@@ -407,13 +418,25 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
           );
         }
 
-        const unitPriceInCents = moneyInCents(unitPrice);
-        const subtotalInCents = unitPriceInCents * item.quantity;
+        const pricing = calculatePromotionPricing(
+          unitPrice,
+          item.quantity,
+          promotionsByProduct.get(product.id) ?? null,
+        );
+        const unitPriceInCents = moneyInCents(pricing.baseUnitPrice);
+        const subtotalInCents = moneyInCents(pricing.finalSubtotal);
         return {
           productId: product.id,
           quantity: item.quantity,
           unitPrice: (unitPriceInCents / 100).toFixed(2),
           subtotal: (subtotalInCents / 100).toFixed(2),
+          discountAmount: pricing.discountAmount.toFixed(2),
+          promotionId: pricing.promotion?.id ?? null,
+          promotionTypeSnapshot: pricing.promotion?.type ?? null,
+          promotionNameSnapshot: pricing.promotion?.name ?? null,
+          promotionValueSnapshot: pricing.promotion?.type === "PERCENTAGE_DISCOUNT"
+            ? pricing.promotion.percentage
+            : null,
           subtotalInCents,
         };
       });
@@ -448,6 +471,11 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         subtotal: item.subtotal,
+          discountAmount: item.discountAmount,
+          promotionId: item.promotionId,
+          promotionTypeSnapshot: item.promotionTypeSnapshot,
+          promotionNameSnapshot: item.promotionNameSnapshot,
+          promotionValueSnapshot: item.promotionValueSnapshot,
       })));
 
       if (

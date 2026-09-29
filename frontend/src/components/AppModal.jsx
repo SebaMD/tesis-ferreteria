@@ -16,6 +16,7 @@ export default function AppModal({
   onClose,
   children,
   footer,
+  headerActions,
   size = "medium",
   panelClassName = "",
 }) {
@@ -93,16 +94,19 @@ export default function AppModal({
             <h2 className="m-0 text-[17px] font-bold text-ink-950" id={titleId}>{title}</h2>
             {description && <p className="mt-1 mb-0 text-xs leading-[1.45] text-slate-500" id={descriptionId}>{description}</p>}
           </div>
-          <button
-            className="size-10 min-h-10 shrink-0 border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar diálogo"
-            title="Cerrar"
-          >
-            <X size={19} />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {headerActions}
+            <button
+              className="size-10 min-h-10 shrink-0 border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar diálogo"
+              title="Cerrar"
+            >
+              <X size={19} />
+            </button>
+          </div>
         </header>
         <div className="min-h-0 overflow-y-auto overscroll-contain p-5 max-[720px]:px-4">{children}</div>
         {footer && <footer className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}

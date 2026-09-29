@@ -7,6 +7,7 @@ export const EMAIL_VERIFICATION_PURPOSES = [
   "CLIENT_EMAIL_CHANGE",
   "GUEST_CHECKOUT",
   "INTERNAL_USER_REGISTRATION",
+  "CLIENT_REACTIVATION",
 ] as const;
 
 export type EmailVerificationPurpose = (typeof EMAIL_VERIFICATION_PURPOSES)[number];
@@ -40,12 +41,12 @@ export const emailVerificationChallengesTable = pgTable(
       .where(sql`${table.guestSessionHash} is not null and ${table.consumedAt} is null`),
     check(
       "email_verification_purpose_check",
-      sql`${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'GUEST_CHECKOUT', 'INTERNAL_USER_REGISTRATION')`,
+      sql`${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'GUEST_CHECKOUT', 'INTERNAL_USER_REGISTRATION', 'CLIENT_REACTIVATION')`,
     ),
     check(
       "email_verification_owner_check",
       sql`(
-        ${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'INTERNAL_USER_REGISTRATION')
+        ${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'INTERNAL_USER_REGISTRATION', 'CLIENT_REACTIVATION')
         and ${table.userId} is not null
         and ${table.guestSessionHash} is null
       ) or (

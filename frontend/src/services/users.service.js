@@ -34,3 +34,8 @@ export async function updateMyClientProfileRequest(data) {
   const response = await api.patch("/users/me/profile", data);
   return response.data.data;
 }
+
+export async function deactivateMyClientAccountRequest(password) {
+  const response = await api.post("/users/me/deactivate", { password });
+  return response.data.data;
+}

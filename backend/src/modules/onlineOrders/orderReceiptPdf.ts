@@ -3,6 +3,7 @@ import {
   formatOrderDate,
   formatOrderMoney,
   formatOrderQuantity,
+  formatPromotionSummary,
   type OrderCommercialModel,
 } from "./orderCommercialModel.js";
 
@@ -78,11 +79,21 @@ function renderItems(document: PDFKit.PDFDocument, model: OrderCommercialModel) 
   renderTableHeader(document);
   for (const item of model.items) {
     document.font("Helvetica").fontSize(9);
-    const productHeight = document.heightOfString(item.productName, { width: TABLE.product - 12 });
+    const promotionSummary = formatPromotionSummary(item);
+    const productText = promotionSummary ? `${item.productName}\n${promotionSummary}` : item.productName;
+    const productHeight = document.heightOfString(productText, { width: TABLE.product - 12 });
     const rowHeight = Math.max(28, productHeight + 12);
     ensureTableSpace(document, rowHeight, model);
     const y = document.y;
     document.fillColor("#111827").text(item.productName, TABLE.left + 6, y + 6, { width: TABLE.product - 12 });
+    if (promotionSummary) {
+      document.fillColor("#c2410c").fontSize(7.5).text(
+        `${promotionSummary} · -${formatOrderMoney(item.discountAmount)}`,
+        TABLE.left + 6,
+        document.y + 2,
+        { width: TABLE.product - 12 },
+      );
+    }
     document.text(formatOrderQuantity(item.quantity, item.unitMeasure), TABLE.left + TABLE.product, y + 6, { width: TABLE.quantity - 6, align: "right" });
     document.text(formatOrderMoney(item.unitPrice), TABLE.left + TABLE.product + TABLE.quantity, y + 6, { width: TABLE.unitPrice - 6, align: "right" });
     document.font("Helvetica-Bold").text(formatOrderMoney(item.subtotal), TABLE.left + TABLE.product + TABLE.quantity + TABLE.unitPrice, y + 6, { width: TABLE.subtotal - 6, align: "right" });
@@ -95,8 +106,13 @@ function renderTotal(document: PDFKit.PDFDocument, model: OrderCommercialModel) 
   if (document.y > 710) document.addPage();
   document.moveDown(1);
   const totalY = document.y;
-  document.font("Helvetica-Bold").fontSize(11).fillColor("#374151").text("Total", 355, totalY, { width: 80, align: "right" });
-  document.fontSize(15).fillColor("#111827").text(formatOrderMoney(model.total), 435, totalY - 1, { width: 110, align: "right" });
+  document.font("Helvetica").fontSize(9).fillColor("#4b5563").text("Subtotal a precio normal", 315, totalY, { width: 120, align: "right" });
+  document.text(formatOrderMoney(model.baseSubtotal), 435, totalY, { width: 110, align: "right" });
+  document.text("Descuentos", 315, totalY + 16, { width: 120, align: "right" });
+  document.fillColor("#c2410c").text(`-${formatOrderMoney(model.totalDiscount)}`, 435, totalY + 16, { width: 110, align: "right" });
+  document.font("Helvetica-Bold").fontSize(11).fillColor("#374151").text("Total pagado", 315, totalY + 36, { width: 120, align: "right" });
+  document.fontSize(15).fillColor("#111827").text(formatOrderMoney(model.total), 435, totalY + 35, { width: 110, align: "right" });
+  document.y = totalY + 55;
   document.moveDown(2);
   document.font("Helvetica").fontSize(10).fillColor("#4b5563").text("Gracias por tu compra.", 50, document.y, { width: 495, align: "center" });
   document.moveDown(0.4).fontSize(8.5).fillColor("#6b7280").text(

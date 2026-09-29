@@ -102,6 +102,16 @@ export async function createProduct(data: NewProduct) {
     return findProductById(product.id);
 }
 
+export async function createProductTx(tx: DbTransaction, data: NewProduct) {
+    const [product] = await tx.insert(productsTable).values(data).returning({
+        id: productsTable.id,
+        name: productsTable.name,
+        categoryId: productsTable.categoryId,
+        status: productsTable.status,
+    });
+    return product;
+}
+
 export async function updateProductById(id: number, data: Partial<NewProduct>) {
     const [product] = await db
         .update(productsTable)
@@ -110,6 +120,20 @@ export async function updateProductById(id: number, data: Partial<NewProduct>) {
         .returning({ id: productsTable.id });
     if (!product) return null;
     return findProductById(product.id, true);
+}
+
+export async function updateProductByIdTx(tx: DbTransaction, id: number, data: Partial<NewProduct>) {
+    const [product] = await tx
+        .update(productsTable)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(productsTable.id, id))
+        .returning({
+            id: productsTable.id,
+            name: productsTable.name,
+            categoryId: productsTable.categoryId,
+            status: productsTable.status,
+        });
+    return product ?? null;
 }
 
 export async function deleteProductById(id: number) {

@@ -34,6 +34,9 @@ export async function findVerificationUserForUpdate(tx: DbTransaction, userId: n
     status: usersTable.status,
     correo: usersTable.correo,
     emailVerifiedAt: usersTable.emailVerifiedAt,
+    password: usersTable.password,
+    selfDeactivatedAt: usersTable.selfDeactivatedAt,
+    authVersion: usersTable.authVersion,
   }).from(usersTable)
     .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
     .where(eq(usersTable.id, userId))
@@ -115,6 +118,19 @@ export async function invalidateActiveChallenges(
     ));
 }
 
+export async function invalidateAllActiveUserChallenges(
+  tx: DbTransaction,
+  userId: number,
+  now: Date,
+) {
+  await tx.update(emailVerificationChallengesTable)
+    .set({ consumedAt: now, updatedAt: now })
+    .where(and(
+      eq(emailVerificationChallengesTable.userId, userId),
+      isNull(emailVerificationChallengesTable.consumedAt),
+    ));
+}
+
 export async function createVerificationChallenge(
   tx: DbTransaction,
   input: {
@@ -192,6 +208,25 @@ export async function markClientEmailVerified(tx: DbTransaction, userId: number,
 }
 
 export const markUserEmailVerified = markClientEmailVerified;
+
+export async function reactivateSelfDeactivatedClient(
+  tx: DbTransaction,
+  userId: number,
+  now: Date,
+) {
+  const [updated] = await tx.update(usersTable).set({
+    status: "ACTIVE",
+    selfDeactivatedAt: null,
+    emailVerifiedAt: sql`coalesce(${usersTable.emailVerifiedAt}, ${now})`,
+    authVersion: sql`${usersTable.authVersion} + 1`,
+    updatedAt: now,
+  }).where(and(
+    eq(usersTable.id, userId),
+    eq(usersTable.status, "INACTIVE"),
+    sql`${usersTable.selfDeactivatedAt} is not null`,
+  )).returning({ id: usersTable.id });
+  return updated ?? null;
+}
 
 export async function changeClientEmail(
   tx: DbTransaction,

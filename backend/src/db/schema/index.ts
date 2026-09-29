@@ -18,3 +18,5 @@ export * from "./clientProductFavorites.js";
 export * from "./emailVerificationChallenges.js";
 export * from "./passwordResetTokens.js";
 export * from "./customerNotice.js";
+export * from "./catalogPresentation.js";
+export * from "./promotions.js";

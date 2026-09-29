@@ -22,6 +22,7 @@ export type CashierScheduleBody = {
   shiftNote: string | null;
 };
 export type ClientProfileBody = { phone: string | null };
+export type ClientDeactivationBody = { password: string };
 
 type ValidationResult<T> =
   | {
@@ -223,6 +224,23 @@ export function validateClientProfileBody(body: unknown): ValidationResult<Clien
     return { success: false, error: "El teléfono debe ser un móvil chileno válido. Ejemplo: +56912345678" };
   }
   return { success: true, value: { phone } };
+}
+
+export function validateClientDeactivationBody(body: unknown): ValidationResult<ClientDeactivationBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debes ingresar tu contraseña actual" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "password")) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.password !== "string" || !input.password) {
+    return { success: false, error: "Debes ingresar tu contraseña actual" };
+  }
+  if (input.password.length > 128) {
+    return { success: false, error: "La contraseña no es válida" };
+  }
+  return { success: true, value: { password: input.password } };
 }
 
 export function validateCashierScheduleBody(body: unknown): ValidationResult<CashierScheduleBody> {

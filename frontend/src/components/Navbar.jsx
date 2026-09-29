@@ -1,5 +1,5 @@
-import { LogOut, Mail, Megaphone, Menu, ShieldCheck, UserRound } from "lucide-react";
-import { useState } from "react";
+import { LogOut, Mail, Megaphone, Menu, Plus, ShieldCheck, UserRound } from "lucide-react";
+import { useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
@@ -15,6 +15,7 @@ const pageNames = {
   "/inventory": "Inventario",
   "/reports": "Reportes",
   "/users": "Usuarios",
+  "/promotions": "Promociones",
 };
 
 export default function Navbar({ onToggleSidebar }) {
@@ -22,6 +23,7 @@ export default function Navbar({ onToggleSidebar }) {
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const noticeManagerRef = useRef(null);
   const canManageNotice = ["ADMIN", "MANAGER"].includes(user?.role);
 
   return (
@@ -47,8 +49,19 @@ export default function Navbar({ onToggleSidebar }) {
           <LogOut size={18} />
         </button>
       </div>
-      <AppModal open={noticeOpen} onClose={() => setNoticeOpen(false)} title="Avisos a clientes" description="Configura la información operacional visible en la tienda online." size="large">
-        {canManageNotice && <CustomerNoticeManager embedded />}
+      <AppModal
+        open={noticeOpen}
+        onClose={() => setNoticeOpen(false)}
+        title={<span className="flex items-center gap-2"><Megaphone size={19} aria-hidden="true" /> Avisos a clientes</span>}
+        description="Administra los mensajes que acompañan la presentación del catálogo."
+        size="xlarge"
+        headerActions={canManageNotice && (
+          <button className="min-h-10 max-[520px]:px-2.5" type="button" onClick={() => noticeManagerRef.current?.startCreate()} aria-label="Nuevo aviso">
+            <Plus size={17} /> <span className="max-[520px]:hidden">Nuevo aviso</span>
+          </button>
+        )}
+      >
+        {canManageNotice && <CustomerNoticeManager ref={noticeManagerRef} embedded />}
       </AppModal>
       <AppModal open={profileOpen} onClose={() => setProfileOpen(false)} title="Mi perfil" description="Información de tu cuenta y preferencias de visualización.">
         <div className="grid gap-5">

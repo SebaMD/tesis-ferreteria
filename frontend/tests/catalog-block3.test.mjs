@@ -1,41 +1,61 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { EMPTY_CATALOG_FILTERS as defaults, filterAndSortCatalog, getCatalogBrands, validatePriceRange } from "../src/helpers/catalogFilters.js";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import {
+  CATALOG_PAGE_SIZES,
+  getCatalogPageRange,
+  validatePriceRange,
+} from "../src/helpers/catalogFilters.js";
 
-const products = [
-  { id: 1, name: "Zinc", categoryId: 1, categoryName: "Materiales", price: "20.00", currentStock: 10, availableStock: 0, brand: "  Marca   Uno " },
-  { id: 2, name: "Árbol", categoryId: 2, categoryName: "Jardín", price: "100.00", availableStock: 4, brand: "marca uno" },
-  { id: 3, name: "Cable", categoryId: 1, categoryName: "Materiales", price: "9.00", currentStock: 2, brand: null },
-  { id: 4, name: "Cable", categoryId: 2, categoryName: "Jardín", price: "20.00", availableStock: 3, brand: "Otra" },
-];
-const ids = (filters = {}, order) => filterAndSortCatalog(products, { ...defaults, ...filters }, order).map((p) => p.id);
-test("catalog: numeric price, Spanish names, stable id ties, source unmodified", () => {
-  assert.deepEqual(ids({}, "price-asc"), [3, 1, 4, 2]);
-  assert.deepEqual(ids({}, "price-desc"), [2, 1, 4, 3]);
-  assert.deepEqual(ids({}, "name-asc"), [2, 3, 4, 1]);
-  assert.deepEqual(ids({}, "name-desc"), [1, 3, 4, 2]);
-  assert.deepEqual(products.map((p) => p.id), [1, 2, 3, 4]);
+test("catalog pagination: allowed page sizes and visible ranges", () => {
+  assert.deepEqual(CATALOG_PAGE_SIZES, [20, 40, 60, 100]);
+  assert.deepEqual(getCatalogPageRange(1, 20, 0), { first: 0, last: 0 });
+  assert.deepEqual(getCatalogPageRange(1, 20, 1), { first: 1, last: 1 });
+  assert.deepEqual(getCatalogPageRange(1, 20, 20), { first: 1, last: 20 });
+  assert.deepEqual(getCatalogPageRange(2, 20, 21), { first: 21, last: 21 });
+  assert.deepEqual(getCatalogPageRange(7, 20, 122), { first: 121, last: 122 });
+  assert.deepEqual(getCatalogPageRange(2, 100, 122), { first: 101, last: 122 });
 });
-test("catalog: text/category/min/max/brand/available stock and combinations", () => {
-  assert.deepEqual(ids({ search: " zinc " }), [1]);
-  assert.deepEqual(ids({ categoryId: "1" }), [3, 1]);
-  assert.deepEqual(ids({ minPrice: "20" }), [2, 4, 1]);
-  assert.deepEqual(ids({ maxPrice: "20" }), [3, 4, 1]);
-  assert.deepEqual(ids({ minPrice: "10", maxPrice: "30" }), [4, 1]);
-  assert.deepEqual(ids({ brand: "MARCA UNO" }), [2, 1]);
-  assert.deepEqual(ids({ availability: "in-stock" }), [2, 3, 4]);
-  assert.deepEqual(ids({ availability: "in-stock", categoryId: "2", maxPrice: "30", search: "cable", brand: "Otra" }), [4]);
-  assert.equal(ids({ search: "  " }).length, 4);
-});
-test("catalog: invalid range is explained without hiding all products", () => {
-  for (const [min, max] of [["50", "10"], ["-1", ""], ["NaN", ""], [".", ""], ["1e8", ""]]) {
-    assert.equal(validatePriceRange(min, max).valid, false);
-    assert.equal(ids({ minPrice: min, maxPrice: max }).length, 4);
-  }
+
+test("catalog price drafts preserve the existing validation contract", () => {
+  assert.deepEqual(validatePriceRange("1.5", "20,25"), { valid: true, min: 1.5, max: 20.25 });
+  assert.equal(validatePriceRange("30", "20").valid, false);
+  assert.equal(validatePriceRange("no", "20").valid, false);
   assert.deepEqual(validatePriceRange("", ""), { valid: true, min: null, max: null });
-  assert.deepEqual(validatePriceRange("0", "19,50"), { valid: true, min: 0, max: 19.5 });
 });
-test("catalog: brand options deduplicate whitespace/case and tolerate all null", () => {
-  assert.deepEqual(getCatalogBrands(products), [{ value: "marca uno", label: "Marca Uno" }, { value: "otra", label: "Otra" }]);
-  assert.deepEqual(getCatalogBrands([{ brand: null }, { brand: " " }]), []);
+
+test("catalog page requests server-side filtering and exposes accessible navigation", async () => {
+  const [page, service, pagination, navbar, filters, card, cart, checkout] = await Promise.all([
+    readFile(new URL("../src/pages/CatalogPage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/services/catalog.service.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/CatalogPagination.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/ClientNavbar.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/CatalogFilters.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/ProductCard.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/ClientCartPage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/CheckoutPage.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(page, /filterAndSortCatalog|getCatalogBrands/);
+  assert.match(page, /getCatalogProductsRequest\(catalogQuery\)/);
+  assert.match(service, /api\.get\("\/catalog\/products", \{ params \}\)/);
+  assert.match(service, /getCatalogProductsByIdsRequest/);
+  assert.match(page, /promotionTypes/);
+  assert.match(page, /scrollToGrid: false/);
+  assert.match(page, /showPageSize=\{false\}/);
+  assert.doesNotMatch(page, /Buscar producto/);
+  assert.match(navbar, /catalog-navbar-search/);
+  assert.match(navbar, /useSearchParams/);
+  assert.match(filters, /Descuentos %/);
+  assert.match(filters, /Promociones 2x1/);
+  assert.doesNotMatch(filters, /Solo productos en oferta/);
+  assert.match(card, /absolute top-3 left-3/);
+  assert.match(cart, /getCatalogProductsByIdsRequest\(cartProductIds\)/);
+  assert.match(checkout, /getCatalogProductsByIdsRequest\(cartProductIds\)/);
+  assert.doesNotMatch(cart, /getCatalogProductsRequest\(\)/);
+  assert.doesNotMatch(checkout, /getCatalogProductsRequest\(\)/);
+  for (const label of ["Ir a la primera página", "Ir a la página anterior", "Ir a la página siguiente", "Ir a la última página"]) {
+    assert.match(pagination, new RegExp(label));
+  }
+  assert.match(pagination, /disabled=\{loading \|\| atFirst\}/);
+  assert.match(pagination, /disabled=\{loading \|\| atLast\}/);
 });

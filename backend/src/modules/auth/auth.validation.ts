@@ -202,3 +202,35 @@ export function validatePasswordResetConfirmBody(
   }
   return { success: true, value: { token: input.token, password: input.password } };
 }
+
+export function validateClientReactivationRequestBody(body: unknown): ValidationResult<LoginBody> {
+  return validateLoginBody(body);
+}
+
+export function validateClientReactivationConfirmBody(
+  body: unknown,
+): ValidationResult<LoginBody & { challengeId: number; pin: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debes ingresar tus credenciales y el código de verificación" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => !["identifier", "correo", "password", "challengeId", "pin"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  const credentials = validateLoginBody({
+    ...(input.identifier !== undefined ? { identifier: input.identifier } : { correo: input.correo }),
+    password: input.password,
+  });
+  if (!credentials.success) return credentials;
+  const challengeId = Number(input.challengeId);
+  if (!Number.isInteger(challengeId) || challengeId < 1) {
+    return { success: false, error: "La verificación solicitada no es válida" };
+  }
+  if (typeof input.pin !== "string" || !/^\d{6}$/.test(input.pin)) {
+    return { success: false, error: "El código debe contener exactamente 6 dígitos" };
+  }
+  return {
+    success: true,
+    value: { ...credentials.value, challengeId, pin: input.pin },
+  };
+}

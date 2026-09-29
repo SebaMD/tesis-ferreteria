@@ -8,6 +8,7 @@ export const customerNoticeTable = pgTable(
     id: integer().primaryKey().generatedByDefaultAsIdentity(),
     title: varchar({ length: 120 }).notNull(),
     message: varchar({ length: 1000 }).notNull(),
+    imagePath: varchar("image_path", { length: 500 }),
     isActive: boolean("is_active").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     displaySeconds: integer("display_seconds").notNull().default(7),

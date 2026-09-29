@@ -35,6 +35,12 @@ export default function AuthProvider({ children }) {
     }
   }, []);
 
+  const clearSession = useCallback(() => {
+    clearStoredAuth();
+    clearSessionNotice();
+    setSession({ token: null, user: null });
+  }, []);
+
   const registerClient = useCallback(async (data) => {
     const sessionData = await registerClientRequest(data);
     replaceSession(sessionData);
@@ -50,8 +56,9 @@ export default function AuthProvider({ children }) {
       registerClient,
       replaceSession,
       logout,
+      clearSession,
     }),
-    [login, logout, registerClient, replaceSession, token, user],
+    [clearSession, login, logout, registerClient, replaceSession, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -11,6 +11,7 @@ import {
 import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgressTimeline.jsx";
 import OrderProductImage from "./OrderProductImage.jsx";
 import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
+import OrderItemPromotion from "./OrderItemPromotion.jsx";
 
 function hasCoordinates(order) {
   if (
@@ -196,8 +197,12 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
                 <div className="min-w-0">
                   <strong className="block truncate text-sm text-ink-950">{item.productName}</strong>
                   <span className="text-xs text-slate-500">{item.quantity} × {formatClp(item.unitPrice)}</span>
+                  <OrderItemPromotion item={item} />
                 </div>
-                <strong className="font-mono text-sm text-ink-950 max-[430px]:col-span-2 max-[430px]:justify-self-end">{formatClp(item.subtotal)}</strong>
+                <div className="grid justify-items-end max-[430px]:col-span-2 max-[430px]:justify-self-end">
+                  {Number(item.discountAmount || 0) > 0 && <span className="font-mono text-xs text-slate-500 line-through">{formatClp(Number(item.unitPrice) * Number(item.quantity))}</span>}
+                  <strong className="font-mono text-sm text-ink-950">{formatClp(item.subtotal)}</strong>
+                </div>
               </article>
             ))}
           </div>

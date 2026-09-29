@@ -6,11 +6,11 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductGallery from "../components/ProductGallery.jsx";
 import FavoriteButton from "../components/FavoriteButton.jsx";
-import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import ProductPurchaseControls from "../components/ProductPurchaseControls.jsx";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
+import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -61,7 +61,7 @@ export default function ProductDetailPage() {
             <span className="text-xs font-extrabold text-rust-600">{product.categoryName}</span>
             <div className="flex items-start justify-between gap-3"><h1 className="mt-2 mb-2 min-w-0 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">{product.name}</h1><FavoriteButton product={product} /></div>
             {product.brand && <p className="text-sm text-slate-500">Marca: {product.brand}</p>}
-            <strong className="font-mono text-3xl text-ink-950">{formatClp(product.price)}</strong>
+            <ProductPromotionPrice product={product} size="detail" />
           </div>
           <p className="m-0 leading-7 text-slate-600">{product.description || "Este producto no tiene una descripción disponible."}</p>
           <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">

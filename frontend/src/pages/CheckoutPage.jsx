@@ -13,7 +13,7 @@ import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrde
 import { readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
-import { getCatalogProductsRequest } from "../services/catalog.service.js";
+import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
   continueGuestOnlineOrderPaymentRequest,
@@ -29,6 +29,7 @@ import {
   verifyClientEmail,
   verifyGuestEmail,
 } from "../services/emailVerification.service.js";
+import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 
 function getPrimaryImage(product) {
   return product?.images?.find((image) => image.isPrimary) || product?.images?.[0] || null;
@@ -77,10 +78,11 @@ export default function CheckoutPage() {
   }));
   const submittingRef = useRef(false);
   const deliveryTouchedRef = useRef(false);
+  const cartProductIds = useMemo(() => items.map((item) => item.product.id), [items]);
 
   const loadAvailability = useCallback(async (notifyError = false) => {
     try {
-      const products = await getCatalogProductsRequest();
+      const products = await getCatalogProductsByIdsRequest(cartProductIds);
       setCatalogProducts(products);
       setCatalogError("");
       return true;
@@ -92,7 +94,7 @@ export default function CheckoutPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cartProductIds]);
 
   const loadPendingOrder = useCallback(async (notifyError = false) => {
     try {
@@ -164,13 +166,15 @@ export default function CheckoutPage() {
     const isAvailable = Boolean(liveProduct) && availableStock > 0;
     const hasEnoughStock = validQuantity && quantity <= availableStock;
 
+    const pricing = getProductPromotionPricing(product, quantity);
     return {
       product,
       quantity,
       availableStock,
       isAvailable,
       isValid: isAvailable && hasEnoughStock,
-      subtotal: Number(product?.price || 0) * Math.max(quantity, 0),
+      pricing,
+      subtotal: pricing.finalSubtotal,
     };
   });
 
@@ -365,8 +369,9 @@ export default function CheckoutPage() {
                       <div className="grid min-w-0 gap-1">
                         <strong className="truncate text-sm text-ink-950">{row.product.name}</strong>
                         <span className="text-xs text-slate-500">
-                          {formatClp(row.product.price)} × {formatQuantityWithUnit(row.quantity, row.product.unitMeasure)}
+                          {formatClp(row.pricing.baseUnitPrice)} × {formatQuantityWithUnit(row.quantity, row.product.unitMeasure)}
                         </span>
+                        {row.pricing.promotion && <span className="text-xs font-bold text-rust-700">{row.pricing.promotion.type === "BUY_2_PAY_1" ? `2x1 · ${row.pricing.freeUnits} ${row.pricing.freeUnits === 1 ? "unidad" : "unidades"} sin costo` : `${row.pricing.promotion.label} · ahorras ${formatClp(row.pricing.discountAmount)}`}</span>}
                         {row.isValid ? (
                           <span className="text-xs font-bold text-positive-600">{formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles</span>
                         ) : (
@@ -378,9 +383,12 @@ export default function CheckoutPage() {
                         )}
                       </div>
                       <div className="flex items-center justify-end gap-3 max-[620px]:col-span-2 max-[620px]:w-full max-[620px]:justify-end">
-                        <strong className="font-mono text-sm text-ink-950">
+                        <div className="grid justify-items-end gap-0.5">
+                          {row.pricing.discountAmount > 0 && <span className="font-mono text-xs text-slate-500 line-through">{formatClp(row.pricing.baseSubtotal)}</span>}
+                          <strong className="font-mono text-sm text-ink-950">
                           {formatClp(row.subtotal)}
-                        </strong>
+                          </strong>
+                        </div>
                       </div>
                     </article>
                   );

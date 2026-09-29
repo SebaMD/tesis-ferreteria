@@ -1,7 +1,8 @@
-import { findCatalogProductById, findCatalogProducts } from "./catalog.repository.js";
+import { findCatalogProductById, findCatalogProductsPage } from "./catalog.repository.js";
+import type { CatalogQuery } from "./catalog.validation.js";
 
-export async function getCatalogProductsService() {
-  return findCatalogProducts();
+export async function getCatalogProductsService(query: CatalogQuery) {
+  return findCatalogProductsPage(query);
 }
 
 export async function getCatalogProductByIdService(id: number) {

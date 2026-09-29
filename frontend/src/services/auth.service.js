@@ -24,3 +24,13 @@ export async function confirmPasswordResetRequest(data) {
   const response = await api.post("/auth/password-reset/confirm", data);
   return response.data;
 }
+
+export async function requestClientReactivationRequest(credentials) {
+  const response = await api.post("/auth/client-reactivation/request", credentials);
+  return response.data.data;
+}
+
+export async function confirmClientReactivationRequest(data) {
+  const response = await api.post("/auth/client-reactivation/confirm", data);
+  return response.data;
+}

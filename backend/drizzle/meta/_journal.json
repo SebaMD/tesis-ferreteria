@@ -162,6 +162,27 @@
       "when": 1790277604520,
       "tag": "0022_good_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790471098518,
+      "tag": "0023_striped_sleeper",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790532777173,
+      "tag": "0024_lean_kate_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790627070366,
+      "tag": "0025_parallel_power_man",
+      "breakpoints": true
     }
   ]
 }

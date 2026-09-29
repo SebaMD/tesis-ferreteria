@@ -11,7 +11,9 @@ import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import useCartActions from "../hooks/useCartActions.js";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
-import { getCatalogProductsRequest } from "../services/catalog.service.js";
+import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
+import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
+import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
 
 function getPrimaryImage(product) {
   return product?.images?.find((image) => image.isPrimary) || product?.images?.[0] || null;
@@ -23,9 +25,10 @@ export default function ClientCartPage() {
   const { isAuthenticated, user } = useAuth();
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const cartProductIds = useMemo(() => items.map((item) => item.product.id), [items]);
 
   useEffect(() => {
-    const loadAvailability = (notifyError = false) => getCatalogProductsRequest()
+    const loadAvailability = (notifyError = false) => getCatalogProductsByIdsRequest(cartProductIds)
       .then(setCatalogProducts)
       .catch((error) => {
         if (notifyError) toast.error(getApiError(error, "No se pudo actualizar la disponibilidad"));
@@ -40,7 +43,7 @@ export default function ClientCartPage() {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshAvailability);
     };
-  }, []);
+  }, [cartProductIds]);
 
   const liveProductById = useMemo(
     () => new Map(catalogProducts.map((product) => [Number(product.id), product])),
@@ -52,10 +55,10 @@ export default function ClientCartPage() {
     const availableStock = liveProduct ? getOnlineAvailableStock(liveProduct) : 0;
     const available = Boolean(liveProduct && availableStock > 0);
     const quantity = Number(item.quantity);
-    return { ...item, product, available, availableStock, requestedQuantity: quantity, quantity };
+    return { ...item, product, available, availableStock, requestedQuantity: quantity, quantity, pricing: getProductPromotionPricing(product, quantity) };
   });
   const total = rows.reduce(
-    (sum, row) => sum + Number(row.product.price || 0) * Number(row.quantity || 0),
+    (sum, row) => sum + row.pricing.finalSubtotal,
     0,
   );
 
@@ -97,7 +100,8 @@ export default function ClientCartPage() {
                   </Link>
                   <div className="grid gap-1.5">
                     <Link className="font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`}>{row.product.name}</Link>
-                    <span className="font-mono text-sm text-ink-700">{formatClp(row.product.price)} por {getDisplayUnit(1, row.product.unitMeasure)}</span>
+                    <span className="text-xs text-slate-500">Precio por {getDisplayUnit(1, row.product.unitMeasure)}</span>
+                    <ProductPromotionPrice product={row.product} quantity={row.quantity} showLineSummary />
                     <span className={`text-xs font-bold ${row.available ? "text-positive-600" : "text-critical-600"}`}>
                       {row.available ? `${formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles` : "Producto no disponible actualmente"}
                     </span>
@@ -116,7 +120,10 @@ export default function ClientCartPage() {
                       onQuantityChange={(quantity) => updateQuantity(row.product.id, quantity, row.availableStock)}
                     />
                     <div className="flex items-center gap-2">
-                      <strong className="font-mono text-ink-950">{formatClp(Number(row.product.price) * row.quantity)}</strong>
+                      <div className="grid justify-items-end gap-0.5">
+                        {row.pricing.discountAmount > 0 && <span className="font-mono text-xs text-slate-500 line-through">{formatClp(row.pricing.baseSubtotal)}</span>}
+                        <strong className="font-mono text-ink-950">{formatClp(row.pricing.finalSubtotal)}</strong>
+                      </div>
                       <button className="size-9 min-h-9 border-critical-600 bg-critical-600 p-0" type="button" onClick={() => removeProduct(row.product.id)} aria-label={`Eliminar ${row.product.name}`}><Trash2 size={16} /></button>
                     </div>
                   </div>

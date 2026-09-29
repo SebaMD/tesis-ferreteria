@@ -19,6 +19,7 @@ function ThemedToaster() {
           info: "app-toast-info",
           warning: "app-toast-warning",
           error: "app-toast-error",
+          actionButton: "app-toast-action",
         },
       }}
     />

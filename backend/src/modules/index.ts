@@ -12,6 +12,7 @@ import usersRoutes from "./users/users.routes.js";
 import favoritesRoutes from "./favorites/favorites.routes.js";
 import emailVerificationRoutes from "./emailVerification/emailVerification.routes.js";
 import customerNoticeRoutes from "./customerNotice/customerNotice.routes.js";
+import promotionsRoutes from "./promotions/promotions.routes.js";
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use("/catalog", catalogRoutes);
 router.use("/favorites", favoritesRoutes);
 router.use("/email-verification", emailVerificationRoutes);
 router.use("/customer-notice", customerNoticeRoutes);
+router.use("/promotions", promotionsRoutes);
 router.use("/categories", categoriesRoutes);
 router.use("/inventory", inventoryRoutes);
 router.use("/online-orders", onlineOrdersRoutes);

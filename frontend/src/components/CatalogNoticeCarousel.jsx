@@ -23,8 +23,8 @@ function useReducedMotion() {
 }
 
 export default function CatalogNoticeCarousel() {
-  const { notices } = useCustomerNotice();
-  const slides = useMemo(() => buildCatalogSlides(notices), [notices]);
+  const { notices, presentation } = useCustomerNotice();
+  const slides = useMemo(() => buildCatalogSlides(presentation, notices), [notices, presentation]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timerVersion, setTimerVersion] = useState(0);
   const reducedMotion = useReducedMotion();
@@ -45,7 +45,7 @@ export default function CatalogNoticeCarousel() {
 
   return (
     <section
-      className="catalog-notice-carousel overflow-hidden rounded-lg bg-ink-950 bg-[linear-gradient(120deg,rgba(217,119,6,0.22),transparent_60%)] text-white"
+      className="catalog-notice-carousel relative overflow-hidden rounded-lg bg-ink-950 bg-[linear-gradient(120deg,rgba(217,119,6,0.22),transparent_60%)] text-white"
       aria-label="Información destacada del catálogo"
       aria-roledescription="carrusel"
     >
@@ -56,14 +56,27 @@ export default function CatalogNoticeCarousel() {
       >
         {slides.map((slide, index) => (
           <article
-            className="flex min-h-45 w-full shrink-0 items-center px-7 py-8 max-[620px]:min-h-50 max-[620px]:px-5 max-[620px]:py-6"
+            className={`relative isolate flex min-h-60 w-full shrink-0 items-center overflow-hidden px-8 pt-8 max-[620px]:min-h-64 max-[620px]:px-5 max-[620px]:pt-6 ${slides.length > 1 ? "pb-18 max-[620px]:pb-16" : "pb-8 max-[620px]:pb-6"}`}
             key={slide.id}
             role="group"
             aria-roledescription="diapositiva"
             aria-label={`${index + 1} de ${slides.length}`}
             aria-hidden={index !== activeIndex}
           >
-            <div className="flex max-w-210 items-start gap-4">
+            {slide.imageUrl && (
+              <>
+                <img
+                  className="absolute inset-y-0 right-0 -z-20 h-full w-[58%] object-cover max-[620px]:w-full"
+                  src={slide.imageUrl}
+                  alt=""
+                />
+                <span
+                  className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,#10151f_0%,rgba(16,21,31,0.98)_38%,rgba(16,21,31,0.72)_68%,rgba(16,21,31,0.2)_100%)] max-[620px]:bg-[linear-gradient(90deg,rgba(16,21,31,0.96),rgba(16,21,31,0.72))]"
+                  aria-hidden="true"
+                />
+              </>
+            )}
+            <div className={`flex max-w-210 items-start gap-4 ${slide.imageUrl ? "w-[58%] max-[820px]:w-[66%] max-[620px]:w-full" : "w-full"}`}>
               {!slide.institutional && (
                 <span className="mt-0.5 grid size-11 shrink-0 place-items-center rounded-full bg-rust-500/20 text-rust-500 max-[480px]:size-9">
                   <Megaphone size={22} aria-hidden="true" />
@@ -79,7 +92,7 @@ export default function CatalogNoticeCarousel() {
         ))}
       </div>
       {slides.length > 1 && (
-        <div className="flex justify-center gap-2 px-4 pb-4" aria-label="Seleccionar información destacada">
+        <div className="catalog-notice-indicators absolute inset-x-0 bottom-3 z-20 mx-auto flex w-fit justify-center gap-1 rounded-full border border-white/15 bg-ink-950/55 px-1.5 py-0.5 shadow-[0_3px_12px_rgba(0,0,0,0.24)] backdrop-blur-sm" aria-label="Seleccionar información destacada">
           {slides.map((slide, index) => (
             <button
               className="group grid size-8 min-h-8 place-items-center border-0 bg-transparent p-0 hover:bg-transparent"
@@ -89,7 +102,7 @@ export default function CatalogNoticeCarousel() {
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => selectSlide(index)}
             >
-              <span className={`h-3 rounded-full border transition-[width,background-color] ${index === activeIndex ? "w-7 border-rust-500 bg-rust-500" : "w-3 border-slate-300 bg-transparent group-hover:bg-white/30"}`} aria-hidden="true" />
+              <span className={`catalog-notice-indicator h-3 rounded-full border shadow-[0_0_0_1px_rgba(0,0,0,0.18)] transition-[width,background-color] ${index === activeIndex ? "w-7 border-rust-500 bg-rust-500" : "w-3 border-white/80 bg-ink-950/25 group-hover:bg-white/35"}`} aria-hidden="true" />
             </button>
           ))}
         </div>

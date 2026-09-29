@@ -72,6 +72,12 @@ export default function LoginPage() {
         ? "/verify-work-email"
         : getAuthenticatedDestination(session.user, requestedPath));
     } catch (err) {
+      if (err?.response?.data?.code === "CLIENT_SELF_DEACTIVATED") {
+        navigate("/reactivate-account", {
+          state: { identifier: identifier.trim() },
+        });
+        return;
+      }
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
       setLoading(false);

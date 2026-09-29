@@ -15,6 +15,7 @@ export class AuthError extends Error {
   constructor(
     message: string,
     public readonly statusCode: number,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "AuthError";
@@ -36,6 +37,7 @@ function createAuthenticatedSession(user: AuthUser) {
       roleId: user.roleId,
       role: user.roleName,
       status: user.status,
+      authVersion: user.authVersion,
     },
     SESSION_SECRET,
     { expiresIn: "24h" },
@@ -83,6 +85,13 @@ export async function loginService(data: LoginBody) {
   }
 
   if (user.status === "INACTIVE") {
+    if (user.roleName === "CLIENT" && user.selfDeactivatedAt) {
+      throw new AuthError(
+        "Esta cuenta fue desactivada voluntariamente. Puedes reactivarla de forma segura.",
+        403,
+        "CLIENT_SELF_DEACTIVATED",
+      );
+    }
     throw new AuthError("Tu cuenta esta inactiva. Contacta a administracion", 401);
   }
 

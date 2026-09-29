@@ -511,6 +511,11 @@ export async function findOrderItems(tx: DbTransaction, orderId: number) {
       quantity: onlineOrderItemsTable.quantity,
       unitPrice: onlineOrderItemsTable.unitPrice,
       subtotal: onlineOrderItemsTable.subtotal,
+      discountAmount: onlineOrderItemsTable.discountAmount,
+      promotionId: onlineOrderItemsTable.promotionId,
+      promotionTypeSnapshot: onlineOrderItemsTable.promotionTypeSnapshot,
+      promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
+      promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
     })
     .from(onlineOrderItemsTable)
     .where(eq(onlineOrderItemsTable.orderId, orderId));
@@ -815,6 +820,11 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
+        discountAmount: onlineOrderItemsTable.discountAmount,
+        promotionId: onlineOrderItemsTable.promotionId,
+        promotionTypeSnapshot: onlineOrderItemsTable.promotionTypeSnapshot,
+        promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
+        promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
       })
       .from(onlineOrderItemsTable)
       .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))

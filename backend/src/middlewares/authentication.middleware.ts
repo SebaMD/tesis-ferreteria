@@ -10,6 +10,7 @@ export type AuthUser = {
   roleId: number;
   role: string;
   status: string;
+  authVersion: number;
 };
 
 export type AuthenticatedRequest = Request & {
@@ -39,14 +40,12 @@ function readJwt(req: AuthenticatedRequest, res: Response) {
   }
 }
 
-export function authenticateJwtAllowUnverified(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const user = readJwt(req, res);
-  if (!user) return;
-  req.user = user;
-  return next();
-}
-
-export async function authenticateJwt(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+async function authenticateCurrentUser(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+  requireVerifiedInternalEmail: boolean,
+) {
   const tokenUser = readJwt(req, res);
   if (!tokenUser) return;
 
@@ -54,6 +53,11 @@ export async function authenticateJwt(req: AuthenticatedRequest, res: Response, 
     const current = await findAuthUserById(tokenUser.id);
     if (!current || current.status !== "ACTIVE") {
       res.status(401).json({ message: "La cuenta no esta activa" });
+      return;
+    }
+    const tokenAuthVersion = Number(tokenUser.authVersion ?? 1);
+    if (!Number.isInteger(tokenAuthVersion) || tokenAuthVersion !== current.authVersion) {
+      res.status(401).json({ message: "La sesion ya no es valida" });
       return;
     }
 
@@ -64,9 +68,14 @@ export async function authenticateJwt(req: AuthenticatedRequest, res: Response, 
       roleId: current.roleId,
       role: current.roleName,
       status: current.status,
+      authVersion: current.authVersion,
     };
 
-    if (["MANAGER", "CASHIER", "WAREHOUSE"].includes(current.roleName) && !current.emailVerifiedAt) {
+    if (
+      requireVerifiedInternalEmail
+      && ["MANAGER", "CASHIER", "WAREHOUSE"].includes(current.roleName)
+      && !current.emailVerifiedAt
+    ) {
       res.status(403).json({
         code: "EMAIL_VERIFICATION_REQUIRED",
         message: "Debes verificar tu correo antes de usar el sistema interno",
@@ -79,4 +88,12 @@ export async function authenticateJwt(req: AuthenticatedRequest, res: Response, 
   }
 
   return next();
+}
+
+export function authenticateJwtAllowUnverified(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  return authenticateCurrentUser(req, res, next, false);
+}
+
+export function authenticateJwt(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  return authenticateCurrentUser(req, res, next, true);
 }

@@ -1,3 +1,4 @@
+import bcrypt from "bcrypt";
 import { db } from "../../db/index.js";
 import type { DbTransaction } from "../../db/index.js";
 import type { EmailVerificationPurpose } from "../../db/schema/index.js";
@@ -5,6 +6,7 @@ import { normalizeEmail } from "../../utils/email.js";
 import { hashGuestSessionId } from "../onlineOrders/guestOrderAccess.js";
 import { buildEmailVerificationMail } from "../notifications/emailVerificationMail.js";
 import { MailDeliveryError, sendMailRequired } from "../notifications/notifications.service.js";
+import { findAuthUserByIdentifier } from "../auth/auth.repository.js";
 import {
   changeClientEmail,
   countRecentVerificationSends,
@@ -14,11 +16,13 @@ import {
   findLatestVerificationSend,
   findOtherUserByEmail,
   findVerificationUserForUpdate,
+  invalidateAllActiveUserChallenges,
   invalidateActiveChallenges,
   lockVerificationContext,
   markChallengeVerified,
   markClientEmailVerified,
   markUserEmailVerified,
+  reactivateSelfDeactivatedClient,
   registerFailedAttempt,
   updateVerificationPinHash,
   type VerificationOwner,
@@ -50,6 +54,25 @@ function assertActiveClient(user: Awaited<ReturnType<typeof findVerificationUser
     throw new EmailVerificationError("La cuenta de cliente no esta activa", 403);
   }
   return user;
+}
+
+function assertSelfDeactivatedClient(user: Awaited<ReturnType<typeof findVerificationUserForUpdate>>) {
+  if (
+    !user
+    || user.role !== "CLIENT"
+    || user.status !== "INACTIVE"
+    || !user.selfDeactivatedAt
+  ) {
+    throw new EmailVerificationError("La cuenta no está disponible para reactivación", 403);
+  }
+  return user;
+}
+
+function maskEmail(email: string) {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "correo registrado";
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${"*".repeat(Math.max(2, local.length - visible.length))}@${domain}`;
 }
 
 const INTERNAL_VERIFICATION_ROLES = new Set(["MANAGER", "CASHIER", "WAREHOUSE"]);
@@ -377,6 +400,65 @@ export async function verifyInternalEmailService(userId: number, challengeId: nu
     await markUserEmailVerified(tx, userId, now);
     await markChallengeVerified(tx, challenge.id, now, true);
     return { email: user.correo, emailVerifiedAt: now.toISOString() };
+  });
+  if (result instanceof EmailVerificationError) throw result;
+  return result;
+}
+
+async function findReactivationCandidate(identifier: string, password: string) {
+  const user = await findAuthUserByIdentifier(identifier);
+  if (!user || !await bcrypt.compare(password, user.password)) {
+    throw new EmailVerificationError("Credenciales incorrectas", 401);
+  }
+  if (user.roleName !== "CLIENT" || user.status !== "INACTIVE" || !user.selfDeactivatedAt) {
+    throw new EmailVerificationError("La cuenta no está disponible para reactivación", 403);
+  }
+  return user;
+}
+
+export async function requestClientReactivationService(identifier: string, password: string) {
+  const user = await findReactivationCandidate(identifier, password);
+  const challenge = await issueChallenge(
+    { type: "USER", userId: user.id },
+    "CLIENT_REACTIVATION",
+    user.correo,
+  );
+  return { ...challenge, emailMasked: maskEmail(user.correo) };
+}
+
+export async function confirmClientReactivationService(input: {
+  identifier: string;
+  password: string;
+  challengeId: number;
+  pin: string;
+}) {
+  const candidate = await findReactivationCandidate(input.identifier, input.password);
+  const result = await db.transaction(async (tx) => {
+    const user = assertSelfDeactivatedClient(
+      await findVerificationUserForUpdate(tx, candidate.id),
+    );
+    if (!await bcrypt.compare(input.password, user.password)) {
+      throw new EmailVerificationError("Credenciales incorrectas", 401);
+    }
+    const challenge = await verifyChallenge(tx, {
+      challengeId: input.challengeId,
+      pin: input.pin,
+      purpose: "CLIENT_REACTIVATION",
+      owner: { type: "USER", userId: user.id },
+    });
+    if (challenge instanceof EmailVerificationError) return challenge;
+    if (challenge.email !== user.correo) {
+      throw new EmailVerificationError("El código no corresponde al correo actual", 409);
+    }
+
+    const now = new Date();
+    const reactivated = await reactivateSelfDeactivatedClient(tx, user.id, now);
+    if (!reactivated) {
+      throw new EmailVerificationError("La cuenta ya no está disponible para reactivación", 409);
+    }
+    await markChallengeVerified(tx, challenge.id, now, true);
+    await invalidateAllActiveUserChallenges(tx, user.id, now);
+    return { reactivated: true };
   });
   if (result instanceof EmailVerificationError) throw result;
   return result;

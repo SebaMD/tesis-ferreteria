@@ -1,5 +1,5 @@
-import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, ShoppingCart, UserPlus, UserRound } from "lucide-react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, Search, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import BrandLogo from "./BrandLogo.jsx";
@@ -12,9 +12,20 @@ function navClass({ isActive }) {
 
 export default function ClientNavbar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, logout, user } = useAuth();
   const { totalUnits } = useCart();
   const isClient = user?.role === "CLIENT";
+  const catalogSearch = location.pathname === "/catalog" ? searchParams.get("search") || "" : "";
+
+  const updateCatalogSearch = (value) => {
+    const next = new URLSearchParams(location.pathname === "/catalog" ? searchParams : undefined);
+    if (value) next.set("search", value);
+    else next.delete("search");
+    if (location.pathname === "/catalog") setSearchParams(next, { replace: true });
+    else navigate({ pathname: "/catalog", search: next.toString() ? `?${next.toString()}` : "" });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -47,7 +58,21 @@ export default function ClientNavbar() {
           </Link>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-none min-[1024px]:ml-auto min-[1024px]:w-[min(28vw,320px)]" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label className="sr-only" htmlFor="catalog-navbar-search">Buscar producto</label>
+          <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} aria-hidden="true" />
+          <input
+            id="catalog-navbar-search"
+            className="min-h-10 w-full pl-9 text-sm"
+            type="search"
+            value={catalogSearch}
+            onChange={(event) => updateCatalogSearch(event.target.value)}
+            placeholder="Buscar producto..."
+            autoComplete="off"
+          />
+        </form>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2 min-[1024px]:ml-0">
           <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:hidden" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
             <ShoppingCart size={20} />
             {totalUnits > 0 && (

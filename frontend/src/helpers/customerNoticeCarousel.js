@@ -5,12 +5,20 @@ export const INSTITUTIONAL_CATALOG_SLIDE = Object.freeze({
   eyebrow: "Catálogo Ferretería FYF",
   displaySeconds: 7,
   institutional: true,
+  imageUrl: null,
 });
 
-export function buildCatalogSlides(notices) {
+export function buildCatalogSlides(presentation, notices) {
+  const institutional = presentation ? {
+    ...INSTITUTIONAL_CATALOG_SLIDE,
+    eyebrow: presentation.title || INSTITUTIONAL_CATALOG_SLIDE.eyebrow,
+    title: presentation.mainText || INSTITUTIONAL_CATALOG_SLIDE.title,
+    message: presentation.secondaryText || INSTITUTIONAL_CATALOG_SLIDE.message,
+    imageUrl: presentation.imageUrl || null,
+  } : INSTITUTIONAL_CATALOG_SLIDE;
   const publicNotices = Array.isArray(notices) ? notices : [];
   return [
-    INSTITUTIONAL_CATALOG_SLIDE,
+    institutional,
     ...publicNotices.map((notice) => ({
       id: `notice-${notice.id}`,
       title: notice.title,
@@ -18,6 +26,7 @@ export function buildCatalogSlides(notices) {
       eyebrow: "Información de la ferretería",
       displaySeconds: notice.displaySeconds,
       institutional: false,
+      imageUrl: notice.imageUrl || null,
     })),
   ];
 }

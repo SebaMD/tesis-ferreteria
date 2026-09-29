@@ -6,16 +6,18 @@ import {
   Pencil,
   Phone,
   Save,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
+import AppModal from "../components/AppModal.jsx";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
@@ -31,7 +33,7 @@ import {
   getClientDeliveryAddressRequest,
   saveClientDeliveryAddressRequest,
 } from "../services/onlineOrders.service.js";
-import { updateMyClientProfileRequest } from "../services/users.service.js";
+import { deactivateMyClientAccountRequest, updateMyClientProfileRequest } from "../services/users.service.js";
 
 function emptyAddress(user) {
   return {
@@ -66,9 +68,10 @@ function AccordionSection({ id, title, Icon, open, onToggle, attention = false, 
 }
 
 export default function ClientAccountPage() {
-  const { user, replaceSession } = useAuth();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [addressOpen, setAddressOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, replaceSession, clearSession } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(true);
+  const [addressOpen, setAddressOpen] = useState(true);
   const [newEmail, setNewEmail] = useState("");
   const [changeEmail, setChangeEmail] = useState("");
   const [editingEmail, setEditingEmail] = useState(false);
@@ -81,6 +84,9 @@ export default function ClientAccountPage() {
   const [addressLoading, setAddressLoading] = useState(true);
   const [savingAddress, setSavingAddress] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deactivationOpen, setDeactivationOpen] = useState(false);
+  const [deactivationPassword, setDeactivationPassword] = useState("");
+  const [deactivating, setDeactivating] = useState(false);
   const emailVerified = Boolean(user.emailVerifiedAt || user.emailVerified);
 
   const cancelEmailChange = () => {
@@ -176,6 +182,28 @@ export default function ClientAccountPage() {
     }
   };
 
+  const closeDeactivation = () => {
+    if (deactivating) return;
+    setDeactivationOpen(false);
+    setDeactivationPassword("");
+  };
+
+  const deactivateAccount = async (event) => {
+    event.preventDefault();
+    if (!deactivationPassword || deactivating) return;
+    setDeactivating(true);
+    try {
+      await deactivateMyClientAccountRequest(deactivationPassword);
+      clearSession();
+      toast.success("Tu cuenta fue desactivada. Puedes reactivarla cuando quieras.");
+      navigate("/login", { replace: true });
+    } catch (error) {
+      toast.error(getApiError(error, "No se pudo desactivar la cuenta"));
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
   return (
     <main className="relative mx-auto grid w-full max-w-220 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <LoadingOverlay active={addressLoading} />
@@ -237,6 +265,37 @@ export default function ClientAccountPage() {
           <div className="client-account-surface grid justify-items-start gap-3 rounded-md bg-slate-50 p-5"><MapPin className="text-rust-600" size={28} /><div><strong className="text-sm text-ink-950">No tienes una dirección guardada</strong><p className="mt-1 mb-0 text-xs leading-5 text-slate-500">Agrégala aquí y estará disponible automáticamente en tu próximo checkout.</p></div><button type="button" onClick={() => setEditingAddress(true)}>Agregar dirección</button></div>
         )}
       </AccordionSection>
+
+      <section className="client-account-section grid gap-4 rounded-lg border border-critical-200 bg-white p-5 shadow-sm max-[520px]:p-4" aria-labelledby="account-security-title">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-critical-50 text-critical-600"><ShieldAlert size={18} /></span>
+          <div>
+            <h2 className="m-0 text-base font-bold text-ink-950" id="account-security-title">Seguridad de la cuenta</h2>
+            <p className="mt-1.5 mb-0 text-xs leading-5 text-slate-600">La desactivación es reversible y no elimina tus compras, dirección ni favoritos. No está disponible mientras tengas una compra o entrega en proceso.</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-md border border-critical-200 bg-critical-50 p-4 max-[620px]:grid">
+          <div><strong className="block text-sm text-ink-950">Desactivar mi cuenta</strong><span className="mt-1 block text-xs leading-5 text-slate-600">Perderás el acceso hasta reactivarla con tu contraseña y un código enviado por correo.</span></div>
+          <button className="shrink-0 border-critical-500 bg-white text-critical-700 hover:bg-critical-100 max-[620px]:w-full" type="button" onClick={() => setDeactivationOpen(true)}>Desactivar mi cuenta</button>
+        </div>
+      </section>
+
+      <AppModal
+        open={deactivationOpen}
+        title="Desactivar mi cuenta"
+        description="Esta acción cerrará tu sesión, pero no eliminará tu información ni tu historial."
+        onClose={closeDeactivation}
+        size="small"
+      >
+        <form className="grid gap-4" onSubmit={deactivateAccount}>
+          <div className="client-account-deactivation-warning rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">Para confirmar, ingresa tu contraseña actual. Si existe una compra o entrega en proceso, la cuenta permanecerá activa.</div>
+          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => setDeactivationPassword(event.target.value)} autoComplete="current-password" required autoFocus /></label>
+          <div className="flex justify-end gap-2 max-[480px]:grid">
+            <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeDeactivation} disabled={deactivating}>Cancelar</button>
+            <button className="border-critical-600 bg-critical-600 text-white hover:bg-critical-700" type="submit" disabled={deactivating || !deactivationPassword}>{deactivating ? "Desactivando..." : "Confirmar desactivación"}</button>
+          </div>
+        </form>
+      </AppModal>
     </main>
   );
 }

@@ -31,6 +31,8 @@ import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
 import InternalEmailVerificationPage from "./pages/InternalEmailVerificationPage.jsx";
 import LogisticsScanPage from "./pages/LogisticsScanPage.jsx";
 import StatisticsPage from "./pages/StatisticsPage.jsx";
+import PromotionsPage from "./pages/PromotionsPage.jsx";
+import ClientReactivationPage from "./pages/ClientReactivationPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,6 +92,7 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/reactivate-account" element={<ClientReactivationPage />} />
       <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
@@ -170,6 +173,14 @@ export default function App() {
       <Route
         path="/"
         element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
+      <Route
+        path="/promotions"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.promotions}>
+            <PromotionsPage />
+          </ProtectedPage>
+        }
       />
       <Route
         path="/statistics"

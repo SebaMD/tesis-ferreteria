@@ -1,4 +1,5 @@
 import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, Search, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
@@ -17,14 +18,38 @@ export default function ClientNavbar() {
   const { isAuthenticated, logout, user } = useAuth();
   const { totalUnits } = useCart();
   const isClient = user?.role === "CLIENT";
+  const searchInputRef = useRef(null);
   const catalogSearch = location.pathname === "/catalog" ? searchParams.get("search") || "" : "";
+
+  useEffect(() => {
+    if (location.pathname !== "/catalog" || !location.state?.restoreCatalogSearchFocus) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      const cursor = input.value.length;
+      input.setSelectionRange(cursor, cursor);
+      navigate(
+        { pathname: location.pathname, search: location.search },
+        { replace: true, state: null, preventScrollReset: true },
+      );
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const updateCatalogSearch = (value) => {
     const next = new URLSearchParams(location.pathname === "/catalog" ? searchParams : undefined);
     if (value) next.set("search", value);
     else next.delete("search");
     if (location.pathname === "/catalog") setSearchParams(next, { replace: true });
-    else navigate({ pathname: "/catalog", search: next.toString() ? `?${next.toString()}` : "" });
+    else {
+      navigate(
+        { pathname: "/catalog", search: next.toString() ? `?${next.toString()}` : "" },
+        { state: { restoreCatalogSearchFocus: true } },
+      );
+    }
   };
 
   const handleLogout = async () => {
@@ -33,7 +58,7 @@ export default function ClientNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur" data-client-navbar>
       <div className="mx-auto flex min-h-17 w-full max-w-360 flex-wrap items-center gap-3 px-6 py-2 max-[720px]:px-3.5">
         <div className="mr-3 flex min-w-0 items-center gap-2 text-ink-950 max-[720px]:mr-0 max-[720px]:gap-1.5">
           <BrandLogo className="size-11 max-[720px]:size-8" />
@@ -58,11 +83,12 @@ export default function ClientNavbar() {
           </Link>
         </nav>
 
-        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-none min-[1024px]:ml-auto min-[1024px]:w-[min(28vw,320px)]" role="search" onSubmit={(event) => event.preventDefault()}>
+        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-none min-[1024px]:ml-2 min-[1024px]:min-w-40 min-[1024px]:flex-1" role="search" onSubmit={(event) => event.preventDefault()}>
           <label className="sr-only" htmlFor="catalog-navbar-search">Buscar producto</label>
           <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} aria-hidden="true" />
           <input
             id="catalog-navbar-search"
+            ref={searchInputRef}
             className="min-h-10 w-full pl-9 text-sm"
             type="search"
             value={catalogSearch}

@@ -1,4 +1,4 @@
-import { CalendarClock, Edit3, Percent, Plus, Tag, Trash2 } from "lucide-react";
+import { CalendarClock, Edit3, Percent, Plus, Power, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -152,7 +152,7 @@ export default function PromotionsPage() {
       <LoadingOverlay active={loading} />
       <header className="flex flex-wrap items-center justify-between gap-3 max-[620px]:text-center">
         <div className="max-[620px]:w-full"><h1 className="m-0 flex items-center gap-2 text-2xl text-ink-950 max-[620px]:justify-center"><Tag size={24} /> Promociones</h1><p className="mt-1 mb-0 text-sm text-slate-500">Beneficios exclusivos del catálogo online.</p></div>
-        <button type="button" onClick={openCreate}><Plus size={18} /> Nueva promoción</button>
+        <button className="max-[620px]:w-full max-[620px]:justify-center" type="button" onClick={openCreate}><Plus size={18} /> Nueva promoción</button>
       </header>
 
       <section className="grid gap-3">
@@ -164,7 +164,11 @@ export default function PromotionsPage() {
             <article className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm" key={promotion.id}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="m-0 text-lg text-ink-950">{promotion.name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusClass}`}>{statusLabel}</span>{promotion.isIndefinite && promotion.status !== "INACTIVE" && <span className="text-xs font-bold text-slate-500">· Indefinida</span>}</div><p className="mt-1 mb-0 text-sm font-bold text-rust-600">{promotion.type === "BUY_2_PAY_1" ? "2x1 · por producto" : `${promotion.percentage}% de descuento`}</p></div>
-                <div className="flex flex-wrap gap-2"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => openEdit(promotion)}><Edit3 size={16} /> Editar</button><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => toggle(promotion)}>{promotion.isActive ? "Desactivar" : "Activar"}</button><button className="border-critical-200 bg-white text-critical-600 hover:bg-critical-50" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : undefined}><Trash2 size={16} /> Eliminar</button></div>
+                <div className="flex flex-wrap gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
+                  <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
+                  <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggle(promotion)} aria-label={`${promotion.isActive ? "Desactivar" : "Activar"} ${promotion.name}`} title={promotion.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{promotion.isActive ? "Desactivar" : "Activar"}</span></button>
+                  <button className="border-critical-200 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-xs max-[700px]:grid-cols-1"><div className="rounded-md bg-slate-50 p-3"><strong className="flex items-center gap-2 text-ink-950"><CalendarClock size={15} /> Vigencia</strong><span className="mt-1 block text-slate-600">Desde {new Date(promotion.startsAt).toLocaleString("es-CL")}</span><span className="block text-slate-600">{promotion.endsAt ? `Hasta ${new Date(promotion.endsAt).toLocaleString("es-CL")}` : "Sin término"}</span></div><div className="rounded-md bg-slate-50 p-3"><strong className="text-ink-950">Aplicación</strong><span className="mt-1 block text-slate-600">{productNames.length ? `${productNames.length} producto(s): ${productNames.join(", ")}` : "Sin productos directos"}</span><span className="block text-slate-600">{categoryNames.length ? `${categoryNames.length} categoría(s): ${categoryNames.join(", ")}` : "Sin categorías"}</span></div></div>
             </article>
@@ -181,7 +185,7 @@ export default function PromotionsPage() {
             {form.type === "PERCENTAGE_DISCOUNT" && <label className="grid gap-1.5 text-xs font-bold text-slate-600">Porcentaje<input required type="number" min="1" max="99" step="1" value={form.percentage} onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))} /></label>}
             <label className="grid gap-1.5 text-xs font-bold text-slate-600">Inicio<input required type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
             <label className="grid gap-1.5 text-xs font-bold text-slate-600">Término <span className="font-normal text-slate-400">(vacío = indefinido)</span><input type="datetime-local" value={form.endsAt} min={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
-            <label className="flex min-h-10 cursor-pointer items-center gap-2 self-end rounded-[5px] border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-ink-950"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} /> Activar promoción</label>
+            <label className="grid min-h-10 cursor-pointer grid-cols-[16px_minmax(0,1fr)] items-center gap-2 self-end rounded-[5px] px-2 text-sm font-bold text-ink-950 hover:bg-slate-100"><input className="size-4 min-h-4 w-4 shrink-0 accent-rust-600" type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Activar promoción</span></label>
           </div>
           <PromotionTargetPicker products={targets.products} categories={targets.categories} productIds={form.productIds} categoryIds={form.categoryIds} onChange={(selection) => setForm((current) => ({ ...current, ...selection }))} />
           <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={close} disabled={saving}>Cancelar</button><button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar promoción"}</button></div>

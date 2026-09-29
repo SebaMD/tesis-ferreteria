@@ -4,6 +4,7 @@ import {
   Edit3,
   GripVertical,
   Image as ImageIcon,
+  Power,
   Save,
   Trash2,
   X,
@@ -150,6 +151,8 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const noticesRef = useRef([]);
   const noticeNodesRef = useRef(new Map());
   const noticePositionsRef = useRef(new Map());
+  const editorRef = useRef(null);
+  const editorRevealRef = useRef(null);
   const draggingIdRef = useRef(null);
   const dragChangedRef = useRef(false);
   const [draggingId, setDraggingId] = useState(null);
@@ -220,7 +223,8 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     setRemoveImage(false);
   };
 
-  const startCreate = useCallback(() => {
+  const startCreate = useCallback(({ focus = false } = {}) => {
+    editorRevealRef.current = { id: "new", focus };
     setEditingId("new");
     setForm(EMPTY_FORM);
     resetMedia();
@@ -228,19 +232,48 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
 
   useImperativeHandle(ref, () => ({ startCreate }), [startCreate]);
 
-  const startEdit = (notice) => {
+  const startEdit = (notice, { focus = false } = {}) => {
+    editorRevealRef.current = { id: notice.id, focus };
     setEditingId(notice.id);
     setForm(noticeForm(notice));
     resetMedia();
   };
 
-  const startPresentationEdit = () => {
+  const startPresentationEdit = ({ focus = false } = {}) => {
+    editorRevealRef.current = { id: "presentation", focus };
     setEditingId("presentation");
     setForm(presentationForm(presentation));
     resetMedia();
   };
 
+  useEffect(() => {
+    const pending = editorRevealRef.current;
+    if (!pending || pending.id !== editingId) return undefined;
+
+    let focusFrame;
+    const scrollFrame = window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+      if (pending.focus) {
+        focusFrame = window.requestAnimationFrame(() => {
+          editor.querySelector('input:not([type="file"]), textarea, button')?.focus({ preventScroll: true });
+        });
+      }
+      editorRevealRef.current = null;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(scrollFrame);
+      if (focusFrame) window.cancelAnimationFrame(focusFrame);
+    };
+  }, [editingId]);
+
   const cancelEdit = () => {
+    editorRevealRef.current = null;
     setEditingId(null);
     resetMedia();
   };
@@ -371,7 +404,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const renderEditor = (kind) => {
     const isPresentation = kind === "presentation";
     return (
-      <form className="customer-notice-editor grid gap-3 rounded-md border border-rust-500 bg-rust-50/40 p-4" onSubmit={persist}>
+      <form className="customer-notice-editor grid scroll-mt-4 gap-3 rounded-md border border-rust-500 bg-rust-50/40 p-4" ref={editorRef} onSubmit={persist}>
         <strong className="text-sm text-ink-950">
           {isPresentation ? "Editar presentación del catálogo" : editingId === "new" ? "Crear aviso" : "Editar aviso"}
         </strong>
@@ -435,9 +468,9 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
       {loading ? <p className="m-0 text-sm text-slate-500">Cargando avisos…</p> : (
         <div className="grid gap-3">
           <div>
-            <article className="customer-notice-presentation grid gap-3 rounded-md border-2 border-rust-500/70 bg-rust-50/30 p-4">
+            <article className="customer-notice-presentation relative grid gap-3 rounded-md border-2 border-rust-500/70 bg-rust-50/30 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
+                <div className="flex min-w-0 items-start gap-3 max-[620px]:pr-11">
                   <span className="grid size-10 shrink-0 place-items-center rounded-md bg-rust-500 text-white"><ImageIcon size={19} /></span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -448,7 +481,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                     <p className="mt-1 mb-0 line-clamp-2 text-xs leading-5 text-slate-600">{presentation?.mainText}</p>
                   </div>
                 </div>
-                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={startPresentationEdit}><Edit3 size={16} /> Editar</button>
+                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0" type="button" onClick={(event) => startPresentationEdit({ focus: event.detail === 0 })} aria-label="Editar presentación del catálogo" title="Editar presentación del catálogo"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
               </div>
               {presentation?.imageUrl && <img className="h-20 w-full rounded-md border border-slate-200 object-cover" src={presentation.imageUrl} alt="" />}
               <span className="text-[11px] text-slate-500">Siempre ocupa la primera posición y no puede desactivarse, moverse ni eliminarse.</span>
@@ -502,15 +535,15 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                     <div><dt className="font-bold text-slate-500">Inicio</dt><dd className="m-0 mt-1 text-ink-700">{formatDateTime(notice.startsAt)}</dd></div>
                     <div><dt className="font-bold text-slate-500">Término</dt><dd className="m-0 mt-1 text-ink-700">{formatDateTime(notice.endsAt)}</dd></div>
                   </dl>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 max-[620px]:grid">
                     <div className="flex gap-1" aria-label={`Cambiar posición de ${notice.title}`}>
                       <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={() => moveNotice(notice.id, -1)} disabled={index === 0} aria-label={`Mover ${notice.title} hacia arriba`} title="Mover hacia arriba"><ArrowUp size={16} /></button>
                       <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={() => moveNotice(notice.id, 1)} disabled={index === notices.length - 1} aria-label={`Mover ${notice.title} hacia abajo`} title="Mover hacia abajo"><ArrowDown size={16} /></button>
                     </div>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => toggleActive(notice)}>{notice.isActive ? "Desactivar" : "Activar"}</button>
-                      <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => startEdit(notice)}><Edit3 size={16} /> Editar</button>
-                      <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50" type="button" onClick={() => setDeleteTarget(notice)}><Trash2 size={16} /> Eliminar</button>
+                    <div className="flex flex-wrap justify-end gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
+                      <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggleActive(notice)} aria-label={`${notice.isActive ? "Desactivar" : "Activar"} ${notice.title}`} title={notice.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{notice.isActive ? "Desactivar" : "Activar"}</span></button>
+                      <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={(event) => startEdit(notice, { focus: event.detail === 0 })} aria-label={`Editar ${notice.title}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
+                      <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => setDeleteTarget(notice)} aria-label={`Eliminar ${notice.title}`} title="Eliminar"><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
                     </div>
                   </div>
                 </article>

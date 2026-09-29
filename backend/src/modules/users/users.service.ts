@@ -143,7 +143,7 @@ export async function deactivateClientAccountService(userId: number, data: Clien
       throw new ClientAccountError("La cuenta de cliente no está activa", 403);
     }
     if (!await bcrypt.compare(data.password, user.password)) {
-      throw new ClientAccountError("La contraseña actual es incorrecta", 401);
+      throw new ClientAccountError("Contraseña incorrecta.", 400);
     }
     if (await findBlockingClientCommerce(tx, userId)) {
       throw new ClientAccountError(

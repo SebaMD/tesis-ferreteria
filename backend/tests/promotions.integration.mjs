@@ -129,7 +129,8 @@ try {
     VALUES
       ($1,'Taladro promocional','Marca A',10000,'unidad',100,5,true),
       ($2,'Tornillo promocional','Marca B',5000,'unidad',100,5,true),
-      ($3,'Pintura sin oferta','Marca C',9000,'unidad',100,5,true)
+      ($3,'Pintura sin oferta','Marca C',9000,'unidad',100,5,true),
+      ($1,'Taladro inactivo','Marca A',12000,'unidad',0,5,false)
     RETURNING id,name
   `, [categoryId("Herramientas"), categoryId("Tornillos"), categoryId("Pinturas")])).rows;
   const productId = (name) => products.find((item) => item.name === name).id;
@@ -175,8 +176,9 @@ try {
     await request("POST", "/promotions", { role, body: promotion({ productIds: [products[0].id] }) }, 403);
   }
   const targets = (await request("GET", "/promotions/targets", { role: "MANAGER" })).data;
-  assert.equal(targets.products.length, 3);
+  assert.equal(targets.products.length, 4);
   assert.equal(targets.categories.length, 3);
+  assert.equal(targets.products.find((product) => product.name === "Taladro inactivo").status, false);
 
   const percentBody = promotion({ productIds: [productId("Taladro promocional")] });
   const percent = (await request("POST", "/promotions", { role: "ADMIN", body: percentBody }, 201)).data;

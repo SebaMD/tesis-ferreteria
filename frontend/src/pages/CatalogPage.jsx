@@ -30,7 +30,7 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const requestSequence = useRef(0);
-  const gridStartRef = useRef(null);
+  const catalogStartRef = useRef(null);
   const search = searchParams.get("search") || "";
 
   const priceRange = validatePriceRange(filters.minPrice, filters.maxPrice);
@@ -123,10 +123,16 @@ export default function CatalogPage() {
     if (next === page) return;
     setPage(next);
     if (scrollToGrid) {
-      window.requestAnimationFrame(() => gridStartRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
-      }));
+      window.requestAnimationFrame(() => {
+        const catalogStart = catalogStartRef.current;
+        if (!catalogStart) return;
+        const navbarHeight = document.querySelector("[data-client-navbar]")?.getBoundingClientRect().height || 0;
+        const top = catalogStart.getBoundingClientRect().top + window.scrollY - navbarHeight - 8;
+        window.scrollTo({
+          top: Math.max(0, top),
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
+      });
     }
   };
 
@@ -144,43 +150,45 @@ export default function CatalogPage() {
         </section>
       )}
 
-      <section className="grid min-w-0 gap-4">
-        <div>
-          <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
-          <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos en catálogo</span>
-          {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
-        </div>
-
-        <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[minmax(0,1fr)_auto] min-[1024px]:items-end">
-          <div className="grid min-w-0 grid-cols-[minmax(0,190px)_minmax(0,210px)_auto] items-end gap-2 max-[620px]:grid-cols-2">
-            <label className="grid min-w-0 gap-1 text-xs font-semibold">
-              Categoría
-              <AppSelect className="text-xs" value={filters.categoryId} onChange={(value) => setFilterValue("categoryId", value)} ariaLabel="Filtrar por categoría" options={[{ value: "", label: "Todas" }, ...categories.map((category) => ({ value: category.id, label: category.name }))]} />
-            </label>
-            <label className="grid min-w-0 gap-1 text-xs font-semibold">
-              Ordenar por
-              <AppSelect className="text-xs" value={order} onChange={changeOrder} ariaLabel="Ordenar catálogo" options={CATALOG_SORT_OPTIONS.map(([value, label]) => ({ value, label }))} />
-            </label>
-            <button className="min-h-10 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden max-[620px]:col-span-2" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
-              <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
-            </button>
+      <section className="grid min-w-0 gap-4" ref={catalogStartRef}>
+        <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
+          <div>
+            <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
+            <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos en catálogo</span>
+            {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
           </div>
-          <CatalogPagination
-            page={pagination.page}
-            pageSize={pagination.pageSize}
-            totalItems={pagination.totalItems}
-            totalPages={pagination.totalPages}
-            loading={loading}
-            onPageChange={(value) => changePage(value, { scrollToGrid: true })}
-            onPageSizeChange={changePageSize}
-          />
+
+          <div className="grid min-w-0 gap-3 min-[1180px]:grid-cols-[minmax(0,1fr)_auto] min-[1180px]:items-end">
+            <div className="grid min-w-0 grid-cols-[minmax(0,190px)_minmax(0,210px)_auto] items-end gap-2 max-[620px]:grid-cols-2">
+              <label className="grid min-w-0 gap-1 text-xs font-semibold">
+                Categoría
+                <AppSelect className="text-xs" value={filters.categoryId} onChange={(value) => setFilterValue("categoryId", value)} ariaLabel="Filtrar por categoría" options={[{ value: "", label: "Todas" }, ...categories.map((category) => ({ value: category.id, label: category.name }))]} />
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-semibold">
+                Ordenar por
+                <AppSelect className="text-xs" value={order} onChange={changeOrder} ariaLabel="Ordenar catálogo" options={CATALOG_SORT_OPTIONS.map(([value, label]) => ({ value, label }))} />
+              </label>
+              <button className="min-h-10 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden max-[620px]:col-span-2" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
+              </button>
+            </div>
+            <CatalogPagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              loading={loading}
+              onPageChange={(value) => changePage(value, { scrollToGrid: true })}
+              onPageSizeChange={changePageSize}
+            />
+          </div>
         </div>
 
         <div className="grid min-w-0 grid-cols-[240px_minmax(0,1fr)] items-start gap-5 max-[1023px]:grid-cols-1">
           <aside className="rounded-lg border border-slate-200 bg-white p-4 max-[1023px]:hidden" aria-label="Filtros del catálogo">
             <CatalogFilters {...filterProps} />
           </aside>
-          <div className="min-w-0 scroll-mt-4" ref={gridStartRef}>
+          <div className="min-w-0">
             <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:gap-2.5" aria-label="Productos del catálogo">
               {products.map((product) => <ProductCard key={product.id} product={product} />)}
             </section>

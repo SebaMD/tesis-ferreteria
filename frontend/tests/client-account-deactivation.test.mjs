@@ -5,11 +5,18 @@ import { test } from "node:test";
 const root = new URL("../src/", import.meta.url);
 
 test("client account presents reversible deactivation and never labels it as deletion", async () => {
-  const source = await readFile(new URL("pages/ClientAccountPage.jsx", root), "utf8");
+  const [source, httpClient] = await Promise.all([
+    readFile(new URL("pages/ClientAccountPage.jsx", root), "utf8"),
+    readFile(new URL("api/httpClient.js", root), "utf8"),
+  ]);
   assert.match(source, /Seguridad de la cuenta/);
   assert.match(source, /Desactivar mi cuenta/);
   assert.match(source, /deactivateMyClientAccountRequest/);
   assert.match(source, /clearSession\(\)/);
+  assert.match(source, /deactivationError/);
+  assert.match(source, /setDeactivationPassword\(""\)/);
+  assert.match(source, /client-deactivation-error/);
+  assert.match(httpClient, /status === 401/);
   assert.doesNotMatch(source, /Eliminar mi cuenta/);
 });
 

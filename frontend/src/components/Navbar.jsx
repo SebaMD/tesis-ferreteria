@@ -56,7 +56,7 @@ export default function Navbar({ onToggleSidebar }) {
         description="Administra los mensajes que acompañan la presentación del catálogo."
         size="xlarge"
         headerActions={canManageNotice && (
-          <button className="min-h-10 max-[520px]:px-2.5" type="button" onClick={() => noticeManagerRef.current?.startCreate()} aria-label="Nuevo aviso">
+          <button className="min-h-10 max-[520px]:px-2.5" type="button" onClick={(event) => noticeManagerRef.current?.startCreate({ focus: event.detail === 0 })} aria-label="Nuevo aviso">
             <Plus size={17} /> <span className="max-[520px]:hidden">Nuevo aviso</span>
           </button>
         )}

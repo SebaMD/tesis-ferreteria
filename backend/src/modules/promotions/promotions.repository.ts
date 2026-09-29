@@ -209,10 +209,10 @@ export async function findPromotionTargets() {
       name: productsTable.name,
       categoryId: productsTable.categoryId,
       categoryName: categoriesTable.name,
+      status: productsTable.status,
     })
       .from(productsTable)
       .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
-      .where(eq(productsTable.status, true))
       .orderBy(asc(productsTable.name), asc(productsTable.id)),
     db.select({ id: categoriesTable.id, name: categoriesTable.name })
       .from(categoriesTable)

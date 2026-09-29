@@ -37,10 +37,12 @@ test("preview 2x1 calcula pares por SKU y no inventa precio unitario rebajado", 
 });
 
 test("catalogo y administracion mantienen contratos de ofertas y roles", async () => {
-  const [catalogFilters, catalogPage, promotionPage, app, roles] = await Promise.all([
+  const [catalogFilters, catalogPage, promotionPage, targetPicker, modal, app, roles] = await Promise.all([
     readFile(new URL("../src/components/CatalogFilters.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/pages/CatalogPage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/pages/PromotionsPage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/PromotionTargetPicker.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/AppModal.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/helpers/roles.js", import.meta.url), "utf8"),
   ]);
@@ -49,6 +51,14 @@ test("catalogo y administracion mantienen contratos de ofertas y roles", async (
   assert.match(catalogPage, /promotionTypes/);
   assert.match(promotionPage, /PERCENTAGE_DISCOUNT/);
   assert.match(promotionPage, /BUY_2_PAY_1/);
+  assert.match(promotionPage, /Nueva promoción/);
+  assert.match(promotionPage, /max-\[620px\]:w-full max-\[620px\]:justify-center/);
+  assert.match(promotionPage, /max-\[620px\]:grid-cols-3/);
+  assert.match(targetPicker, /Buscar categoría\.\.\./);
+  assert.match(targetPicker, /Productos incluidos por/);
+  assert.match(targetPicker, /Quitar categoría/);
+  assert.doesNotMatch(targetPicker, /promotion_excluded_products/);
+  assert.match(modal, /dialogs\[dialogs\.length - 1\] !== dialogRef\.current/);
   assert.match(app, /path="\/promotions"/);
   assert.match(roles, /promotions:\s*\["ADMIN",\s*"MANAGER"\]/);
 });

@@ -37,6 +37,9 @@ export default function AppModal({
     const previousActiveElement = document.activeElement;
 
     const handleKeyDown = (event) => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return;
+
       if (event.key === "Escape") {
         onCloseRef.current();
         return;

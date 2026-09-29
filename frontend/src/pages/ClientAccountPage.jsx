@@ -86,6 +86,7 @@ export default function ClientAccountPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deactivationOpen, setDeactivationOpen] = useState(false);
   const [deactivationPassword, setDeactivationPassword] = useState("");
+  const [deactivationError, setDeactivationError] = useState("");
   const [deactivating, setDeactivating] = useState(false);
   const emailVerified = Boolean(user.emailVerifiedAt || user.emailVerified);
 
@@ -186,6 +187,7 @@ export default function ClientAccountPage() {
     if (deactivating) return;
     setDeactivationOpen(false);
     setDeactivationPassword("");
+    setDeactivationError("");
   };
 
   const deactivateAccount = async (event) => {
@@ -198,7 +200,8 @@ export default function ClientAccountPage() {
       toast.success("Tu cuenta fue desactivada. Puedes reactivarla cuando quieras.");
       navigate("/login", { replace: true });
     } catch (error) {
-      toast.error(getApiError(error, "No se pudo desactivar la cuenta"));
+      setDeactivationError(getApiError(error, "No se pudo desactivar la cuenta"));
+      setDeactivationPassword("");
     } finally {
       setDeactivating(false);
     }
@@ -276,7 +279,7 @@ export default function ClientAccountPage() {
         </div>
         <div className="flex items-center justify-between gap-4 rounded-md border border-critical-200 bg-critical-50 p-4 max-[620px]:grid">
           <div><strong className="block text-sm text-ink-950">Desactivar mi cuenta</strong><span className="mt-1 block text-xs leading-5 text-slate-600">Perderás el acceso hasta reactivarla con tu contraseña y un código enviado por correo.</span></div>
-          <button className="shrink-0 border-critical-500 bg-white text-critical-700 hover:bg-critical-100 max-[620px]:w-full" type="button" onClick={() => setDeactivationOpen(true)}>Desactivar mi cuenta</button>
+          <button className="shrink-0 border-critical-500 bg-white text-critical-700 hover:bg-critical-100 max-[620px]:w-full" type="button" onClick={() => { setDeactivationError(""); setDeactivationPassword(""); setDeactivationOpen(true); }}>Desactivar mi cuenta</button>
         </div>
       </section>
 
@@ -289,7 +292,8 @@ export default function ClientAccountPage() {
       >
         <form className="grid gap-4" onSubmit={deactivateAccount}>
           <div className="client-account-deactivation-warning rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">Para confirmar, ingresa tu contraseña actual. Si existe una compra o entrega en proceso, la cuenta permanecerá activa.</div>
-          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => setDeactivationPassword(event.target.value)} autoComplete="current-password" required autoFocus /></label>
+          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => { setDeactivationPassword(event.target.value); setDeactivationError(""); }} autoComplete="current-password" aria-invalid={Boolean(deactivationError)} aria-describedby={deactivationError ? "client-deactivation-error" : undefined} required autoFocus /></label>
+          {deactivationError && <p className="m-0 rounded-md border border-critical-200 bg-critical-50 px-3 py-2 text-sm font-semibold text-critical-700" id="client-deactivation-error" role="alert">{deactivationError}</p>}
           <div className="flex justify-end gap-2 max-[480px]:grid">
             <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeDeactivation} disabled={deactivating}>Cancelar</button>
             <button className="border-critical-600 bg-critical-600 text-white hover:bg-critical-700" type="submit" disabled={deactivating || !deactivationPassword}>{deactivating ? "Desactivando..." : "Confirmar desactivación"}</button>

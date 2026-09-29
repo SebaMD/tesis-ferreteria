@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-r
 import { CATALOG_PAGE_SIZES, getCatalogPageRange } from "../helpers/catalogFilters.js";
 import AppSelect from "./AppSelect.jsx";
 
-const iconButtonClass = "grid size-10 min-h-10 shrink-0 place-items-center border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40";
+const iconButtonClass = "grid size-10 min-h-10 shrink-0 place-items-center border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 max-[600px]:size-[38px] max-[600px]:min-h-[38px]";
 
 export default function CatalogPagination({
   page,
@@ -21,11 +21,11 @@ export default function CatalogPagination({
   const atLast = totalPages === 0 || page >= totalPages;
 
   return (
-    <nav className={`flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 py-1 max-[600px]:justify-between ${className}`} aria-label={ariaLabel}>
-      {showPageSize && <div className="flex min-w-0 items-center gap-2">
-        <span className="whitespace-nowrap text-xs font-semibold text-slate-600">Ítems por pág.</span>
+    <nav className={`flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 py-1 max-[600px]:flex-nowrap max-[600px]:justify-between max-[600px]:gap-1.5 ${className}`} aria-label={ariaLabel}>
+      {showPageSize && <div className="flex min-w-0 items-center gap-2 max-[600px]:gap-0">
+        <span className="whitespace-nowrap text-xs font-semibold text-slate-600 max-[600px]:sr-only">Ítems por pág.</span>
         <AppSelect
-          className="w-20 shrink-0"
+          className="w-20 shrink-0 max-[600px]:w-[68px]"
           value={pageSize}
           onChange={(value) => onPageSizeChange(Number(value))}
           options={CATALOG_PAGE_SIZES.map((size) => ({ value: size, label: String(size) }))}
@@ -34,7 +34,7 @@ export default function CatalogPagination({
           disabled={loading}
         />
       </div>}
-      <span className="whitespace-nowrap text-xs font-semibold text-slate-600" aria-live="polite">
+      <span className="whitespace-nowrap text-xs font-semibold text-slate-600 max-[600px]:text-[11px]" aria-live="polite">
         {first}–{last} de {totalItems}
       </span>
       <div className="flex items-center gap-1" role="group" aria-label="Controles de página">

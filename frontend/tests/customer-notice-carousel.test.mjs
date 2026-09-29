@@ -56,7 +56,13 @@ assert.doesNotMatch(manager, /<legend[^>]*>Imagen opcional/);
 assert.match(manager, /node\.animate/);
 assert.match(manager, /customer-notice-card--dragging/);
 assert.match(manager, /prefers-reduced-motion: reduce/);
+assert.match(manager, /editorRevealRef/);
+assert.match(manager, /scrollIntoView/);
+assert.match(manager, /event\.detail === 0/);
+assert.match(manager, /aria-label="Editar presentación del catálogo"/);
+assert.match(manager, /max-\[620px\]:grid-cols-3/);
 assert.match(navbar, /headerActions/);
+assert.match(navbar, /startCreate\(\{ focus: event\.detail === 0 \}\)/);
 assert.match(navbar, /Administra los mensajes que acompañan la presentación del catálogo/);
 
 console.log("PASS editable institutional slide, image carousel, inline editing, pointer/keyboard ordering and accessible indicators");

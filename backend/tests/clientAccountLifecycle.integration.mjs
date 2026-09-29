@@ -204,10 +204,22 @@ try {
   const clientLogin = await login("client.lifecycle@example.test");
   const adminLogin = await login("admin.lifecycle@example.test");
   const cashierLogin = await login("cashier.lifecycle@example.test");
-  await request("POST", "/users/me/deactivate", {
+  const beforeWrongPassword = (await pool.query(
+    "SELECT status,self_deactivated_at,auth_version FROM users WHERE id=$1",
+    [client.id],
+  )).rows[0];
+  const wrongPassword = await request("POST", "/users/me/deactivate", {
     token: clientLogin.data.token,
     body: { password: "Incorrecta-2026!" },
-  }, 401);
+  }, 400);
+  assert.equal(wrongPassword.message, "Contraseña incorrecta.");
+  const afterWrongPassword = (await pool.query(
+    "SELECT status,self_deactivated_at,auth_version FROM users WHERE id=$1",
+    [client.id],
+  )).rows[0];
+  assert.deepEqual(afterWrongPassword, beforeWrongPassword);
+  await request("GET", "/favorites", { token: clientLogin.data.token });
+  await request("GET", "/favorites", { token: "invalid-token" }, 401);
   await request("POST", "/users/me/deactivate", {
     token: cashierLogin.data.token,
     body: { password },

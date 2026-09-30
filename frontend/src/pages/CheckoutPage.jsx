@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
-import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
@@ -73,8 +72,6 @@ export default function CheckoutPage() {
     phone: user?.phone || "",
     address: "",
     reference: "",
-    latitude: null,
-    longitude: null,
   }));
   const submittingRef = useRef(false);
   const deliveryTouchedRef = useRef(false);
@@ -124,8 +121,6 @@ export default function CheckoutPage() {
         phone: savedAddress.phone || "",
         address: savedAddress.address || "",
         reference: savedAddress.reference || "",
-        latitude: savedAddress.latitude ?? null,
-        longitude: savedAddress.longitude ?? null,
       });
     } catch (error) {
       toast.error(getApiError(error, "No se pudo cargar tu dirección guardada"));
@@ -262,8 +257,8 @@ export default function CheckoutPage() {
         deliveryAddress: deliveryType === "DELIVERY" ? deliveryData.address : null,
         deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null,
         deliveryReference: deliveryType === "DELIVERY" ? deliveryData.reference : null,
-        deliveryLatitude: deliveryType === "DELIVERY" ? deliveryData.latitude : null,
-        deliveryLongitude: deliveryType === "DELIVERY" ? deliveryData.longitude : null,
+        deliveryLatitude: null,
+        deliveryLongitude: null,
         saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveDeliveryAddress,
       };
       const payment = isClient
@@ -536,17 +531,6 @@ export default function CheckoutPage() {
                   <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia / indicaciones <span className="font-normal text-slate-400">(opcional)</span>
                     <textarea className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500" maxLength="500" value={deliveryData.reference} onChange={(event) => updateDeliveryData("reference", event.target.value)} placeholder="Ej: portón azul, llamar al llegar" />
                   </label>
-                  <DeliveryLocationPicker
-                    latitude={deliveryData.latitude}
-                    longitude={deliveryData.longitude}
-                    address={deliveryData.address}
-                    commune={DELIVERY_COMMUNE}
-                    onChange={({ latitude, longitude }) => {
-                      deliveryTouchedRef.current = true;
-                      setDeliveryData((current) => ({ ...current, latitude, longitude }));
-                    }}
-                    disabled={submitting}
-                  />
                   {isClient && (
                     <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-ink-950 max-[620px]:col-span-1">
                       <input

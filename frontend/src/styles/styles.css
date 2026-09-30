@@ -392,6 +392,16 @@
   color: #bfdbfe !important;
 }
 
+.status-badge--inactive {
+  border: 1px solid var(--color-slate-300);
+}
+
+.dark .status-badge--inactive {
+  border-color: #526174 !important;
+  background: #232c38 !important;
+  color: #d7dee7 !important;
+}
+
 .dark .customer-notice-editor,
 .dark .customer-notice-presentation {
   border-color: #b45309 !important;

@@ -28,6 +28,13 @@ test("logistics QR handoff is WAREHOUSE-only and keeps the mobile delivery flow"
   assert.match(page, /DeliveryEvidenceForm/);
   assert.match(page, /tel:/);
   assert.match(page, /buildDeliveryRouteUrl/);
+  assert.match(page, /Abrir en Google Maps/);
+  assert.doesNotMatch(page, /DeliveryMap|MapContainer|react-leaflet/);
+  assert.match(management, /const canManage = user\?\.role === "WAREHOUSE"/);
+  assert.match(management, /canManage && hasDeliveryDetails/);
+  assert.match(management, /buildDeliveryRouteUrl/);
+  assert.match(management, /Abrir en Google Maps/);
+  assert.match(management, /!canManage && selectedOrder\.deliveryType === "DELIVERY"/);
   assert.doesNotMatch(management, /DISPATCH_LABEL|getDispatchLabelRequest/);
   assert.doesNotMatch(labelButton, /despacho|DISPATCH_LABEL/);
 });

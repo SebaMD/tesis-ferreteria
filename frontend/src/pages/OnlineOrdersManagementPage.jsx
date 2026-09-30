@@ -2,6 +2,7 @@ import {
   Camera,
   CheckCircle2,
   Eye,
+  MapPinned,
   PackageCheck,
   Play,
   RefreshCw,
@@ -23,6 +24,7 @@ import AppSelect from "../components/AppSelect.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
+import { buildDeliveryRouteUrl } from "../helpers/delivery.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
   formatOnlineOrderFolio,
@@ -395,6 +397,14 @@ export default function OnlineOrdersManagementPage() {
     || selectedOrder?.deliveryCommune
     || selectedOrder?.deliveryReference,
   );
+  const selectedRouteUrl = canManage && hasDeliveryDetails
+    ? buildDeliveryRouteUrl({
+      latitude: selectedOrder?.deliveryLatitude,
+      longitude: selectedOrder?.deliveryLongitude,
+      address: selectedOrder?.deliveryAddress,
+      commune: selectedOrder?.deliveryCommune,
+    })
+    : "";
 
   let modalFooter = null;
   if (selectedOrder && confirmationConfig) {
@@ -684,13 +694,24 @@ export default function OnlineOrdersManagementPage() {
               ) : selectedOrder.deliveryType === "PICKUP" ? <DetailField label="Modalidad">Retiro en tienda</DetailField> : null}
             </dl>
 
+            {selectedRouteUrl && (
+              <a
+                className="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-[5px] border border-slate-300 bg-white px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:w-full"
+                href={selectedRouteUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MapPinned size={18} aria-hidden="true" /> Abrir en Google Maps
+              </a>
+            )}
+
             {canManage && selectedOrder.deliveryType === "DELIVERY" && !hasDeliveryDetails && (
               <p className="m-0 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
                 Los datos privados del destino se habilitan únicamente al bodeguero responsable cuando inicia el reparto.
               </p>
             )}
 
-            {selectedOrder.deliveryType === "DELIVERY" && selectedOrder.deliveryAddress && (
+            {!canManage && selectedOrder.deliveryType === "DELIVERY" && selectedOrder.deliveryAddress && (
               <DeliveryMap
                 latitude={selectedOrder.deliveryLatitude}
                 longitude={selectedOrder.deliveryLongitude}

@@ -20,7 +20,7 @@ const TYPES = [
   { value: "BUY_2_PAY_1", label: "2x1" },
 ];
 const STATUS = {
-  INACTIVE: ["Inactiva", "bg-slate-100 text-slate-700"],
+  INACTIVE: ["Inactiva", "status-badge--inactive bg-slate-100 text-slate-700"],
   SCHEDULED: ["Programada", "bg-blue-100 text-blue-800"],
   ACTIVE: ["Vigente", "bg-positive-50 text-positive-700"],
   EXPIRED: ["Vencida", "bg-amber-100 text-amber-800"],
@@ -167,7 +167,7 @@ export default function PromotionsPage() {
                 <div className="flex flex-wrap gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggle(promotion)} aria-label={`${promotion.isActive ? "Desactivar" : "Activar"} ${promotion.name}`} title={promotion.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{promotion.isActive ? "Desactivar" : "Activar"}</span></button>
-                  <button className="border-critical-200 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
+                  <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-xs max-[700px]:grid-cols-1"><div className="rounded-md bg-slate-50 p-3"><strong className="flex items-center gap-2 text-ink-950"><CalendarClock size={15} /> Vigencia</strong><span className="mt-1 block text-slate-600">Desde {new Date(promotion.startsAt).toLocaleString("es-CL")}</span><span className="block text-slate-600">{promotion.endsAt ? `Hasta ${new Date(promotion.endsAt).toLocaleString("es-CL")}` : "Sin término"}</span></div><div className="rounded-md bg-slate-50 p-3"><strong className="text-ink-950">Aplicación</strong><span className="mt-1 block text-slate-600">{productNames.length ? `${productNames.length} producto(s): ${productNames.join(", ")}` : "Sin productos directos"}</span><span className="block text-slate-600">{categoryNames.length ? `${categoryNames.length} categoría(s): ${categoryNames.join(", ")}` : "Sin categorías"}</span></div></div>

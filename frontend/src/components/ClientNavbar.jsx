@@ -1,5 +1,5 @@
 import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, Search, ShoppingCart, UserPlus, UserRound } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
@@ -21,33 +21,33 @@ export default function ClientNavbar() {
   const searchInputRef = useRef(null);
   const catalogSearch = location.pathname === "/catalog" ? searchParams.get("search") || "" : "";
 
-  useEffect(() => {
-    if (location.pathname !== "/catalog" || !location.state?.restoreCatalogSearchFocus) return undefined;
+  useLayoutEffect(() => {
+    if (location.pathname !== "/catalog" || !location.state?.restoreCatalogSearchFocus) return;
 
-    const frame = window.requestAnimationFrame(() => {
-      const input = searchInputRef.current;
-      if (!input) return;
-      input.focus({ preventScroll: true });
-      const cursor = input.value.length;
-      input.setSelectionRange(cursor, cursor);
-      navigate(
-        { pathname: location.pathname, search: location.search },
-        { replace: true, state: null, preventScrollReset: true },
-      );
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [location.pathname, location.search, location.state, navigate]);
+    const input = searchInputRef.current;
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    const cursor = input.value.length;
+    input.setSelectionRange(cursor, cursor);
+  }, [location.pathname, location.state]);
 
   const updateCatalogSearch = (value) => {
     const next = new URLSearchParams(location.pathname === "/catalog" ? searchParams : undefined);
     if (value) next.set("search", value);
     else next.delete("search");
-    if (location.pathname === "/catalog") setSearchParams(next, { replace: true });
+    if (location.pathname === "/catalog") {
+      setSearchParams(next, { replace: true, preventScrollReset: true });
+    }
     else {
       navigate(
         { pathname: "/catalog", search: next.toString() ? `?${next.toString()}` : "" },
-        { state: { restoreCatalogSearchFocus: true } },
+        {
+          preventScrollReset: true,
+          state: {
+            restoreCatalogSearchFocus: true,
+            scrollToCatalogResults: true,
+          },
+        },
       );
     }
   };

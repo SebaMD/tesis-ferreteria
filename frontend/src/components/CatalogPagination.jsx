@@ -25,7 +25,7 @@ export default function CatalogPagination({
       {showPageSize && <div className="flex min-w-0 items-center gap-2 max-[600px]:gap-0">
         <span className="whitespace-nowrap text-xs font-semibold text-slate-600 max-[600px]:sr-only">Ítems por pág.</span>
         <AppSelect
-          className="w-20 shrink-0 max-[600px]:w-[68px]"
+          className="w-20 min-w-20 shrink-0"
           value={pageSize}
           onChange={(value) => onPageSizeChange(Number(value))}
           options={CATALOG_PAGE_SIZES.map((size) => ({ value: size, label: String(size) }))}

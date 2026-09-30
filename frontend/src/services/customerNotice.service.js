@@ -1,9 +1,14 @@
 import api from "../api/httpClient.js";
+import { resolveApiAssetUrl } from "../helpers/apiAssets.js";
+
+function resolveImage(item) {
+  return item ? { ...item, imageUrl: resolveApiAssetUrl(item.imageUrl) } : null;
+}
 
 function noticeConfiguration(data) {
   return {
-    presentation: data?.presentation ?? null,
-    notices: Array.isArray(data?.notices) ? data.notices : [],
+    presentation: resolveImage(data?.presentation),
+    notices: Array.isArray(data?.notices) ? data.notices.map(resolveImage) : [],
   };
 }
 

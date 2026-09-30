@@ -16,12 +16,11 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
-import DeliveryLocationPicker from "../components/DeliveryLocationPicker.jsx";
 import AppModal from "../components/AppModal.jsx";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
-import { DELIVERY_COMMUNE, normalizeDeliveryCoordinates } from "../helpers/delivery.js";
+import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { normalizeChileanMobilePhone } from "../helpers/phone.js";
 import useAuth from "../hooks/useAuth.js";
 import {
@@ -42,8 +41,17 @@ function emptyAddress(user) {
     address: "",
     commune: DELIVERY_COMMUNE,
     reference: "",
-    latitude: null,
-    longitude: null,
+  };
+}
+
+function editableAddress(address, user) {
+  if (!address) return emptyAddress(user);
+  return {
+    recipientName: address.recipientName || "",
+    phone: address.phone || "",
+    address: address.address || "",
+    commune: DELIVERY_COMMUNE,
+    reference: address.reference || "",
   };
 }
 
@@ -102,7 +110,7 @@ export default function ClientAccountPage() {
       .then((data) => {
         if (!active || !data) return;
         setSavedAddress(data);
-        setAddressForm({ ...data, reference: data.reference || "" });
+        setAddressForm(editableAddress(data));
       })
       .catch((error) => { if (active) toast.error(getApiError(error, "No se pudo cargar tu dirección")); })
       .finally(() => { if (active) setAddressLoading(false); });
@@ -137,12 +145,9 @@ export default function ClientAccountPage() {
     const recipientName = addressForm.recipientName.trim().replace(/\s+/g, " ");
     const normalizedPhone = normalizeChileanMobilePhone(addressForm.phone);
     const address = addressForm.address.trim().replace(/\s+/g, " ");
-    const coordinates = normalizeDeliveryCoordinates(addressForm.latitude, addressForm.longitude);
-    const hasAnyCoordinate = addressForm.latitude !== null || addressForm.longitude !== null;
     if (recipientName.length < 3) return toast.error("Ingresa el nombre completo del destinatario");
     if (!normalizedPhone) return toast.error("Ingresa un teléfono móvil chileno válido");
     if (!address) return toast.error("Ingresa una dirección");
-    if (hasAnyCoordinate && !coordinates) return toast.error("El punto de entrega no contiene coordenadas válidas");
 
     setSavingAddress(true);
     try {
@@ -152,11 +157,11 @@ export default function ClientAccountPage() {
         address,
         commune: DELIVERY_COMMUNE,
         reference: addressForm.reference.trim().replace(/\s+/g, " ") || null,
-        latitude: coordinates?.latitude ?? null,
-        longitude: coordinates?.longitude ?? null,
+        latitude: null,
+        longitude: null,
       });
       setSavedAddress(saved);
-      setAddressForm({ ...saved, reference: saved.reference || "" });
+      setAddressForm(editableAddress(saved));
       setEditingAddress(false);
       setConfirmDelete(false);
       toast.success("Dirección guardada");
@@ -259,8 +264,8 @@ export default function ClientAccountPage() {
       <AccordionSection id="client-address-section" title="Mi dirección" Icon={MapPin} open={addressOpen} onToggle={() => setAddressOpen((current) => !current)}>
         {editingAddress ? (
           <form className="grid gap-4" onSubmit={saveAddress}>
-            <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1"><label>Nombre del destinatario<input maxLength="240" value={addressForm.recipientName} onChange={(event) => updateAddress("recipientName", event.target.value)} required /></label><label>Teléfono de contacto<input maxLength="20" value={addressForm.phone} onChange={(event) => updateAddress("phone", event.target.value)} placeholder="+56912345678" required /></label><label>Dirección<input maxLength="300" value={addressForm.address} onChange={(event) => updateAddress("address", event.target.value)} required /></label><label>Comuna<input readOnly value={DELIVERY_COMMUNE} aria-readonly="true" /></label><label className="col-span-2 max-[620px]:col-span-1">Referencia (opcional)<textarea className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950" maxLength="500" value={addressForm.reference} onChange={(event) => updateAddress("reference", event.target.value)} /></label><DeliveryLocationPicker latitude={addressForm.latitude} longitude={addressForm.longitude} address={addressForm.address} commune={DELIVERY_COMMUNE} onChange={({ latitude, longitude }) => setAddressForm((current) => ({ ...current, latitude, longitude }))} disabled={savingAddress} /></div>
-            <div className="flex flex-wrap gap-2"><button type="submit" disabled={savingAddress}><Save size={16} /> Guardar dirección</button><button className="border-slate-300 bg-white text-ink-700" type="button" disabled={savingAddress} onClick={() => { setAddressForm(savedAddress ? { ...savedAddress, reference: savedAddress.reference || "" } : emptyAddress(user)); setEditingAddress(false); }}><X size={16} /> Cancelar</button></div>
+            <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1"><label>Nombre del destinatario<input maxLength="240" value={addressForm.recipientName} onChange={(event) => updateAddress("recipientName", event.target.value)} required /></label><label>Teléfono de contacto<input maxLength="20" value={addressForm.phone} onChange={(event) => updateAddress("phone", event.target.value)} placeholder="+56912345678" required /></label><label>Dirección<input maxLength="300" value={addressForm.address} onChange={(event) => updateAddress("address", event.target.value)} required /></label><label>Comuna<input readOnly value={DELIVERY_COMMUNE} aria-readonly="true" /></label><label className="col-span-2 max-[620px]:col-span-1">Referencia (opcional)<textarea className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950" maxLength="500" value={addressForm.reference} onChange={(event) => updateAddress("reference", event.target.value)} /></label></div>
+            <div className="flex flex-wrap gap-2"><button type="submit" disabled={savingAddress}><Save size={16} /> Guardar dirección</button><button className="border-slate-300 bg-white text-ink-700" type="button" disabled={savingAddress} onClick={() => { setAddressForm(editableAddress(savedAddress, user)); setEditingAddress(false); }}><X size={16} /> Cancelar</button></div>
           </form>
         ) : savedAddress ? (
           <div className="grid gap-4"><dl className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1"><div className="client-account-surface rounded-md bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Destinatario</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{savedAddress.recipientName}</dd></div><div className="client-account-surface rounded-md bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">Teléfono</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{savedAddress.phone}</dd></div><div className="client-account-surface col-span-2 rounded-md bg-slate-50 p-3 max-[620px]:col-span-1"><dt className="text-xs font-bold text-slate-500">Dirección</dt><dd className="mt-1 ml-0 font-semibold text-ink-950">{savedAddress.address}, {savedAddress.commune}</dd>{savedAddress.reference && <span className="mt-1 block text-xs text-slate-500">{savedAddress.reference}</span>}</div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setEditingAddress(true)}><Pencil size={16} /> Editar dirección</button>{confirmDelete ? <><button className="border-critical-600 bg-critical-600 text-white hover:bg-critical-700" type="button" disabled={savingAddress} onClick={deleteAddress}><Trash2 size={16} /> Confirmar eliminación</button><button className="border-slate-300 bg-white text-ink-700" type="button" disabled={savingAddress} onClick={() => setConfirmDelete(false)}>Cancelar</button></> : <button className="border-critical-300 bg-white text-critical-600 hover:bg-critical-50" type="button" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> Eliminar</button>}</div></div>

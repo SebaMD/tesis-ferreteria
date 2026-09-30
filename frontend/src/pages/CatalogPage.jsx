@@ -1,6 +1,6 @@
 import { AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -17,6 +17,8 @@ import { getCatalogProductsRequest } from "../services/catalog.service.js";
 const EMPTY_PAGINATION = { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
 
 export default function CatalogPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState(EMPTY_CATALOG_FILTERS);
@@ -32,6 +34,20 @@ export default function CatalogPage() {
   const requestSequence = useRef(0);
   const catalogStartRef = useRef(null);
   const search = searchParams.get("search") || "";
+  const searchWasActiveRef = useRef(Boolean(search.trim()));
+  const handledNavigationScrollRef = useRef(null);
+  const pendingNavigationScrollRef = useRef(false);
+
+  const scrollToCatalogStart = useCallback(() => {
+    const catalogStart = catalogStartRef.current;
+    if (!catalogStart) return;
+    const navbarHeight = document.querySelector("[data-client-navbar]")?.getBoundingClientRect().height || 0;
+    const top = catalogStart.getBoundingClientRect().top + window.scrollY - navbarHeight - 8;
+    window.scrollTo({
+      top: Math.max(0, top),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, []);
 
   const priceRange = validatePriceRange(filters.minPrice, filters.maxPrice);
   const catalogQuery = useMemo(() => ({
@@ -75,9 +91,15 @@ export default function CatalogPage() {
         if (notifyError) toast.error(message);
       }
     } finally {
-      if (showLoading && requestSequence.current === sequence) setLoading(false);
+      if (showLoading && requestSequence.current === sequence) {
+        setLoading(false);
+        if (pendingNavigationScrollRef.current && (catalogQuery.search || "") === search.trim()) {
+          pendingNavigationScrollRef.current = false;
+          window.requestAnimationFrame(scrollToCatalogStart);
+        }
+      }
     }
-  }, [catalogQuery, page]);
+  }, [catalogQuery, page, scrollToCatalogStart, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -86,6 +108,28 @@ export default function CatalogPage() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const hasSearch = Boolean(search.trim());
+    const searchStarted = hasSearch && !searchWasActiveRef.current;
+    searchWasActiveRef.current = hasSearch;
+    if (!searchStarted) return undefined;
+
+    const frame = window.requestAnimationFrame(scrollToCatalogStart);
+    return () => window.cancelAnimationFrame(frame);
+  }, [scrollToCatalogStart, search]);
+
+  useLayoutEffect(() => {
+    if (!location.state?.scrollToCatalogResults) return;
+    if (handledNavigationScrollRef.current === location.key) return;
+    handledNavigationScrollRef.current = location.key;
+    pendingNavigationScrollRef.current = true;
+
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: null, preventScrollReset: true },
+    );
+  }, [location.hash, location.key, location.pathname, location.search, location.state, navigate, scrollToCatalogStart]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -123,16 +167,7 @@ export default function CatalogPage() {
     if (next === page) return;
     setPage(next);
     if (scrollToGrid) {
-      window.requestAnimationFrame(() => {
-        const catalogStart = catalogStartRef.current;
-        if (!catalogStart) return;
-        const navbarHeight = document.querySelector("[data-client-navbar]")?.getBoundingClientRect().height || 0;
-        const top = catalogStart.getBoundingClientRect().top + window.scrollY - navbarHeight - 8;
-        window.scrollTo({
-          top: Math.max(0, top),
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        });
-      });
+      window.requestAnimationFrame(scrollToCatalogStart);
     }
   };
 

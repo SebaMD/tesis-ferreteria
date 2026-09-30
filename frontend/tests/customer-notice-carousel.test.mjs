@@ -5,6 +5,14 @@ import {
   catalogSlideDurationMilliseconds,
   nextCatalogSlideIndex,
 } from "../src/helpers/customerNoticeCarousel.js";
+import { resolveApiAssetUrl } from "../src/helpers/apiAssets.js";
+
+assert.equal(resolveApiAssetUrl("/uploads/customer-notices/test.png", "/api"), "/uploads/customer-notices/test.png");
+assert.equal(
+  resolveApiAssetUrl("/uploads/customer-notices/test.png", "https://api.example.test/api"),
+  "https://api.example.test/uploads/customer-notices/test.png",
+);
+assert.equal(resolveApiAssetUrl("https://cdn.example.test/test.webp", "https://api.example.test/api"), "https://cdn.example.test/test.webp");
 
 const institutionalOnly = buildCatalogSlides(null, []);
 assert.equal(institutionalOnly.length, 1);
@@ -32,6 +40,7 @@ assert.equal(nextCatalogSlideIndex(2, 3), 0);
 const component = await readFile(new URL("../src/components/CatalogNoticeCarousel.jsx", import.meta.url), "utf8");
 const manager = await readFile(new URL("../src/components/CustomerNoticeManager.jsx", import.meta.url), "utf8");
 const navbar = await readFile(new URL("../src/components/Navbar.jsx", import.meta.url), "utf8");
+const service = await readFile(new URL("../src/services/customerNotice.service.js", import.meta.url), "utf8");
 assert.match(component, /window\.setTimeout/);
 assert.match(component, /setTimerVersion/);
 assert.match(component, /aria-current/);
@@ -42,6 +51,7 @@ assert.match(component, /slide\.imageUrl/);
 assert.match(component, /linear-gradient/);
 assert.match(component, /catalog-notice-indicators absolute/);
 assert.match(component, /pb-18/);
+assert.match(component, /rgba\(16,21,31,0\.58\)/);
 assert.match(manager, /Presentación del catálogo/);
 assert.match(manager, /Predeterminado/);
 assert.match(manager, /onPointerMove/);
@@ -61,6 +71,10 @@ assert.match(manager, /scrollIntoView/);
 assert.match(manager, /event\.detail === 0/);
 assert.match(manager, /aria-label="Editar presentación del catálogo"/);
 assert.match(manager, /max-\[620px\]:grid-cols-3/);
+assert.match(manager, /max-\[620px\]:grid-cols-\[auto_minmax\(0,1fr\)\]/);
+assert.match(manager, /max-\[620px\]:auto-cols-fr max-\[620px\]:grid-flow-col/);
+assert.match(service, /resolveApiAssetUrl/);
+assert.match(service, /data\.notices\.map\(resolveImage\)/);
 assert.match(navbar, /headerActions/);
 assert.match(navbar, /startCreate\(\{ focus: event\.detail === 0 \}\)/);
 assert.match(navbar, /Administra los mensajes que acompañan la presentación del catálogo/);

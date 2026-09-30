@@ -54,6 +54,8 @@ test("catalogo y administracion mantienen contratos de ofertas y roles", async (
   assert.match(promotionPage, /Nueva promoción/);
   assert.match(promotionPage, /max-\[620px\]:w-full max-\[620px\]:justify-center/);
   assert.match(promotionPage, /max-\[620px\]:grid-cols-3/);
+  assert.match(promotionPage, /status-badge--inactive/);
+  assert.match(promotionPage, /border-critical-600 bg-white text-critical-600 hover:bg-critical-50/);
   assert.match(targetPicker, /Buscar categoría\.\.\./);
   assert.match(targetPicker, /Productos incluidos por/);
   assert.match(targetPicker, /Quitar categoría/);

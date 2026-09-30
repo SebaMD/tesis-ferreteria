@@ -194,7 +194,7 @@ export default function LogisticsScanPage() {
                 )}
                 {routeUrl && (
                   <a className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 font-bold text-ink-700 no-underline hover:bg-slate-100" href={routeUrl} target="_blank" rel="noreferrer">
-                    <MapPinned size={19} />Abrir ruta
+                    <MapPinned size={19} />Abrir en Google Maps
                   </a>
                 )}
               </div>

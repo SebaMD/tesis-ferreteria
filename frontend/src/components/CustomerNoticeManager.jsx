@@ -521,10 +521,10 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                           <strong className="block text-sm text-ink-950">{notice.title || "Aviso sin título"}</strong>
                           <p className="mt-1 mb-0 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{notice.message || "Sin mensaje"}</p>
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${notice.isActive ? "bg-positive-50 text-positive-600" : "bg-slate-100 text-slate-600"}`}>{notice.isActive ? "Activo" : "Inactivo"}</span>
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${phase.className}`}>{phase.label}</span>
-                          {!notice.endsAt && <span className="rounded-full bg-rust-50 px-2 py-1 text-[11px] font-bold text-rust-600">Indefinido</span>}
+                        <div className="flex flex-wrap gap-1.5 max-[620px]:grid max-[620px]:w-full max-[620px]:auto-cols-fr max-[620px]:grid-flow-col">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold max-[620px]:grid max-[620px]:place-items-center max-[620px]:text-center ${notice.isActive ? "bg-positive-50 text-positive-600" : "bg-slate-100 text-slate-600"}`}>{notice.isActive ? "Activo" : "Inactivo"}</span>
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold max-[620px]:grid max-[620px]:place-items-center max-[620px]:text-center ${phase.className}`}>{phase.label}</span>
+                          {!notice.endsAt && <span className="rounded-full bg-rust-50 px-2 py-1 text-[11px] font-bold text-rust-600 max-[620px]:grid max-[620px]:place-items-center max-[620px]:text-center">Indefinido</span>}
                         </div>
                       </div>
                     </div>
@@ -535,7 +535,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                     <div><dt className="font-bold text-slate-500">Inicio</dt><dd className="m-0 mt-1 text-ink-700">{formatDateTime(notice.startsAt)}</dd></div>
                     <div><dt className="font-bold text-slate-500">Término</dt><dd className="m-0 mt-1 text-ink-700">{formatDateTime(notice.endsAt)}</dd></div>
                   </dl>
-                  <div className="flex flex-wrap items-center justify-between gap-2 max-[620px]:grid">
+                  <div className="flex flex-wrap items-center justify-between gap-2 max-[620px]:grid max-[620px]:grid-cols-[auto_minmax(0,1fr)]">
                     <div className="flex gap-1" aria-label={`Cambiar posición de ${notice.title}`}>
                       <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={() => moveNotice(notice.id, -1)} disabled={index === 0} aria-label={`Mover ${notice.title} hacia arriba`} title="Mover hacia arriba"><ArrowUp size={16} /></button>
                       <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={() => moveNotice(notice.id, 1)} disabled={index === notices.length - 1} aria-label={`Mover ${notice.title} hacia abajo`} title="Mover hacia abajo"><ArrowDown size={16} /></button>

@@ -12,7 +12,11 @@ const {
 const { hashVerificationPin, verificationPinMatches } = await import("../dist/modules/emailVerification/emailVerification.security.js");
 const { validateLoginBody } = await import("../dist/modules/auth/auth.validation.js");
 const { validateClientProfileBody } = await import("../dist/modules/users/users.validation.js");
-const { validateClientDeliveryAddressBody } = await import("../dist/modules/onlineOrders/onlineOrders.validation.js");
+const {
+  validateClientDeliveryAddressBody,
+  validateCreateCheckoutBody,
+  validateCreateGuestCheckoutBody,
+} = await import("../dist/modules/onlineOrders/onlineOrders.validation.js");
 const { isValidRut, normalizeRut } = await import("../dist/utils/rut.js");
 
 const validNotice = validateCustomerNotice({
@@ -77,6 +81,79 @@ assert.equal(validateClientDeliveryAddressBody({
   clientId: 9,
 }).success, false);
 
+const deliveryWithoutCoordinates = validateCreateCheckoutBody({
+  checkoutKey: "checkout-no-coordinates-2026",
+  items: [{ productId: 1, quantity: 2 }],
+  deliveryType: "DELIVERY",
+  deliveryRecipientName: "Persona Prueba",
+  deliveryPhone: "+56912345678",
+  deliveryAddress: "Avenida Prueba 123",
+  deliveryCommune: "Santa Juana",
+  deliveryReference: "Portón azul",
+  deliveryLatitude: null,
+  deliveryLongitude: null,
+  saveDeliveryAddress: true,
+});
+assert.equal(deliveryWithoutCoordinates.success, true);
+assert.equal(deliveryWithoutCoordinates.value.deliveryLatitude, null);
+assert.equal(deliveryWithoutCoordinates.value.deliveryLongitude, null);
+
+const guestDeliveryWithoutCoordinates = validateCreateGuestCheckoutBody({
+  checkoutKey: "guest-no-coordinates-2026",
+  items: [{ productId: 1, quantity: 1 }],
+  deliveryType: "DELIVERY",
+  deliveryRecipientName: "Persona Invitada",
+  deliveryPhone: "+56912345678",
+  deliveryAddress: "Pasaje Invitado 10",
+  deliveryCommune: "Santa Juana",
+  deliveryReference: null,
+  deliveryLatitude: null,
+  deliveryLongitude: null,
+  saveDeliveryAddress: false,
+  guestName: "Persona Invitada",
+  guestEmail: "invitada@example.com",
+  guestEmailConfirmation: "invitada@example.com",
+  guestPhone: "+56912345678",
+  emailVerificationChallengeId: 1,
+});
+assert.equal(guestDeliveryWithoutCoordinates.success, true);
+assert.equal(guestDeliveryWithoutCoordinates.value.deliveryLatitude, null);
+assert.equal(guestDeliveryWithoutCoordinates.value.deliveryLongitude, null);
+
+const deliveryWithoutAddress = validateCreateCheckoutBody({
+  checkoutKey: "checkout-missing-address",
+  items: [{ productId: 1, quantity: 1 }],
+  deliveryType: "DELIVERY",
+  deliveryRecipientName: "Persona Prueba",
+  deliveryPhone: "+56912345678",
+  deliveryAddress: "",
+  deliveryCommune: "Santa Juana",
+  deliveryReference: null,
+  deliveryLatitude: null,
+  deliveryLongitude: null,
+  saveDeliveryAddress: false,
+});
+assert.equal(deliveryWithoutAddress.success, false);
+assert.match(deliveryWithoutAddress.error, /direccion es obligatoria/i);
+
+const historicalCoordinatesRemainValid = validateCreateCheckoutBody({
+  checkoutKey: "checkout-historical-coords",
+  items: [{ productId: 1, quantity: 1 }],
+  deliveryType: "DELIVERY",
+  deliveryRecipientName: "Persona Histórica",
+  deliveryPhone: "+56987654321",
+  deliveryAddress: "Calle Histórica 45",
+  deliveryCommune: "Santa Juana",
+  deliveryReference: null,
+  deliveryLatitude: -37.17,
+  deliveryLongitude: -72.94,
+  saveDeliveryAddress: false,
+});
+assert.equal(historicalCoordinatesRemainValid.success, true);
+assert.equal(historicalCoordinatesRemainValid.value.deliveryLatitude, -37.17);
+assert.equal(historicalCoordinatesRemainValid.value.deliveryLongitude, -72.94);
+
 console.log("PASS customer notice validation, field allowlist and active content contract");
 console.log("PASS internal worker PIN remains purpose-bound and HMAC protected");
 console.log("PASS canonical Chilean RUT, client profile and shared address validation contracts");
+console.log("PASS CLIENT/Guest DELIVERY require an address, accept no coordinates and preserve historical coordinate compatibility");

@@ -219,6 +219,12 @@ try {
   assert.match(publicData.notices[0].imageUrl, new RegExp(`^/uploads/customer-notices/notices/${indefinite.data.id}/`));
   assert.equal("imagePath" in publicData.presentation, false);
   assert.equal("imagePath" in publicData.notices[0], false);
+  for (const imageUrl of [publicData.presentation.imageUrl, publicData.notices[0].imageUrl]) {
+    const imageResponse = await fetch(new URL(imageUrl, new URL(base).origin));
+    assert.equal(imageResponse.status, 200, `GET ${imageUrl}`);
+    assert.equal(imageResponse.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await imageResponse.arrayBuffer()), png);
+  }
 
   await request("DELETE", "/customer-notice/configuration/presentation/image", { role: "MANAGER" });
   await request("DELETE", `/customer-notice/configuration/${indefinite.data.id}/image`, { role: "ADMIN" });

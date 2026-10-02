@@ -12,6 +12,7 @@ import AppSelect from "../components/AppSelect.jsx";
 import CatalogNoticeCarousel from "../components/CatalogNoticeCarousel.jsx";
 import CatalogPagination from "../components/CatalogPagination.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, validatePriceRange } from "../helpers/catalogFilters.js";
+import { readCatalogRestoration } from "../helpers/catalogNavigation.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 const EMPTY_PAGINATION = { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -20,12 +21,15 @@ export default function CatalogPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const search = searchParams.get("search") || "";
+  const initialRestoration = readCatalogRestoration(location.state);
+  const restoredSnapshot = initialRestoration?.snapshot;
   const [products, setProducts] = useState([]);
-  const [filters, setFilters] = useState(EMPTY_CATALOG_FILTERS);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [order, setOrder] = useState("name-asc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [filters, setFilters] = useState(() => restoredSnapshot?.filters || EMPTY_CATALOG_FILTERS);
+  const [debouncedSearch, setDebouncedSearch] = useState(() => search.trim());
+  const [order, setOrder] = useState(() => restoredSnapshot?.order || "name-asc");
+  const [page, setPage] = useState(() => restoredSnapshot?.page || 1);
+  const [pageSize, setPageSize] = useState(() => restoredSnapshot?.pageSize || 20);
   const [pagination, setPagination] = useState(EMPTY_PAGINATION);
   const [facets, setFacets] = useState({ categories: [], brands: [] });
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -33,10 +37,11 @@ export default function CatalogPage() {
   const [loadError, setLoadError] = useState("");
   const requestSequence = useRef(0);
   const catalogStartRef = useRef(null);
-  const search = searchParams.get("search") || "";
+  const previousSearchRef = useRef(search);
   const searchWasActiveRef = useRef(Boolean(search.trim()));
   const handledNavigationScrollRef = useRef(null);
   const pendingNavigationScrollRef = useRef(false);
+  const pendingRestoreScrollRef = useRef(initialRestoration?.scrollY ?? null);
 
   const scrollToCatalogStart = useCallback(() => {
     const catalogStart = catalogStartRef.current;
@@ -102,9 +107,11 @@ export default function CatalogPage() {
   }, [catalogQuery, page, scrollToCatalogStart, search]);
 
   useEffect(() => {
+    const searchChanged = previousSearchRef.current !== search;
+    previousSearchRef.current = search;
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
-      setPage(1);
+      if (searchChanged) setPage(1);
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
@@ -118,6 +125,21 @@ export default function CatalogPage() {
     const frame = window.requestAnimationFrame(scrollToCatalogStart);
     return () => window.cancelAnimationFrame(frame);
   }, [scrollToCatalogStart, search]);
+
+  useLayoutEffect(() => {
+    if (!location.state?.restoreCatalog) return;
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      { replace: true, state: null, preventScrollReset: true },
+    );
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
+
+  useLayoutEffect(() => {
+    if (loading || pendingRestoreScrollRef.current === null) return;
+    const scrollY = pendingRestoreScrollRef.current;
+    pendingRestoreScrollRef.current = null;
+    window.scrollTo({ top: scrollY, behavior: "auto" });
+  }, [loading, products.length]);
 
   useLayoutEffect(() => {
     if (!location.state?.scrollToCatalogResults) return;
@@ -169,6 +191,11 @@ export default function CatalogPage() {
     if (scrollToGrid) {
       window.requestAnimationFrame(scrollToCatalogStart);
     }
+  };
+  const detailOrigin = {
+    source: "catalog",
+    search: location.search,
+    snapshot: { filters, order, page, pageSize },
   };
 
   return (
@@ -225,7 +252,7 @@ export default function CatalogPage() {
           </aside>
           <div className="min-w-0">
             <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:gap-2.5" aria-label="Productos del catálogo">
-              {products.map((product) => <ProductCard key={product.id} product={product} />)}
+              {products.map((product) => <ProductCard key={product.id} product={product} detailOrigin={detailOrigin} />)}
             </section>
             {!loading && !loadError && products.length === 0 && (
               <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-sm text-slate-500">

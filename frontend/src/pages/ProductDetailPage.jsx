@@ -1,6 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -11,11 +11,14 @@ import ProductPurchaseControls from "../components/ProductPurchaseControls.jsx";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
+import { resolveProductDetailReturn } from "../helpers/catalogNavigation.js";
 
 export default function ProductDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const returnNavigation = resolveProductDetailReturn(location.state);
 
   useEffect(() => {
     const loadProduct = (notifyError = false) => getCatalogProductByIdRequest(id)
@@ -41,7 +44,7 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <main className="mx-auto grid min-h-100 max-w-220 place-items-center px-6 text-center">
-        <div><h1>Producto no disponible</h1><Link to="/catalog">Volver al catálogo</Link></div>
+        <div><h1>Producto no disponible</h1><Link to={returnNavigation.to} state={returnNavigation.state}>{returnNavigation.label}</Link></div>
       </main>
     );
   }
@@ -51,8 +54,8 @@ export default function ProductDetailPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-320 gap-5 px-6 py-8 max-[720px]:px-3.5">
-      <Link className="inline-flex w-fit items-center gap-2 text-sm font-bold text-ink-700 no-underline hover:text-rust-600" to="/catalog">
-        <ArrowLeft size={17} /> Volver al catálogo
+      <Link className="inline-flex w-fit items-center gap-2 text-sm font-bold text-ink-700 no-underline hover:text-rust-600" to={returnNavigation.to} state={returnNavigation.state} preventScrollReset>
+        <ArrowLeft size={17} /> {returnNavigation.label}
       </Link>
       <section className="grid grid-cols-2 gap-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm max-[860px]:grid-cols-1 max-[620px]:p-4">
         <ProductGallery key={product.id} images={product.images} productName={product.name} />

@@ -156,7 +156,7 @@ export default function LogisticsScanPage() {
             </div>
             {!hasPrivateDelivery && (
               <p className="m-0 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-                El escaneo identifica la tarea, pero no revela dirección ni datos del comprador. Esa información se habilita únicamente al WAREHOUSE que toma el reparto.
+                El escaneo identifica la tarea, pero no revela dirección ni datos del comprador. Esa información se habilita únicamente al bodeguero que toma el reparto.
               </p>
             )}
             {actions.has("START_DELIVERY") && (

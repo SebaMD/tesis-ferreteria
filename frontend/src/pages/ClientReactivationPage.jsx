@@ -109,7 +109,7 @@ export default function ClientReactivationPage() {
         <div>
           <span className="grid size-12 place-items-center rounded-full bg-rust-50 text-rust-600"><RotateCcwKey size={23} /></span>
           <h1 className="mt-4 mb-0 text-2xl font-bold text-ink-950">Reactivar mi cuenta</h1>
-          <p className="mt-2 mb-0 text-sm leading-6 text-slate-600">Confirma tu contraseña y el código enviado a tu correo. Este flujo solo funciona para cuentas CLIENT desactivadas voluntariamente.</p>
+          <p className="mt-2 mb-0 text-sm leading-6 text-slate-600">Confirma tu contraseña y el código enviado a tu correo. Este flujo solo funciona para cuentas de cliente desactivadas voluntariamente.</p>
         </div>
 
         <div className="grid gap-4">

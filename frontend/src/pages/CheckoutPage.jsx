@@ -158,7 +158,7 @@ export default function CheckoutPage() {
     const quantity = Number(item.quantity || 0);
     const availableStock = liveProduct ? getOnlineAvailableStock(liveProduct) : 0;
     const validQuantity = Number.isInteger(quantity) && quantity > 0;
-    const isAvailable = Boolean(liveProduct) && availableStock > 0;
+    const isAvailable = Boolean(liveProduct) && !liveProduct.inStoreOnly && availableStock > 0;
     const hasEnoughStock = validQuantity && quantity <= availableStock;
 
     const pricing = getProductPromotionPricing(product, quantity);
@@ -568,7 +568,7 @@ export default function CheckoutPage() {
 
             {hasAvailabilityIssues && !loading && (
               <p className="m-0 rounded-[5px] bg-critical-50 px-3 py-3 text-xs leading-5 text-critical-600">
-                {catalogError || "El stock disponible cambió. Ajusta el carrito antes de continuar."}
+                {catalogError || "Uno o más productos ya no están disponibles para compra online. Ajusta el carrito antes de continuar."}
               </p>
             )}
 

@@ -1918,7 +1918,7 @@ export default function SalesPage() {
               <AppSelect
                 className="min-h-9 w-full max-w-55 max-[720px]:max-w-none"
                 value={catalogCategoryFilter}
-                onChange={setCatalogCategoryFilter}
+                onChange={(value) => setCatalogCategoryFilter(String(value))}
                 ariaLabel="Filtrar productos por categoría"
                 options={[{ value: "", label: "Todas las categorías" }, ...productCategories.map((category) => ({ value: category.id, label: category.name }))]}
               />

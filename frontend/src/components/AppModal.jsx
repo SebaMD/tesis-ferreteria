@@ -19,6 +19,7 @@ export default function AppModal({
   headerActions,
   size = "medium",
   panelClassName = "",
+  overlayClassName = "",
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -79,7 +80,7 @@ export default function AppModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-900 grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5"
+      className={`fixed inset-0 z-900 grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${overlayClassName}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

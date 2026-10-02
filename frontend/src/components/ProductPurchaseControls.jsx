@@ -18,6 +18,14 @@ export default function ProductPurchaseControls({ product, compact = false, show
   const inCart = Number(items.find((item) => Number(item.product.id) === Number(product.id))?.quantity || 0);
   const remaining = getRemainingCartCapacity(getOnlineAvailableStock(product), inCart);
 
+  if (product.inStoreOnly) {
+    return (
+      <div className="flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-slate-100 px-3 text-center text-xs font-bold text-slate-600" role="status">
+        Disponible solo en tienda
+      </div>
+    );
+  }
+
   const addSelectedQuantity = (options) => addProduct(product, quantity, options);
   const buyNow = () => {
     const result = addSelectedQuantity({ showSuccessToast: false });

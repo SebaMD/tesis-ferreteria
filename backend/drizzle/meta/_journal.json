@@ -183,6 +183,13 @@
       "when": 1790627070366,
       "tag": "0025_parallel_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790814736613,
+      "tag": "0026_rainy_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }

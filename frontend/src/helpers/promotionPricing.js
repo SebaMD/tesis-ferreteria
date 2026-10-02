@@ -2,7 +2,7 @@ export function getProductPromotionPricing(product, quantity = 1) {
   const baseUnitPrice = Number(product?.price || 0);
   const safeQuantity = Math.max(0, Number(quantity) || 0);
   const baseSubtotal = baseUnitPrice * safeQuantity;
-  const promotion = product?.promotion || null;
+  const promotion = product?.inStoreOnly ? null : product?.promotion || null;
 
   if (!promotion || safeQuantity === 0) {
     return { baseUnitPrice, promotionalUnitPrice: null, baseSubtotal, discountAmount: 0, finalSubtotal: baseSubtotal, freeUnits: 0, promotion };

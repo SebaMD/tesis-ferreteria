@@ -22,6 +22,7 @@ export async function lockProductsForAvailability(
       name: productsTable.name,
       price: productsTable.price,
       currentStock: productsTable.currentStock,
+      inStoreOnly: productsTable.inStoreOnly,
       status: productsTable.status,
     })
     .from(productsTable)

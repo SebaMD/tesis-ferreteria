@@ -14,6 +14,9 @@ import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
+import { createProductDetailNavigationState } from "../helpers/catalogNavigation.js";
+
+const CART_PRODUCT_DETAIL_STATE = createProductDetailNavigationState({ source: "cart" });
 
 function getPrimaryImage(product) {
   return product?.images?.find((image) => image.isPrimary) || product?.images?.[0] || null;
@@ -53,7 +56,7 @@ export default function ClientCartPage() {
     const liveProduct = liveProductById.get(Number(item.product.id));
     const product = liveProduct || item.product;
     const availableStock = liveProduct ? getOnlineAvailableStock(liveProduct) : 0;
-    const available = Boolean(liveProduct && availableStock > 0);
+    const available = Boolean(liveProduct && !liveProduct.inStoreOnly && availableStock > 0);
     const quantity = Number(item.quantity);
     return { ...item, product, available, availableStock, requestedQuantity: quantity, quantity, pricing: getProductPromotionPricing(product, quantity) };
   });
@@ -95,17 +98,17 @@ export default function ClientCartPage() {
 
               return (
                 <article className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 max-[620px]:grid-cols-[76px_1fr]" key={row.product.id}>
-                  <Link className="grid size-24 place-items-center overflow-hidden rounded-[5px] bg-slate-100 max-[620px]:size-19" to={`/catalog/products/${row.product.id}`}>
-                    {image ? <img className="h-full w-full object-cover" src={image.imageUrl} alt={row.product.name} /> : <ShoppingCart className="text-slate-400" size={26} />}
+                  <Link className="grid size-24 place-items-center overflow-hidden rounded-[5px] bg-slate-100 p-1.5 max-[620px]:size-19" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>
+                    {image ? <img className="block max-h-full max-w-full object-contain object-center" src={image.imageUrl} alt={row.product.name} /> : <ShoppingCart className="text-slate-400" size={26} />}
                   </Link>
                   <div className="grid gap-1.5">
-                    <Link className="font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`}>{row.product.name}</Link>
+                    <Link className="font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
                     <span className="text-xs text-slate-500">Precio por {getDisplayUnit(1, row.product.unitMeasure)}</span>
                     <ProductPromotionPrice product={row.product} quantity={row.quantity} showLineSummary />
                     <span className={`text-xs font-bold ${row.available ? "text-positive-600" : "text-critical-600"}`}>
-                      {row.available ? `${formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles` : "Producto no disponible actualmente"}
+                      {row.product.inStoreOnly ? "Solo presencial · quítalo para continuar" : row.available ? `${formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles` : "Producto no disponible actualmente"}
                     </span>
-                    {invalidQuantity && (
+                    {invalidQuantity && !row.product.inStoreOnly && (
                       <span className="text-xs text-critical-600">
                         Tienes {row.requestedQuantity} en el carrito, pero ahora solo hay {row.availableStock} disponibles. Ajusta la cantidad para continuar.
                       </span>
@@ -140,7 +143,7 @@ export default function ClientCartPage() {
             </div>
             {hasAvailabilityConflicts && (
               <p className="m-0 rounded-[5px] bg-rust-50 px-3 py-3 text-xs leading-5 text-rust-700">
-                El stock disponible cambió. Ajusta las cantidades antes de continuar al pago.
+                Uno o más productos ya no están disponibles para compra online. Revisa el carrito para continuar.
               </p>
             )}
             {!isAuthenticated && !hasAvailabilityConflicts && (

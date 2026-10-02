@@ -81,6 +81,9 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
   };
 
   const addItem = (product, quantity = 1) => {
+    if (product?.inStoreOnly) {
+      return { success: false, message: "Este producto está disponible únicamente para compra presencial." };
+    }
     const stock = getOnlineAvailableStock(product);
     const currentItem = itemsRef.current.find((item) => Number(item.product.id) === Number(product?.id));
     const currentQuantity = Number(currentItem?.quantity || 0);

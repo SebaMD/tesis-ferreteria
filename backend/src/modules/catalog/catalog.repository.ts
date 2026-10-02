@@ -25,7 +25,7 @@ import {
   type ApplicablePromotion,
 } from "../promotions/promotionPricing.js";
 
-function attachPromotion<T extends { id: number; price: string }>(
+function attachPromotion<T extends { id: number; price: string; inStoreOnly: boolean }>(
   product: T,
   promotion: ApplicablePromotion | null,
 ) {
@@ -53,6 +53,7 @@ function toCatalogProduct(
     description: product.description,
     price: product.price,
     unitMeasure: product.unitMeasure,
+    inStoreOnly: product.inStoreOnly,
     currentStock: product.currentStock,
     reservedQuantity,
     availableStock: calculateAvailableStock(product.currentStock, reservedQuantity),
@@ -62,7 +63,7 @@ function toCatalogProduct(
       position: image.position,
       isPrimary: image.isPrimary,
     })),
-  }, promotion);
+  }, product.inStoreOnly ? null : promotion);
 }
 
 export async function findCatalogProducts() {
@@ -133,8 +134,10 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
   const reservedQuantity = sql<number>`coalesce(${reservations.reservedQuantity}, 0)::integer`;
   const availableStock = sql<number>`greatest(${productsTable.currentStock} - coalesce(${reservations.reservedQuantity}, 0), 0)::integer`;
   const normalizedBrand = sql<string>`lower(regexp_replace(btrim(coalesce(${productsTable.brand}, '')), '\\s+', ' ', 'g'))`;
-  const effectivePrice = catalogEffectivePriceSql();
-  const hasActivePromotion = catalogHasActivePromotionSql(filters.promotionTypes);
+  const promotionEffectivePrice = catalogEffectivePriceSql();
+  const effectivePrice = sql<number>`case when ${productsTable.inStoreOnly} then ${productsTable.price} else ${promotionEffectivePrice} end`;
+  const activePromotion = catalogHasActivePromotionSql(filters.promotionTypes);
+  const hasActivePromotion = sql<boolean>`${productsTable.inStoreOnly} = false and ${activePromotion}`;
   const conditions = [eq(productsTable.status, true)];
 
   if (filters.search) {
@@ -183,6 +186,7 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
       description: productsTable.description,
       price: productsTable.price,
       unitMeasure: productsTable.unitMeasure,
+      inStoreOnly: productsTable.inStoreOnly,
       currentStock: productsTable.currentStock,
       reservedQuantity,
       availableStock,
@@ -217,7 +221,7 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
         position: image.position,
         isPrimary: image.isPrimary,
       })) ?? [],
-    }, promotionsByProduct.get(product.id) ?? null)),
+    }, product.inStoreOnly ? null : promotionsByProduct.get(product.id) ?? null)),
     page,
     pageSize: filters.limit,
     totalItems: total,

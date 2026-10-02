@@ -109,8 +109,12 @@ try {
   assert.equal(historical.discount_amount, "0.00");
   assert.equal(historical.promotion_id, null);
   assert.equal(historical.subtotal, "7980.00");
+  assert.equal(
+    (await upgradePool.query("SELECT in_store_only FROM products WHERE id=$1", [historicalProduct])).rows[0].in_store_only,
+    false,
+  );
   await upgradePool.end();
-  console.log("PASS migration 0023 -> latest preserves historical orders without recalculation");
+  console.log("PASS migration 0023 -> latest preserves historical orders and defaults existing products to online-enabled");
 
   await createDatabase(databaseNames[1]);
   cleanPool = new pg.Pool({ connectionString: databaseUrl(databaseNames[1]) });
@@ -179,6 +183,35 @@ try {
   assert.equal(targets.products.length, 4);
   assert.equal(targets.categories.length, 3);
   assert.equal(targets.products.find((product) => product.name === "Taladro inactivo").status, false);
+
+  const regularCreated = (await request("POST", "/products", {
+    role: "ADMIN",
+    body: {
+      categoryId: categoryId("Pinturas"),
+      name: "Producto online nuevo",
+      price: 6500,
+      unitMeasure: "unidad",
+    },
+  }, 201)).data;
+  const storeOnlyCreated = (await request("POST", "/products", {
+    role: "ADMIN",
+    body: {
+      categoryId: categoryId("Pinturas"),
+      name: "Producto solo presencial",
+      price: 7000,
+      unitMeasure: "unidad",
+      inStoreOnly: true,
+    },
+  }, 201)).data;
+  assert.equal(regularCreated.inStoreOnly, false);
+  assert.equal(storeOnlyCreated.inStoreOnly, true);
+  assert.equal((await request("PATCH", `/products/${storeOnlyCreated.id}`, {
+    role: "ADMIN", body: { inStoreOnly: false },
+  })).data.inStoreOnly, false);
+  assert.equal((await request("PATCH", `/products/${storeOnlyCreated.id}`, {
+    role: "ADMIN", body: { inStoreOnly: true },
+  })).data.inStoreOnly, true);
+  console.log("PASS ADMIN creates and edits regular/in-store-only products");
 
   const percentBody = promotion({ productIds: [productId("Taladro promocional")] });
   const percent = (await request("POST", "/promotions", { role: "ADMIN", body: percentBody }, 201)).data;
@@ -274,6 +307,59 @@ try {
   assert.equal(bothPromotionTypes.page, 1);
   await request("GET", "/catalog/products?promotionTypes=UNKNOWN", {}, 400);
   console.log("PASS catalog offer types, filtered totals, public DTO and percentage/base price ordering");
+
+  await request("PATCH", `/products/${taladro.id}`, {
+    role: "ADMIN", body: { inStoreOnly: true },
+  });
+  const storeOnlyDetail = (await request("GET", `/catalog/products/${taladro.id}`)).data;
+  assert.equal(storeOnlyDetail.inStoreOnly, true);
+  assert.equal(storeOnlyDetail.promotion, null);
+  assert.equal(storeOnlyDetail.promotionalPrice, null);
+  assert.equal(storeOnlyDetail.price, "10000.00");
+  assert.equal((await request("GET", "/catalog/products?offers=true&search=taladro")).data.totalItems, 0);
+  assert.equal((await request("GET", "/catalog/products?search=taladro")).data.totalItems, 1);
+  await request("PUT", `/favorites/${taladro.id}`, { role: "CLIENT" });
+  const storeOnlyFavorite = (await request("GET", "/favorites", { role: "CLIENT" })).data
+    .find((product) => product.id === taladro.id);
+  assert.equal(storeOnlyFavorite.inStoreOnly, true);
+  assert.equal(storeOnlyFavorite.promotion, null);
+
+  const commercialCountsBefore = (await cleanPool.query(`
+    SELECT
+      (SELECT count(*)::int FROM online_orders) AS orders,
+      (SELECT count(*)::int FROM online_order_items) AS items,
+      (SELECT count(*)::int FROM online_payments) AS payments,
+      (SELECT count(*)::int FROM inventory_movements) AS movements,
+      (SELECT current_stock FROM products WHERE id=$1) AS stock
+  `, [taladro.id])).rows[0];
+  const webpayCallsBeforeStoreOnly = webpayAmounts.length;
+  const rejectedStoreOnly = await request("POST", "/online-orders/checkout", {
+    role: "CLIENT",
+    body: {
+      checkoutKey: "store-only-rejected-0001",
+      items: [{ productId: taladro.id, quantity: 1 }],
+      deliveryType: "PICKUP",
+      saveDeliveryAddress: false,
+    },
+  }, 409);
+  assert.match(rejectedStoreOnly.message, /compra presencial/i);
+  assert.deepEqual((await cleanPool.query(`
+    SELECT
+      (SELECT count(*)::int FROM online_orders) AS orders,
+      (SELECT count(*)::int FROM online_order_items) AS items,
+      (SELECT count(*)::int FROM online_payments) AS payments,
+      (SELECT count(*)::int FROM inventory_movements) AS movements,
+      (SELECT current_stock FROM products WHERE id=$1) AS stock
+  `, [taladro.id])).rows[0], commercialCountsBefore);
+  assert.equal(webpayAmounts.length, webpayCallsBeforeStoreOnly);
+
+  await request("PATCH", `/products/${taladro.id}`, {
+    role: "ADMIN", body: { inStoreOnly: false },
+  });
+  const onlineAgain = (await request("GET", `/catalog/products/${taladro.id}`)).data;
+  assert.equal(onlineAgain.inStoreOnly, false);
+  assert.equal(onlineAgain.promotion.label, "-20%");
+  console.log("PASS in-store-only products stay public, hide ecommerce promotions, block checkout before writes and recover active promotions when re-enabled");
 
   await request("PATCH", `/products/${productId("Taladro promocional")}`, {
     role: "ADMIN", body: { categoryId: categoryId("Tornillos") },

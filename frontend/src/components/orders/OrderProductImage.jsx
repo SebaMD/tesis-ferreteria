@@ -3,7 +3,7 @@ import { useState } from "react";
 
 export default function OrderProductImage({
   alt,
-  className = "h-full w-full object-cover",
+  className = "block max-h-full max-w-full object-contain object-center p-1",
   fallbackSize = 28,
   src,
 }) {

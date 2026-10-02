@@ -16,6 +16,7 @@ const productColumns = {
     unitMeasure: productsTable.unitMeasure,
     currentStock: productsTable.currentStock,
     minimumStock: productsTable.minimumStock,
+    inStoreOnly: productsTable.inStoreOnly,
     status: productsTable.status,
     createdAt: productsTable.createdAt,
     updatedAt: productsTable.updatedAt,

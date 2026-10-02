@@ -398,6 +398,12 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         if (!product.status) {
           throw new OnlineOrderError(`El producto ${product.name} ya no esta disponible`, 409);
         }
+        if (product.inStoreOnly) {
+          throw new OnlineOrderError(
+            "Uno o mas productos estan disponibles unicamente para compra presencial.",
+            409,
+          );
+        }
 
         const availableStock = calculateAvailableStock(
           product.currentStock,

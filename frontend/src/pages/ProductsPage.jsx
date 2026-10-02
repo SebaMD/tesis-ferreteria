@@ -102,6 +102,7 @@ const emptyForm = {
   price: "",
   unitMeasure: "unidad",
   minimumStock: 0,
+  inStoreOnly: false,
   status: true,
 };
 
@@ -465,6 +466,7 @@ export default function ProductsPage() {
     normalizeSearchValue(unitSearch) !== normalizeSearchValue(linkedRegistration.product.unitMeasure) ||
     Number(form.price) !== Number(linkedRegistration.product.price) ||
     Number(form.minimumStock) !== Number(linkedRegistration.product.minimumStock) ||
+    Boolean(form.inStoreOnly) !== Boolean(linkedRegistration.product.inStoreOnly) ||
     Boolean(form.status) !== Boolean(linkedRegistration.product.status)
   );
   const showProductContinueAction = linkedRegistration?.step === "product";
@@ -732,6 +734,7 @@ export default function ProductsPage() {
           price: product.price,
           unitMeasure: product.unitMeasure,
           minimumStock: product.minimumStock,
+          inStoreOnly: Boolean(product.inStoreOnly),
           status: product.status,
         });
         setCategorySearch(product.categoryName || "");
@@ -914,6 +917,7 @@ export default function ProductsPage() {
       price: product.price,
       unitMeasure: product.unitMeasure,
       minimumStock: product.minimumStock,
+      inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
     } : {
       ...emptyForm,
@@ -983,6 +987,7 @@ export default function ProductsPage() {
       price: product.price,
       unitMeasure: product.unitMeasure,
       minimumStock: product.minimumStock,
+      inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
     });
     setCategorySearch(product.categoryName || "");
@@ -1326,7 +1331,7 @@ export default function ProductsPage() {
           <AppSelect
             className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
             value={categoryFilter}
-            onChange={setCategoryFilter}
+            onChange={(value) => setCategoryFilter(String(value))}
             ariaLabel="Filtrar productos por categoría"
             options={[{ value: "", label: "Todas las categorías" }, ...categoryOptions.map((category) => ({ value: category.id, label: category.name }))]}
           />
@@ -1700,6 +1705,20 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
+            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-ink-950">
+              <input
+                className="mt-0.5 size-4 shrink-0"
+                type="checkbox"
+                checked={Boolean(form.inStoreOnly)}
+                onChange={(event) => setForm((current) => ({ ...current, inStoreOnly: event.target.checked }))}
+              />
+              <span>
+                <strong className="block">Solo presencial</strong>
+                <small className="mt-0.5 block font-normal leading-5 text-slate-500">
+                  El producto se mostrará en el catálogo, pero no podrá comprarse en línea.
+                </small>
+              </span>
+            </label>
             <ProductImagesManager
               disabled={submittingProduct || managingProductImages}
               images={editingProduct?.images || []}

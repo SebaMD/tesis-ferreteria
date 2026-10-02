@@ -2,7 +2,7 @@ import type { NewProduct } from "../../db/schema/index.js";
 
 export type ProductBody = Pick<
   NewProduct,
-  "categoryId" | "name" | "brand" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "status"
+  "categoryId" | "name" | "brand" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "inStoreOnly" | "status"
 >;
 export type EditProductBody = Partial<ProductBody>;
 
@@ -44,7 +44,7 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
 
   const input = body as Record<string, unknown>;
   const value: EditProductBody = {};
-  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "status"];
+  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "inStoreOnly", "status"];
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -107,6 +107,11 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
     const parsed = positiveInt(input.minimumStock, "El stock minimo", true);
     if (!parsed.success) return { success: false, error: parsed.error };
     value.minimumStock = parsed.value;
+  }
+
+  if (input.inStoreOnly !== undefined) {
+    if (typeof input.inStoreOnly !== "boolean") return { success: false, error: "Solo presencial debe ser booleano" };
+    value.inStoreOnly = input.inStoreOnly;
   }
 
   if (input.status !== undefined) {

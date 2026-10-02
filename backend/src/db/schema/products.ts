@@ -25,6 +25,7 @@ export const productsTable = pgTable(
     unitMeasure: varchar("unit_measure", { length: 50 }).notNull(),
     currentStock: integer("current_stock").notNull().default(0),
     minimumStock: integer("minimum_stock").notNull().default(0),
+    inStoreOnly: boolean("in_store_only").notNull().default(false),
     status: boolean().notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),

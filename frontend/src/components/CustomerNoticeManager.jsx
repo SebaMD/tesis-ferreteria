@@ -132,11 +132,17 @@ function ImageField({ currentUrl, file, onFile, removeImage, onRemove }) {
           ><X size={16} /></button>
         </div>
       )}
-      <label className="max-w-md">{visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
+      <label className="inline-flex min-h-10 w-fit max-w-full cursor-pointer items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white shadow-sm hover:bg-ink-800 focus-within:ring-2 focus-within:ring-rust-500 focus-within:ring-offset-2">
+        <ImageIcon size={17} /> {visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
         <input
+          className="sr-only"
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => onFile(event.target.files?.[0] || null)}
+          aria-label={visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
+          onChange={(event) => {
+            onFile(event.target.files?.[0] || null);
+            event.target.value = "";
+          }}
         />
       </label>
       <span className="text-[11px] text-slate-500">JPG, PNG o WebP · máximo 5 MB.</span>

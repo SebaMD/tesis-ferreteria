@@ -532,6 +532,35 @@
   cursor: grabbing;
 }
 
+.product-gallery-thumbnails {
+  scrollbar-color: var(--color-slate-400) transparent;
+  scrollbar-width: thin;
+}
+
+.pending-image-remove {
+  border-color: var(--color-slate-400) !important;
+  background: #ffffff !important;
+  color: #10151f !important;
+}
+
+.pending-image-remove:not(:disabled):hover {
+  border-color: var(--color-rust-600) !important;
+  background: var(--color-rust-50) !important;
+  color: #8a3415 !important;
+}
+
+.dark .pending-image-remove {
+  border-color: #526174 !important;
+  background: #232c38 !important;
+  color: #f8fafc !important;
+}
+
+.dark .pending-image-remove:not(:disabled):hover {
+  border-color: #fb923c !important;
+  background: #3a2718 !important;
+  color: #ffffff !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-select-trigger svg,
   .catalog-notice-track,

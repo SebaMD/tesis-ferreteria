@@ -65,15 +65,14 @@ export default function CatalogNoticeCarousel() {
           >
             {slide.imageUrl && (
               <>
-                <img
-                  className="absolute inset-y-0 right-0 -z-20 h-full w-[58%] object-cover max-[620px]:w-full"
-                  src={slide.imageUrl}
-                  alt=""
-                />
-                <span
-                  className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,#10151f_0%,rgba(16,21,31,0.95)_38%,rgba(16,21,31,0.62)_68%,rgba(16,21,31,0.1)_100%)] max-[620px]:bg-[linear-gradient(90deg,rgba(16,21,31,0.92),rgba(16,21,31,0.58))]"
-                  aria-hidden="true"
-                />
+                <div className="catalog-notice-media" aria-hidden="true">
+                  <img
+                    className="catalog-notice-media-image"
+                    src={slide.imageUrl}
+                    alt=""
+                  />
+                </div>
+                <span className="catalog-notice-mobile-overlay" aria-hidden="true" />
               </>
             )}
             <div className={`flex max-w-210 items-start gap-4 ${slide.imageUrl ? "w-[58%] max-[820px]:w-[66%] max-[620px]:w-full" : "w-full"}`}>

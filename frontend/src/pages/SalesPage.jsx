@@ -21,7 +21,7 @@ import {
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
-import { isValidRut, normalizeRut } from "../helpers/rut.js";
+import { formatRutInput, isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
@@ -1147,7 +1147,7 @@ export default function SalesPage() {
                     maxLength="12"
                     placeholder="12345678-9"
                     value={saleDelivery.recipientRut}
-                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientRut: event.target.value }))}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientRut: formatRutInput(event.target.value) }))}
                     required
                   />
                 </label>
@@ -1171,12 +1171,17 @@ export default function SalesPage() {
                     required
                   />
                 </label>
-                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia <span className="font-normal text-slate-400">(opcional)</span>
+                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">
+                  <span className="flex items-baseline gap-1.5">
+                    <span>Referencia</span>
+                    <span className="font-normal text-slate-400">(opcional)</span>
+                  </span>
                   <textarea
-                    className="min-h-18 resize-y"
+                    className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950 placeholder:text-slate-400"
                     maxLength="500"
                     value={saleDelivery.reference}
                     onChange={(event) => setSaleDelivery((current) => ({ ...current, reference: event.target.value }))}
+                    placeholder="Ej: Casa azul, portón negro, frente a la plaza"
                   />
                 </label>
               </div>

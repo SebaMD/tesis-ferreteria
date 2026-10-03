@@ -38,6 +38,7 @@ assert.equal(nextCatalogSlideIndex(0, 3), 1);
 assert.equal(nextCatalogSlideIndex(2, 3), 0);
 
 const component = await readFile(new URL("../src/components/CatalogNoticeCarousel.jsx", import.meta.url), "utf8");
+const styles = await readFile(new URL("../src/styles/styles.css", import.meta.url), "utf8");
 const manager = await readFile(new URL("../src/components/CustomerNoticeManager.jsx", import.meta.url), "utf8");
 const navbar = await readFile(new URL("../src/components/Navbar.jsx", import.meta.url), "utf8");
 const service = await readFile(new URL("../src/services/customerNotice.service.js", import.meta.url), "utf8");
@@ -51,9 +52,33 @@ assert.match(component, /slide\.imageUrl/);
 assert.match(component, /linear-gradient/);
 assert.match(component, /catalog-notice-indicators absolute/);
 assert.match(component, /pb-18/);
-assert.match(component, /rgba\(16,21,31,0\.58\)/);
+assert.match(component, /catalog-notice-media-image/);
+assert.match(component, /catalog-notice-mobile-overlay/);
+assert.match(
+  styles,
+  /\.catalog-notice-media\s*\{[^}]*justify-content:\s*flex-end;[^}]*background:\s*transparent;/s,
+);
+assert.match(
+  styles,
+  /\.catalog-notice-media-image\s*\{[^}]*object-fit:\s*contain;[^}]*-webkit-mask-image:\s*linear-gradient\([^}]*rgb\(16 21 31 \/ 22%\) 8%[^}]*rgb\(16 21 31 \/ 58%\) 18%[^}]*var\(--color-ink-950\) 30%[^}]*var\(--color-ink-950\) 100%/s,
+);
+assert.match(styles, /mask-image:\s*linear-gradient\(/);
+assert.match(
+  styles,
+  /@media \(max-width: 620px\)[\s\S]*\.catalog-notice-media-image\s*\{[^}]*object-fit:\s*cover;[^}]*-webkit-mask-image:\s*none;[^}]*mask-image:\s*none;/,
+);
+assert.match(styles, /\.catalog-notice-mobile-overlay\s*\{\s*display:\s*none;/s);
+assert.match(
+  styles,
+  /@media \(max-width: 620px\)[\s\S]*\.catalog-notice-mobile-overlay\s*\{[^}]*display:\s*block;[^}]*pointer-events:\s*none;[^}]*linear-gradient/s,
+);
 assert.match(manager, /Presentación del catálogo/);
 assert.match(manager, /Predeterminado/);
+assert.match(manager, /const fileInputRef = useRef\(null\)/);
+assert.match(manager, /onClick=\{\(\) => fileInputRef\.current\?\.click\(\)\}/);
+assert.match(manager, /className="hidden"\s*\n\s*type="file"\s*\n\s*tabIndex=\{-1\}/);
+assert.match(manager, /Sin imagen seleccionada/);
+assert.doesNotMatch(manager, /className="sr-only"\s*\n\s*type="file"/);
 assert.match(manager, /onPointerMove/);
 assert.match(manager, /Mover .* hacia arriba/);
 assert.match(manager, /editingId === notice\.id/);
@@ -63,8 +88,12 @@ assert.doesNotMatch(manager, /<label>Orden/);
 assert.match(manager, /image\/jpeg,image\/png,image\/webp/);
 assert.match(manager, /Cambiar imagen/);
 assert.match(manager, /Seleccionar imagen/);
-assert.match(manager, /className="sr-only"/);
 assert.doesNotMatch(manager, /Ningún archivo seleccionado/);
+assert.match(manager, /1920 × 720 px/);
+assert.match(manager, /formato panorámico/);
+assert.match(manager, /contenido principal centrado/);
+assert.match(manager, /JPG, PNG o WebP · máximo 5 MB/);
+assert.doesNotMatch(manager, /1200 × 675|16:9/);
 assert.match(manager, /aria-labelledby=\{titleId\}/);
 assert.doesNotMatch(manager, /<legend[^>]*>Imagen opcional/);
 assert.match(manager, /node\.animate/);

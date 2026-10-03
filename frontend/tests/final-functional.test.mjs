@@ -64,13 +64,17 @@ assert.doesNotMatch(internalVerification, /useEffect/);
 assert.match(themeProvider, /fyf-theme:user:/);
 assert.match(themeProvider, /return "light"/);
 
-const { isValidRut, normalizeRut } = await import("../src/helpers/rut.js");
+const { formatRutInput, isValidRut, normalizeRut } = await import("../src/helpers/rut.js");
 const { normalizeChileanMobilePhone } = await import("../src/helpers/phone.js");
 for (const variant of ["10.120.345-k", "10120345k", "10120345-K", "10 120 345 K"]) {
   assert.equal(normalizeRut(variant), "10120345-K");
   assert.equal(isValidRut(variant), true);
 }
 assert.equal(isValidRut("10120345-1"), false);
+assert.equal(formatRutInput("123456789"), "12345678-9");
+assert.equal(formatRutInput("12345678k"), "12345678-K");
+assert.equal(formatRutInput("12.345.678-k"), "12345678-K");
+assert.equal(formatRutInput("12345678-"), "12345678-");
 assert.equal(normalizeChileanMobilePhone("9 1234 5678"), "+56912345678");
 
 console.log("PASS reusable searchable AppSelect accessibility/portal/height contract and migrated native selects");

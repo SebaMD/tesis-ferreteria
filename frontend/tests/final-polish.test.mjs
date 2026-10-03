@@ -106,3 +106,14 @@ test("product detail keeps its quantity and purchase actions in one aligned colu
   assert.match(controls, /<div className="grid gap-2">/);
   assert.match(controls, /showSuccessToast: false/);
 });
+
+test("cashier delivery keeps reference optional and formats the recipient RUT without changing sale rules", async () => {
+  const sales = await read("src/pages/SalesPage.jsx");
+  assert.match(sales, /formatRutInput\(event\.target\.value\)/);
+  assert.match(sales, /<span>Referencia<\/span>/);
+  assert.match(sales, /\(opcional\)/);
+  assert.match(sales, /placeholder="Ej: Casa azul, portón negro, frente a la plaza"/);
+  assert.match(sales, /min-h-20 w-full resize-y rounded-\[5px\] border border-slate-300 bg-white/);
+  assert.match(sales, /deliveryReference: saleDelivery\.reference \|\| null/);
+  assert.match(sales, /saleDeliveryType === "IMMEDIATE"/);
+});

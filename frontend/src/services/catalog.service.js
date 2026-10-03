@@ -1,13 +1,15 @@
 import api from "../api/httpClient.js";
+import { resolveProductAssets, resolveProductListAssets } from "../helpers/productAssets.js";
 
 export async function getCatalogProductsRequest(params = {}) {
   const response = await api.get("/catalog/products", { params });
-  return response.data.data;
+  const data = response.data.data;
+  return { ...data, items: resolveProductListAssets(data?.items) };
 }
 
 export async function getCatalogProductByIdRequest(id) {
   const response = await api.get(`/catalog/products/${id}`);
-  return response.data.data;
+  return resolveProductAssets(response.data.data);
 }
 
 export async function getCatalogProductsByIdsRequest(ids = []) {

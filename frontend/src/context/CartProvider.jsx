@@ -6,6 +6,7 @@ import { createCartRemovalUndo } from "../helpers/cartUndo.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import CartContext from "./CartContext.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
+import { resolveProductAssets } from "../helpers/productAssets.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
 
@@ -18,7 +19,7 @@ function readCart(storageKey) {
       Number.isInteger(Number(item?.product?.id))
       && Number.isInteger(Number(item?.quantity))
       && Number(item.quantity) > 0
-    ));
+    )).map((item) => ({ ...item, product: resolveProductAssets(item.product) }));
   } catch {
     return [];
   }

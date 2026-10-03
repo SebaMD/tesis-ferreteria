@@ -85,3 +85,27 @@ EMAIL_VERIFICATION_SECRET=otro_secreto_largo_e_independiente
 # Frontend
 VITE_API_URL=/api
 ```
+
+## Imágenes persistentes en despliegue
+
+Las rutas guardadas en la base de datos son relativas, por ejemplo
+`products/17/imagen.webp`. El backend las publica en `/uploads/products/...`.
+
+Cuando frontend y backend se exponen en orígenes o puertos distintos, el build
+del frontend debe recibir la URL absoluta de la API. El origen de esa URL se
+utiliza también para resolver los archivos estáticos, sin conservar el segmento
+`/api`:
+
+```sh
+VITE_API_URL=http://backend.example:1980/api npm run build
+```
+
+En ejecuciones directas con PM2 conviene configurar `UPLOADS_ROOT` como ruta
+absoluta y persistente. De ese modo la carpeta no depende del directorio desde
+el que PM2 haya iniciado Node:
+
+```sh
+UPLOADS_ROOT=/ruta/absoluta/tesis-ferreteria/backend/uploads
+```
+
+Docker Compose ya mantiene `/app/uploads` en el volumen `product_uploads`.

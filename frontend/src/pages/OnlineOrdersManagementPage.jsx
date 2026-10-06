@@ -15,7 +15,6 @@ import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import DeliveryEvidenceForm from "../components/DeliveryEvidenceForm.jsx";
-import DeliveryMap from "../components/DeliveryMap.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
@@ -397,7 +396,7 @@ export default function OnlineOrdersManagementPage() {
     || selectedOrder?.deliveryCommune
     || selectedOrder?.deliveryReference,
   );
-  const selectedRouteUrl = canManage && hasDeliveryDetails
+  const selectedRouteUrl = hasDeliveryDetails
     ? buildDeliveryRouteUrl({
       latitude: selectedOrder?.deliveryLatitude,
       longitude: selectedOrder?.deliveryLongitude,
@@ -709,15 +708,6 @@ export default function OnlineOrdersManagementPage() {
               <p className="m-0 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
                 Los datos privados del destino se habilitan únicamente al bodeguero responsable cuando inicia el reparto.
               </p>
-            )}
-
-            {!canManage && selectedOrder.deliveryType === "DELIVERY" && selectedOrder.deliveryAddress && (
-              <DeliveryMap
-                latitude={selectedOrder.deliveryLatitude}
-                longitude={selectedOrder.deliveryLongitude}
-                address={selectedOrder.deliveryAddress}
-                commune={selectedOrder.deliveryCommune}
-              />
             )}
 
             <section className="overflow-hidden rounded-md border border-slate-200">

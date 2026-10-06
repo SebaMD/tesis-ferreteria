@@ -38,7 +38,15 @@ function nextDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
 }
 
-export function validateDailyReportQuery(query: unknown): ValidationResult<ReportDateRange> {
+function isFutureDate(date: Date, now: Date) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return date > today;
+}
+
+export function validateDailyReportQuery(
+  query: unknown,
+  now = new Date(),
+): ValidationResult<ReportDateRange> {
   if (!query || typeof query !== "object" || Array.isArray(query)) {
     return { success: false, error: "Debe indicar la fecha del reporte" };
   }
@@ -46,6 +54,9 @@ export function validateDailyReportQuery(query: unknown): ValidationResult<Repor
   const input = query as Record<string, unknown>;
   const parsedDate = parseDate(input.date, "La fecha");
   if (!parsedDate.success) return parsedDate;
+  if (isFutureDate(parsedDate.value.date, now)) {
+    return { success: false, error: "La fecha no puede ser futura" };
+  }
 
   return {
     success: true,
@@ -58,7 +69,10 @@ export function validateDailyReportQuery(query: unknown): ValidationResult<Repor
   };
 }
 
-export function validateSalesReportQuery(query: unknown): ValidationResult<ReportDateRange> {
+export function validateSalesReportQuery(
+  query: unknown,
+  now = new Date(),
+): ValidationResult<ReportDateRange> {
   if (!query || typeof query !== "object" || Array.isArray(query)) {
     return { success: false, error: "Debe indicar un rango de fechas" };
   }
@@ -72,6 +86,12 @@ export function validateSalesReportQuery(query: unknown): ValidationResult<Repor
 
   if (parsedFrom.value.date > parsedTo.value.date) {
     return { success: false, error: "La fecha desde no puede ser posterior a la fecha hasta" };
+  }
+  if (isFutureDate(parsedFrom.value.date, now)) {
+    return { success: false, error: "La fecha desde no puede ser futura" };
+  }
+  if (isFutureDate(parsedTo.value.date, now)) {
+    return { success: false, error: "La fecha hasta no puede ser futura" };
   }
 
   const value: ReportDateRange = {
@@ -119,8 +139,7 @@ export function validateManagerStatisticsQuery(
     return { success: false, error: "La fecha desde no puede ser posterior a la fecha hasta" };
   }
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (parsedTo.value.date > today) {
+  if (isFutureDate(parsedTo.value.date, now)) {
     return { success: false, error: "La fecha hasta no puede ser futura" };
   }
 

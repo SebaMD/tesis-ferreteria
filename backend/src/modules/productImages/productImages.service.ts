@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { UPLOADS_ROOT } from "../../config/configEnv.js";
+import { ImageFileError, validateImageBuffer } from "../../utils/imageFiles.js";
 import { findProductById } from "../products/products.repository.js";
 import {
   createProductImage,
@@ -10,12 +11,6 @@ import {
   setPrimaryProductImage,
 } from "./productImages.repository.js";
 import { presentProductImage } from "./productImages.presenter.js";
-
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
 
 export class ProductImageError extends Error {
   constructor(
@@ -45,17 +40,14 @@ export async function uploadProductImageService(
   const product = await findProductById(productId, true);
   if (!product) throw new ProductImageError("Producto no encontrado", 404);
 
-  const extension = IMAGE_EXTENSIONS[data.mimeType];
-  if (!extension) {
-    throw new ProductImageError("La imagen debe ser JPG, PNG o WebP", 400);
-  }
-
-  if (data.buffer.length === 0) {
-    throw new ProductImageError("Debe seleccionar una imagen", 400);
-  }
-
-  if (data.buffer.length > 5 * 1024 * 1024) {
-    throw new ProductImageError("La imagen no puede superar 5 MB", 413);
+  let extension: string;
+  try {
+    ({ extension } = await validateImageBuffer(data.buffer, data.mimeType));
+  } catch (error) {
+    if (error instanceof ImageFileError) {
+      throw new ProductImageError(error.message, error.statusCode);
+    }
+    throw error;
   }
 
   const relativeDirectory = path.join("products", String(productId));

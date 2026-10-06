@@ -19,6 +19,7 @@ import DeliveryProofViewer from "../components/orders/DeliveryProofViewer.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
+import { isDirectPurchaseOrder } from "../helpers/directPurchase.js";
 import {
   captureGuestAccessTokenFromHash,
   readGuestOrderAccessToken,
@@ -90,7 +91,11 @@ export default function GuestOrderTrackingPage() {
       saveGuestOrderAccessToken(data.id, accessToken);
       setOrder(data);
       setErrorMessage("");
-      if (isOnlineOrderPaid(data.status) && !cartAdjustedRef.current) {
+      if (
+        isOnlineOrderPaid(data.status)
+        && !cartAdjustedRef.current
+        && !isDirectPurchaseOrder(data.id)
+      ) {
         cartAdjustedRef.current = true;
         removePurchasedItemsRef.current(data.items || []);
       }

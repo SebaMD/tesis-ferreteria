@@ -51,7 +51,7 @@ test("checkout, success navigation, clean catalog and warehouse shortcut are wir
   assert.match(dashboard, /Pedidos y repartos/);
   assert.match(dashboard, /operationalOrders\.length/);
   assert.match(favorites, /font-bold text-rust-600/);
-  assert.match(controls, /showSuccessToast: false/);
+  assert.match(controls, /state: \{ directPurchase \}/);
   assert.match(cartActions, /if \(showSuccessToast\) toast\.success/);
   assert.match(card, /max-\[600px\]:hidden/);
   assert.match(favorites, /products\.length > 0/);
@@ -104,7 +104,7 @@ test("product detail keeps its quantity and purchase actions in one aligned colu
   assert.match(detail, /mx-auto w-full max-w-md/);
   assert.match(controls, /showBuyNow \? "grid justify-items-center gap-2"/);
   assert.match(controls, /<div className="grid gap-2">/);
-  assert.match(controls, /showSuccessToast: false/);
+  assert.match(controls, /createDirectPurchaseItem\(product, quantity\)/);
 });
 
 test("cashier delivery keeps reference optional and formats the recipient RUT without changing sale rules", async () => {

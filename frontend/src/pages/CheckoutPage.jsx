@@ -1,11 +1,12 @@
 import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
+import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { formatClp } from "../helpers/formatters.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
@@ -43,8 +44,17 @@ function createCheckoutKey() {
 }
 
 export default function CheckoutPage() {
+  const location = useLocation();
   const { isAuthenticated, user, replaceSession } = useAuth();
   const { items } = useCart();
+  const directPurchase = useMemo(
+    () => readDirectPurchaseItem(location.state),
+    [location.state],
+  );
+  const checkoutItems = useMemo(
+    () => directPurchase ? [directPurchase] : items,
+    [directPurchase, items],
+  );
   const isClient = isAuthenticated && user?.role === "CLIENT";
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
@@ -75,11 +85,14 @@ export default function CheckoutPage() {
   }));
   const submittingRef = useRef(false);
   const deliveryTouchedRef = useRef(false);
-  const cartProductIds = useMemo(() => items.map((item) => item.product.id), [items]);
+  const checkoutProductIds = useMemo(
+    () => checkoutItems.map((item) => item.product.id),
+    [checkoutItems],
+  );
 
   const loadAvailability = useCallback(async (notifyError = false) => {
     try {
-      const products = await getCatalogProductsByIdsRequest(cartProductIds);
+      const products = await getCatalogProductsByIdsRequest(checkoutProductIds);
       setCatalogProducts(products);
       setCatalogError("");
       return true;
@@ -91,7 +104,7 @@ export default function CheckoutPage() {
     } finally {
       setLoading(false);
     }
-  }, [cartProductIds]);
+  }, [checkoutProductIds]);
 
   const loadPendingOrder = useCallback(async (notifyError = false) => {
     try {
@@ -152,7 +165,7 @@ export default function CheckoutPage() {
     [catalogProducts],
   );
 
-  const rows = items.map((item) => {
+  const rows = checkoutItems.map((item) => {
     const liveProduct = liveProductById.get(Number(item.product.id));
     const product = liveProduct || item.product;
     const quantity = Number(item.quantity || 0);
@@ -273,6 +286,8 @@ export default function CheckoutPage() {
           saveDeliveryAddress: false,
         });
 
+      if (directPurchase) markDirectPurchaseOrder(payment.orderId);
+
       if (!isClient && payment.guestAccessToken) {
         saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
       }
@@ -333,7 +348,7 @@ export default function CheckoutPage() {
         </section>
       )}
 
-      {items.length === 0 ? (
+      {checkoutItems.length === 0 ? (
         <section className="grid min-h-70 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
           <div className="grid justify-items-center gap-3">
             <ShoppingCart className="text-slate-400" size={45} />

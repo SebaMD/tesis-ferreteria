@@ -375,6 +375,38 @@
   color: #fde68a !important;
 }
 
+.dark .sale-return-reason {
+  border-color: #8a5a16 !important;
+  background: #33270f !important;
+}
+
+.dark .sale-return-reason .text-amber-800,
+.dark .sale-return-reason .text-amber-950 {
+  color: #fde68a !important;
+}
+
+.dark .sale-return-history,
+.dark .sale-return-history-toggle,
+.dark .sale-return-history-details {
+  background: #171e28 !important;
+}
+
+.dark .sale-return-history-item {
+  background: #1c2530 !important;
+}
+
+.dark .sale-return-history-toggle:hover,
+.dark .sale-return-history-item-toggle:hover {
+  background: #252f3b !important;
+}
+
+.dark .inventory-adjustment-note {
+  border-color: #465260 !important;
+  border-left-color: #fb923c !important;
+  background: #1c2530 !important;
+  color: #eef1f4 !important;
+}
+
 .dark .login-submit-button {
   border-color: #526174 !important;
   background: #354152 !important;

@@ -1850,7 +1850,7 @@ export default function ProductsPage() {
         ) : (
         <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
           {movementForm.movementType === "ADJUSTMENT" && (
-            <div className="flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
+            <div className="inventory-adjustment-note flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
               <Info className="shrink-0 text-rust-600" size={19} />
               <div className="grid gap-0.75">
                 <strong className="text-[13px] text-ink-950">Este ajuste establece el stock exacto del producto.</strong>

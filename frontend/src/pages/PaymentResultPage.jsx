@@ -8,6 +8,7 @@ import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.js
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
+import { isDirectPurchaseOrder } from "../helpers/directPurchase.js";
 import {
   formatOnlineOrderFolio,
   getOnlineOrderDeliveryType,
@@ -67,7 +68,11 @@ export default function PaymentResultPage() {
         if (!active) return;
         setOrder(data);
         setErrorMessage("");
-        if (isOnlineOrderPaid(data.status) && !cartAdjustedRef.current) {
+        if (
+          isOnlineOrderPaid(data.status)
+          && !cartAdjustedRef.current
+          && !isDirectPurchaseOrder(data.id)
+        ) {
           cartAdjustedRef.current = true;
           removePurchasedItemsRef.current(data.items || []);
         }

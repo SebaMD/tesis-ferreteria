@@ -1,7 +1,7 @@
 // PRODUCT_IMAGES_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55444/postgres node tests/productImages.integration.mjs
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import jwt from "jsonwebtoken";
@@ -19,6 +19,7 @@ const suffix = randomBytes(4).toString("hex");
 const databaseName = `fyf_product_images_${suffix}`;
 const uploadsRoot = await mkdtemp(path.join(tmpdir(), "fyf-product-images-"));
 const admin = new pg.Client({ connectionString: rootUrl.href });
+let adminConnected = false;
 let applicationDb;
 let server;
 
@@ -46,8 +47,14 @@ function databaseUrl(name) {
   return value.href;
 }
 
-await admin.connect();
+async function countStoredFiles(directory) {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  return entries.filter((entry) => entry.isFile()).length;
+}
+
 try {
+  await admin.connect();
+  adminConnected = true;
   await admin.query(`CREATE DATABASE "${databaseName}"`);
   const pool = new pg.Pool({ connectionString: databaseUrl(databaseName) });
   await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
@@ -111,6 +118,32 @@ try {
     assert.deepEqual(await readFile(path.join(uploadsRoot, row.image_path)), fixtures[index].buffer);
   }
 
+  const rejectedUploads = [
+    { mimeType: "image/png", buffer: Buffer.from("esto no es una imagen PNG"), status: 400 },
+    { mimeType: "image/jpeg", buffer: Buffer.from("esto no es una imagen JPEG"), status: 400 },
+    { mimeType: "image/jpeg", buffer: fixtures[0].buffer, status: 400 },
+    { mimeType: "image/png", buffer: Buffer.alloc(0), status: 400 },
+    { mimeType: "image/gif", buffer: Buffer.from("GIF89a"), status: 400 },
+    { mimeType: "image/png", buffer: Buffer.alloc(5 * 1024 * 1024 + 1), status: 413 },
+  ];
+
+  for (const rejected of rejectedUploads) {
+    const response = await fetch(`${apiBase}/products/${productId}/images`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": rejected.mimeType,
+      },
+      body: rejected.buffer,
+    });
+    assert.equal(response.status, rejected.status, await response.text());
+    assert.equal((await applicationDb.$client.query(
+      "SELECT count(*)::int AS count FROM product_images WHERE product_id=$1",
+      [productId],
+    )).rows[0].count, fixtures.length);
+    assert.equal(await countStoredFiles(uploadsRoot), fixtures.length);
+  }
+
   for (const route of [`/products/${productId}`, `/catalog/products/${productId}`]) {
     const response = await fetch(`${apiBase}${route}`, {
       headers: route.startsWith("/products") ? { Authorization: `Bearer ${token}` } : {},
@@ -121,11 +154,13 @@ try {
     assert.equal(body.data.images[0].isPrimary, true);
   }
 
-  console.log("PASS product images persist and serve JPEG/PNG/WebP bytes through admin and public DTOs");
+  console.log("PASS product images validate bytes, reject invalid uploads without residue, and serve JPEG/PNG/WebP through DTOs");
 } finally {
   if (server) await new Promise((resolve) => server.close(resolve));
   if (applicationDb?.$client) await applicationDb.$client.end();
   await rm(uploadsRoot, { recursive: true, force: true });
-  await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`).catch(() => undefined);
-  await admin.end();
+  if (adminConnected) {
+    await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`).catch(() => undefined);
+  }
+  await admin.end().catch(() => undefined);
 }

@@ -1,14 +1,20 @@
 import { CheckCircle2, LogIn, ShoppingBag, UserPlus } from "lucide-react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
+import { readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 
 export default function CheckoutChoicePage() {
+  const location = useLocation();
   const { isAuthenticated, user } = useAuth();
   const { items } = useCart();
+  const directPurchase = readDirectPurchaseItem(location.state);
+  const checkoutState = directPurchase ? { directPurchase } : undefined;
 
-  if (isAuthenticated && user?.role === "CLIENT") return <Navigate to="/checkout" replace />;
-  if (items.length === 0) return <Navigate to="/cart" replace />;
+  if (isAuthenticated && user?.role === "CLIENT") {
+    return <Navigate to="/checkout" replace state={checkoutState} />;
+  }
+  if (items.length === 0 && !directPurchase) return <Navigate to="/cart" replace />;
 
   return (
     <main className="mx-auto grid w-full max-w-220 gap-5 px-6 py-10 max-[720px]:px-3.5">
@@ -28,7 +34,7 @@ export default function CheckoutChoicePage() {
               Finaliza la compra sin contraseña ni cuenta. Usaremos tu correo para enviarte el seguimiento.
             </p>
           </div>
-          <Link className="inline-flex min-h-11 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/checkout?mode=guest">
+          <Link className="inline-flex min-h-11 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/checkout?mode=guest" state={checkoutState}>
             Continuar como invitado
           </Link>
         </article>

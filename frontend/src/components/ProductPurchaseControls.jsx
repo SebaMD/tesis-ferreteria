@@ -2,6 +2,7 @@ import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getRemainingCartCapacity } from "../helpers/cartQuantity.js";
+import { createDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
@@ -28,9 +29,11 @@ export default function ProductPurchaseControls({ product, compact = false, show
 
   const addSelectedQuantity = (options) => addProduct(product, quantity, options);
   const buyNow = () => {
-    const result = addSelectedQuantity({ showSuccessToast: false });
-    if (!result.success) return;
-    navigate(user?.role === "CLIENT" ? "/checkout" : "/checkout-options");
+    const directPurchase = createDirectPurchaseItem(product, quantity);
+    if (!directPurchase) return;
+    navigate(user?.role === "CLIENT" ? "/checkout" : "/checkout-options", {
+      state: { directPurchase },
+    });
   };
 
   return (

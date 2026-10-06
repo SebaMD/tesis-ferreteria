@@ -77,7 +77,7 @@ test("catalog page requests server-side filtering and exposes accessible navigat
   assert.doesNotMatch(filters, /Solo productos en oferta/);
   assert.match(card, /absolute top-3 left-3/);
   assert.match(cart, /getCatalogProductsByIdsRequest\(cartProductIds\)/);
-  assert.match(checkout, /getCatalogProductsByIdsRequest\(cartProductIds\)/);
+  assert.match(checkout, /getCatalogProductsByIdsRequest\(checkoutProductIds\)/);
   assert.doesNotMatch(cart, /getCatalogProductsRequest\(\)/);
   assert.doesNotMatch(checkout, /getCatalogProductsRequest\(\)/);
   for (const label of ["Ir a la primera página", "Ir a la página anterior", "Ir a la página siguiente", "Ir a la última página"]) {

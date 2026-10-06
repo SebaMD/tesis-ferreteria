@@ -1529,7 +1529,7 @@ export default function SalesPage() {
                   </strong>
                 </div>
               </div>
-              <div className="rounded-[5px] border border-amber-200 bg-amber-50 p-3.5">
+              <div className="sale-return-reason rounded-[5px] border border-amber-200 bg-amber-50 p-3.5">
                 <span className="text-xs font-semibold text-amber-800">Motivo de la solicitud</span>
                 <p className="m-0 mt-1 text-sm text-amber-950">{requestToReview.reason}</p>
               </div>
@@ -1758,9 +1758,9 @@ export default function SalesPage() {
               </div>
 
               {detailReturnRequests.length > 0 && (
-                <div className="rounded-[5px] border border-slate-200 bg-white">
+                <div className="sale-return-history rounded-[5px] border border-slate-200 bg-white">
                   <button
-                    className="min-h-0! w-full justify-between rounded-none border-0! bg-white! px-3.5! py-3! text-ink-950 hover:bg-slate-50!"
+                    className="sale-return-history-toggle min-h-0! w-full justify-between rounded-none border-0! bg-white px-3.5! py-3! text-ink-950 hover:bg-slate-100"
                     type="button"
                     onClick={() => setReturnHistoryOpen((current) => !current)}
                     aria-expanded={returnHistoryOpen}
@@ -1778,11 +1778,11 @@ export default function SalesPage() {
 
                           return (
                             <article
-                              className="overflow-hidden rounded-[5px] border border-slate-200 bg-[#fafbfc]"
+                              className="sale-return-history-item overflow-hidden rounded-[5px] border border-slate-200 bg-[#fafbfc]"
                               key={request.id}
                             >
                               <button
-                                className="min-h-0! w-full justify-start rounded-none border-0! bg-transparent! p-3! text-left text-ink-950 hover:bg-slate-100!"
+                                className="sale-return-history-item-toggle min-h-0! w-full justify-start rounded-none border-0! bg-transparent p-3! text-left text-ink-950 hover:bg-slate-100"
                                 type="button"
                                 onClick={() => setExpandedReturnRequestId((current) => current === request.id ? null : request.id)}
                                 aria-expanded={requestOpen}
@@ -1811,7 +1811,7 @@ export default function SalesPage() {
                               </button>
 
                               {requestOpen && (
-                                <div className="grid gap-3 border-t border-slate-200 bg-white p-3.5">
+                                <div className="sale-return-history-details grid gap-3 border-t border-slate-200 bg-white p-3.5">
                                   <div className="grid grid-cols-2 gap-4 max-[720px]:grid-cols-1">
                                     <ReturnHistoryText
                                       label="Motivo"

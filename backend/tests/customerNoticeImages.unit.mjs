@@ -7,7 +7,13 @@ import path from "node:path";
 const uploadsRoot = await mkdtemp(path.join(tmpdir(), "fyf-notice-image-unit-"));
 process.env.UPLOADS_ROOT = uploadsRoot;
 
-const { removeStoredImageFile, saveImageFile, validateImageBuffer } = await import("../dist/utils/imageFiles.js");
+const {
+  ImageFileError,
+  MAX_IMAGE_FILE_SIZE,
+  removeStoredImageFile,
+  saveImageFile,
+  validateImageBuffer,
+} = await import("../dist/utils/imageFiles.js");
 
 const fixtures = [
   {
@@ -46,4 +52,30 @@ test("customer notice images validate and persist JPEG, PNG and WebP without cha
   } finally {
     await rm(uploadsRoot, { recursive: true, force: true });
   }
+});
+
+test("shared image validation rejects fake, empty, oversized and mismatched uploads", async () => {
+  const expectImageError = async (promise, statusCode) => {
+    await assert.rejects(promise, (error) => {
+      assert.ok(error instanceof ImageFileError);
+      assert.equal(error.statusCode, statusCode);
+      return true;
+    });
+  };
+
+  await expectImageError(
+    validateImageBuffer(Buffer.from("esto no es una imagen"), "image/png"),
+    400,
+  );
+  await expectImageError(
+    validateImageBuffer(Buffer.from("esto tampoco es JPEG"), "image/jpeg"),
+    400,
+  );
+  await expectImageError(validateImageBuffer(Buffer.alloc(0), "image/png"), 400);
+  await expectImageError(
+    validateImageBuffer(Buffer.alloc(MAX_IMAGE_FILE_SIZE + 1), "image/png"),
+    413,
+  );
+  await expectImageError(validateImageBuffer(fixtures[0].buffer, "image/jpeg"), 400);
+  await expectImageError(validateImageBuffer(fixtures[0].buffer, "image/gif"), 400);
 });

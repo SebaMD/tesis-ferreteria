@@ -1,7 +1,7 @@
-import { ChevronDown, MapPin, Store, Truck } from "lucide-react";
+import { ChevronDown, ExternalLink, MapPin, Store, Truck } from "lucide-react";
 import { useState } from "react";
 import AppModal from "../AppModal.jsx";
-import DeliveryMap from "../DeliveryMap.jsx";
+import { buildDeliveryRouteUrl } from "../../helpers/delivery.js";
 import { formatClp, formatDate } from "../../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
@@ -12,20 +12,6 @@ import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgress
 import OrderProductImage from "./OrderProductImage.jsx";
 import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
 import OrderItemPromotion from "./OrderItemPromotion.jsx";
-
-function hasCoordinates(order) {
-  if (
-    order?.deliveryLatitude === null
-    || order?.deliveryLatitude === undefined
-    || order?.deliveryLatitude === ""
-    || order?.deliveryLongitude === null
-    || order?.deliveryLongitude === undefined
-    || order?.deliveryLongitude === ""
-  ) return false;
-
-  return Number.isFinite(Number(order?.deliveryLatitude))
-    && Number.isFinite(Number(order?.deliveryLongitude));
-}
 
 function AccordionContent({ id, open, children }) {
   return (
@@ -115,6 +101,14 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
   const progressOpen = expandedSections.orderId === order.id && expandedSections.progress;
   const productsOpen = expandedSections.orderId === order.id && expandedSections.products;
   const productCount = order.items?.length || 0;
+  const deliveryRouteUrl = order.deliveryType === "DELIVERY"
+    ? buildDeliveryRouteUrl({
+      latitude: order.deliveryLatitude,
+      longitude: order.deliveryLongitude,
+      address: order.deliveryAddress,
+      commune: order.deliveryCommune,
+    })
+    : "";
 
   const toggleSection = (section) => {
     setExpandedSections((current) => {
@@ -170,14 +164,15 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
               ) : <span className="text-xs text-slate-500">Retiro directamente en FERRETERIA FYF.</span>}
             </div>
           </div>
-          {order.deliveryType === "DELIVERY" && hasCoordinates(order) && (
-            <DeliveryMap
-              latitude={order.deliveryLatitude}
-              longitude={order.deliveryLongitude}
-              address={order.deliveryAddress}
-              commune={order.deliveryCommune}
-              showRouteButton={false}
-            />
+          {deliveryRouteUrl && (
+            <a
+              className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-[5px] border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:w-full"
+              href={deliveryRouteUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={17} /> Abrir en Google Maps
+            </a>
           )}
         </section>
 

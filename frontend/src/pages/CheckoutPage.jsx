@@ -7,6 +7,7 @@ import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
+import { readCheckoutIntent, resolveCheckoutItems } from "../helpers/checkoutIntent.js";
 import { formatClp } from "../helpers/formatters.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
@@ -52,9 +53,10 @@ export default function CheckoutPage() {
     [location.state],
   );
   const checkoutItems = useMemo(
-    () => directPurchase ? [directPurchase] : items,
-    [directPurchase, items],
+    () => resolveCheckoutItems(location.state, items),
+    [location.state, items],
   );
+  const checkoutIntent = useMemo(() => readCheckoutIntent(location.state), [location.state]);
   const isClient = isAuthenticated && user?.role === "CLIENT";
   const [checkoutKey] = useState(createCheckoutKey);
   const [catalogProducts, setCatalogProducts] = useState([]);
@@ -286,7 +288,10 @@ export default function CheckoutPage() {
           saveDeliveryAddress: false,
         });
 
-      if (directPurchase) markDirectPurchaseOrder(payment.orderId);
+      // Both temporary origins must leave the persistent CLIENT cart untouched.
+      if (directPurchase || checkoutIntent?.source === "DIRECT" || (checkoutIntent && isClient)) {
+        markDirectPurchaseOrder(payment.orderId);
+      }
 
       if (!isClient && payment.guestAccessToken) {
         saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
@@ -352,7 +357,7 @@ export default function CheckoutPage() {
         <section className="grid min-h-70 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
           <div className="grid justify-items-center gap-3">
             <ShoppingCart className="text-slate-400" size={45} />
-            <strong className="text-lg text-ink-950">Tu carrito está vacío</strong>
+            <strong className="text-lg text-ink-950">{location.state?.checkoutIntent ? "La selección de compra venció. Vuelve a seleccionar tus productos." : "Tu carrito está vacío"}</strong>
             <Link className="font-bold text-rust-600" to="/catalog">Volver al catálogo</Link>
           </div>
         </section>
@@ -478,6 +483,7 @@ export default function CheckoutPage() {
                 <EmailVerificationPanel
                   key={`client-${user.correo}`}
                   email={user.correo}
+                  description="Debes verificar tu correo antes de continuar con esta compra. Tu selección de productos se conserva."
                   requestCode={requestClientEmailVerification}
                   verifyCode={verifyClientEmail}
                   onVerified={(session) => {

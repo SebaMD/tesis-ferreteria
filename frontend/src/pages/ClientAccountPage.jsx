@@ -284,7 +284,7 @@ export default function ClientAccountPage() {
         </div>
         <div className="flex items-center justify-between gap-4 rounded-md border border-critical-200 bg-critical-50 p-4 max-[620px]:grid">
           <div><strong className="block text-sm text-ink-950">Desactivar mi cuenta</strong><span className="mt-1 block text-xs leading-5 text-slate-600">Perderás el acceso hasta reactivarla con tu contraseña y un código enviado por correo.</span></div>
-          <button className="shrink-0 border-critical-500 bg-white text-critical-700 hover:bg-critical-100 max-[620px]:w-full" type="button" onClick={() => { setDeactivationError(""); setDeactivationPassword(""); setDeactivationOpen(true); }}>Desactivar mi cuenta</button>
+          <button className="shrink-0 border-critical-600 bg-white text-ink-950 hover:bg-critical-50 max-[620px]:w-full" type="button" onClick={() => { setDeactivationError(""); setDeactivationPassword(""); setDeactivationOpen(true); }}>Desactivar mi cuenta</button>
         </div>
       </section>
 

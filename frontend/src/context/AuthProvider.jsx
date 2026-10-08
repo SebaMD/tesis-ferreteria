@@ -7,21 +7,22 @@ import {
 } from "../helpers/session.js";
 import { loginRequest, logoutRequest, registerClientRequest } from "../services/auth.service.js";
 import AuthContext from "./AuthContext.js";
+import { shouldMergeGuestCartOnAuthentication } from "../helpers/checkoutIntent.js";
 
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(readStoredAuth);
-  const { token, user } = session;
+  const { token, user, mergeGuestCart = false } = session;
 
-  const replaceSession = useCallback((sessionData) => {
+  const replaceSession = useCallback((sessionData, { mergeGuestCart = false } = {}) => {
     storeAuthSession(sessionData.token, sessionData.user);
     clearSessionNotice();
-    setSession({ token: sessionData.token, user: sessionData.user });
+    setSession({ token: sessionData.token, user: sessionData.user, mergeGuestCart });
     return sessionData.user;
   }, []);
 
-  const login = useCallback(async (credentials) => {
+  const login = useCallback(async (credentials, checkoutState) => {
     const data = await loginRequest(credentials);
-    replaceSession(data);
+    replaceSession(data, { mergeGuestCart: shouldMergeGuestCartOnAuthentication(checkoutState) });
     return data;
   }, [replaceSession]);
 
@@ -41,9 +42,9 @@ export default function AuthProvider({ children }) {
     setSession({ token: null, user: null });
   }, []);
 
-  const registerClient = useCallback(async (data) => {
+  const registerClient = useCallback(async (data, checkoutState) => {
     const sessionData = await registerClientRequest(data);
-    replaceSession(sessionData);
+    replaceSession(sessionData, { mergeGuestCart: shouldMergeGuestCartOnAuthentication(checkoutState) });
     return sessionData;
   }, [replaceSession]);
 
@@ -52,13 +53,14 @@ export default function AuthProvider({ children }) {
       user,
       token,
       isAuthenticated: Boolean(token && user),
+      mergeGuestCart,
       login,
       registerClient,
       replaceSession,
       logout,
       clearSession,
     }),
-    [clearSession, login, logout, registerClient, replaceSession, token, user],
+    [clearSession, login, logout, mergeGuestCart, registerClient, replaceSession, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

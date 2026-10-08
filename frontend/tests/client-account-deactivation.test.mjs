@@ -31,3 +31,18 @@ test("login routes only the explicit self-deactivation code to secure reactivati
   assert.match(reactivation, /current-password/);
   assert.match(reactivation, /one-time-code/);
 });
+
+test("deactivation button uses defined theme tokens with dark text in light mode", async () => {
+  const [account, styles] = await Promise.all([
+    readFile(new URL("pages/ClientAccountPage.jsx", root), "utf8"),
+    readFile(new URL("styles/styles.css", root), "utf8"),
+  ]);
+  const button = account.match(/<button[^\n]*>Desactivar mi cuenta<\/button>/)?.[0];
+  assert.ok(button);
+  assert.match(button, /border-critical-600 bg-white text-ink-950 hover:bg-critical-50/);
+  assert.doesNotMatch(button, /text-white|text-critical-700/);
+  assert.match(button, /setDeactivationOpen\(true\)/);
+  assert.match(styles, /--color-ink-950: #10151f/);
+  assert.match(styles, /\.dark \.bg-white[\s\S]*background-color: #171e28 !important/);
+  assert.match(styles, /\.dark \.text-ink-950[\s\S]*color: #eef1f4 !important/);
+});

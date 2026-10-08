@@ -1,6 +1,8 @@
 import { CheckCircle2, LogIn, ShoppingBag, UserPlus } from "lucide-react";
+import { useMemo } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { readDirectPurchaseItem } from "../helpers/directPurchase.js";
+import { createCheckoutIntent, readCheckoutIntent } from "../helpers/checkoutIntent.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 
@@ -9,7 +11,12 @@ export default function CheckoutChoicePage() {
   const { isAuthenticated, user } = useAuth();
   const { items } = useCart();
   const directPurchase = readDirectPurchaseItem(location.state);
-  const checkoutState = directPurchase ? { directPurchase } : undefined;
+  const checkoutIntent = useMemo(() => readCheckoutIntent(location.state) || (
+    !isAuthenticated
+      ? createCheckoutIntent(directPurchase ? "DIRECT" : "GUEST_CART", directPurchase ? [directPurchase] : items)
+      : null
+  ), [directPurchase, isAuthenticated, items, location.state]);
+  const checkoutState = checkoutIntent ? { checkoutIntent } : directPurchase ? { directPurchase } : undefined;
 
   if (isAuthenticated && user?.role === "CLIENT") {
     return <Navigate to="/checkout" replace state={checkoutState} />;
@@ -50,10 +57,10 @@ export default function CheckoutChoicePage() {
             </ul>
           </div>
           <div className="grid grid-cols-2 gap-2 max-[430px]:grid-cols-1">
-            <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/login" state={{ from: "/checkout" }}>
+            <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/login" state={{ from: "/checkout", ...checkoutState }}>
               <LogIn size={17} /> Iniciar sesión
             </Link>
-            <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={{ from: "/checkout" }}>
+            <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={{ from: "/checkout", ...checkoutState }}>
               <UserPlus size={17} /> Crear mi cuenta
             </Link>
           </div>

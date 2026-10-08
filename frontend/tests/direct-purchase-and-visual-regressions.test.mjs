@@ -35,7 +35,7 @@ test("compra directa conserva un único producto temporal sin mutar el carrito",
   assert.match(controls, /state: \{ directPurchase \}/);
   assert.doesNotMatch(controls, /const result = addSelectedQuantity\(\{ showSuccessToast: false \}\)/);
   assert.match(choice, /state=\{checkoutState\}/);
-  assert.match(checkout, /directPurchase \? \[directPurchase\] : items/);
+  assert.match(checkout, /resolveCheckoutItems\(location\.state, items\)/);
   assert.match(checkout, /items: rows\.map/);
 });
 

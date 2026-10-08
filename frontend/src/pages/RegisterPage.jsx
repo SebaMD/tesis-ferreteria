@@ -8,6 +8,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { isValidPassword, PASSWORD_REQUIREMENTS } from "../helpers/password.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
+import { checkoutContinuationState } from "../helpers/checkoutIntent.js";
 
 let postRegistrationNavigationPending = false;
 
@@ -27,6 +28,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const checkoutState = checkoutContinuationState(location.state);
 
   const requestedPath = typeof location.state?.from === "string"
     && location.state.from.startsWith("/")
@@ -35,7 +37,7 @@ export default function RegisterPage() {
     : null;
 
   if (isAuthenticated && !postRegistrationNavigationPending) {
-    return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace />;
+    return <Navigate to={user?.role === "CLIENT" ? requestedPath || "/catalog" : "/dashboard"} replace state={user?.role === "CLIENT" ? checkoutState : undefined} />;
   }
 
   const updateField = (field, value) => {
@@ -71,11 +73,12 @@ export default function RegisterPage() {
         correo: form.correo,
         phone: form.phone.trim() || null,
         password: form.password,
-      });
+      }, checkoutState);
       toast.success("Cuenta creada exitosamente");
       navigate("/verify-email", {
         replace: true,
         state: {
+          ...checkoutState,
           from: requestedPath || "/catalog",
           initialChallenge: session.emailVerification,
           fromRegistration: true,
@@ -184,7 +187,7 @@ export default function RegisterPage() {
 
           <button className="w-full" type="submit" disabled={loading}>Crear cuenta</button>
           <p className="m-0 text-center text-sm text-slate-500">
-            ¿Ya tienes una cuenta? <Link className="font-bold text-rust-600" to="/login" state={requestedPath ? { from: requestedPath } : undefined}>Inicia sesión</Link>
+            ¿Ya tienes una cuenta? <Link className="font-bold text-rust-600" to="/login" state={requestedPath ? { from: requestedPath, ...checkoutState } : undefined}>Inicia sesión</Link>
           </p>
         </form>
       </div>

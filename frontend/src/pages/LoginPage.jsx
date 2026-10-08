@@ -9,6 +9,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { clearSessionNotice, readSessionNotice, storeInternalVerificationChallenge } from "../helpers/session.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
+import { checkoutContinuationState } from "../helpers/checkoutIntent.js";
 
 const getAuthenticatedDestination = (user, requestedPath) => {
   if (user?.role === "CLIENT") return requestedPath || "/catalog";
@@ -27,6 +28,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
   const [loading, setLoading] = useState(false);
+  const checkoutState = checkoutContinuationState(location.state);
 
   useEffect(() => {
     if (!sessionNotice) return;
@@ -44,7 +46,7 @@ export default function LoginPage() {
     const destination = user?.requiresEmailVerification
       ? "/verify-work-email"
       : getAuthenticatedDestination(user, requestedPath);
-    return <Navigate to={destination} replace />;
+    return <Navigate to={destination} replace state={user?.role === "CLIENT" ? checkoutState : undefined} />;
   }
 
   const clearExpiredSessionMessage = () => {
@@ -64,13 +66,15 @@ export default function LoginPage() {
         toast.error("Ingresa un RUT chileno válido");
         return;
       }
-      const session = await login({ identifier: normalizedIdentifier, password });
+      const session = await login({ identifier: normalizedIdentifier, password }, checkoutState);
       if (session.user.requiresEmailVerification) {
         storeInternalVerificationChallenge(session.user.id, session.emailVerification);
       }
       navigate(session.user.requiresEmailVerification
         ? "/verify-work-email"
-        : getAuthenticatedDestination(session.user, requestedPath));
+        : getAuthenticatedDestination(session.user, requestedPath), {
+          state: session.user.role === "CLIENT" ? checkoutState : undefined,
+        });
     } catch (err) {
       if (err?.response?.data?.code === "CLIENT_SELF_DEACTIVATED") {
         navigate("/reactivate-account", {
@@ -178,7 +182,7 @@ export default function LoginPage() {
             Ingresar
           </button>
           <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
-            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={requestedPath ? { from: requestedPath } : undefined}>
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={requestedPath ? { from: requestedPath, ...checkoutState } : undefined}>
               <UserPlus size={17} /> Registrarse
             </Link>
             <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">

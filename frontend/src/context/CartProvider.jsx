@@ -169,7 +169,7 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
 }
 
 export default function CartProvider({ children }) {
-  const { user } = useAuth();
+  const { user, mergeGuestCart } = useAuth();
   const ownerKey = user?.role === "CLIENT" ? `client_${user.id}` : "guest";
   const storageKey = `${CART_STORAGE_PREFIX}_${ownerKey}`;
   const guestStorageKey = `${CART_STORAGE_PREFIX}_guest`;
@@ -179,7 +179,7 @@ export default function CartProvider({ children }) {
       key={`${storageKey}:${user?.role || "anonymous"}:${user?.id || "anonymous"}`}
       storageKey={storageKey}
       guestStorageKey={guestStorageKey}
-      mergeGuestCart={user?.role === "CLIENT"}
+      mergeGuestCart={user?.role === "CLIENT" && mergeGuestCart}
     >
       {children}
     </CartStore>

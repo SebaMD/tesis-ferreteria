@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import useAuth from "../hooks/useAuth.js";
+import { checkoutContinuationState } from "../helpers/checkoutIntent.js";
 import {
   requestClientEmailVerification,
   verifyClientEmail,
@@ -14,6 +15,7 @@ export default function ClientEmailVerificationPage() {
   const { user, replaceSession } = useAuth();
   const [verified, setVerified] = useState(Boolean(user?.emailVerifiedAt || user?.emailVerified));
   const fromRegistration = Boolean(location.state?.fromRegistration);
+  const checkoutState = checkoutContinuationState(location.state);
   const destination = typeof location.state?.from === "string" && location.state.from.startsWith("/")
     ? location.state.from
     : "/catalog";
@@ -62,11 +64,11 @@ export default function ClientEmailVerificationPage() {
           : "Te enviaremos un código de 6 dígitos."}
       />
       {verified ? (
-        <button className="w-fit max-[480px]:w-full" type="button" onClick={() => navigate(destination, { replace: true })}>
+        <button className="w-fit max-[480px]:w-full" type="button" onClick={() => navigate(destination, { replace: true, state: checkoutState })}>
           Continuar <ArrowRight size={17} />
         </button>
       ) : fromRegistration ? (
-        <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[480px]:w-full" type="button" onClick={() => navigate(destination, { replace: true })}><Clock3 size={17} /> Verificar más tarde</button>
+        <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[480px]:w-full" type="button" onClick={() => navigate(destination, { replace: true, state: checkoutState })}><Clock3 size={17} /> Verificar más tarde</button>
       ) : (
         <p className="m-0 text-xs leading-5 text-slate-500">Puedes navegar por el catálogo e iniciar sesión normalmente. La verificación se exigirá solamente antes de una nueva compra.</p>
       )}

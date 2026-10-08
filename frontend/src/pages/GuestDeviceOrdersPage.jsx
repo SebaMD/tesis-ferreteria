@@ -1,22 +1,21 @@
-import { ClipboardList, RefreshCw } from "lucide-react";
+import { ClipboardList, CreditCard, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
+import { saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
+import { groupBuyerOrders } from "../helpers/buyerOrderGroups.js";
+import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import {
   getGuestDeviceOrderReceiptRequest,
   getGuestDeviceOrderDeliveryProofRequest,
   getGuestDeviceOrdersRequest,
+  retryGuestDeviceOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
-const ACTIVE_STATUSES = new Set([
-  "PENDING_PAYMENT", "PAYMENT_REVIEW", "PAID", "PREPARING",
-  "READY_FOR_PICKUP", "READY_FOR_DELIVERY", "OUT_FOR_DELIVERY",
-]);
-const INCOMPLETE_STATUSES = new Set(["PAYMENT_FAILED", "CANCELLED", "EXPIRED"]);
-
-function OrdersSection({ title, description, orders, onView, empty, secondary = false }) {
+function OrdersSection({ title, description, orders, onView, renderActions, empty, secondary = false }) {
   return (
     <section className="grid gap-3">
       <header className="flex items-end justify-between gap-3">
@@ -34,6 +33,7 @@ function OrdersSection({ title, description, orders, onView, empty, secondary = 
               order={order}
               onView={onView}
               requestReceipt={({ id }) => getGuestDeviceOrderReceiptRequest(id)}
+              actions={renderActions?.(order)}
               secondary={secondary}
             />
           ))}
@@ -50,6 +50,7 @@ export default function GuestDeviceOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [paymentActionOrderIds, setPaymentActionOrderIds] = useState(() => new Set());
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -72,11 +73,43 @@ export default function GuestDeviceOrdersPage() {
     loadOrders();
   }, [loadOrders]);
 
-  const grouped = useMemo(() => ({
-    active: orders.filter((order) => ACTIVE_STATUSES.has(order.status)),
-    delivered: orders.filter((order) => order.status === "DELIVERED"),
-    incomplete: orders.filter((order) => INCOMPLETE_STATUSES.has(order.status)),
-  }), [orders]);
+  const grouped = useMemo(() => groupBuyerOrders(orders), [orders]);
+
+  const handleRetryPayment = async (order) => {
+    if (!order?.canRetryPayment || paymentActionOrderIds.has(order.id)) return;
+    setPaymentActionOrderIds((current) => new Set(current).add(order.id));
+    let redirectStarted = false;
+    try {
+      const payment = await retryGuestDeviceOrderPaymentRequest(order.id);
+      if (payment.guestAccessToken) {
+        saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
+      }
+      submitWebpayForm(payment);
+      redirectStarted = true;
+    } catch (requestError) {
+      toast.error(getApiError(requestError, "No se pudo reintentar el pago"));
+      await loadOrders();
+    } finally {
+      if (!redirectStarted) {
+        setPaymentActionOrderIds((current) => {
+          const next = new Set(current);
+          next.delete(order.id);
+          return next;
+        });
+      }
+    }
+  };
+
+  const actionsFor = (order) => {
+    if (!order?.canRetryPayment) return null;
+    const isProcessing = paymentActionOrderIds.has(order.id);
+    return (
+      <button type="button" onClick={() => handleRetryPayment(order)} disabled={isProcessing}>
+        {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <CreditCard size={16} />}
+        {isProcessing ? "Iniciando..." : "Reintentar pago"}
+      </button>
+    );
+  };
 
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[620px]:px-3.5 max-[620px]:py-6">
@@ -106,10 +139,13 @@ export default function GuestDeviceOrdersPage() {
         </section>
       ) : !loading && !error && (
         <>
-          <OrdersSection title="Pedidos en curso" description="Compras pendientes de pago, preparación o entrega." orders={grouped.active} onView={setSelectedOrder} empty="No hay compras en curso." />
-          <OrdersSection title="Historial" description="Compras entregadas o retiradas desde este dispositivo." orders={grouped.delivered} onView={setSelectedOrder} empty="No hay compras entregadas." />
+          {grouped.payments.length > 0 && (
+            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary />
+          )}
+          <OrdersSection title="Pedidos en curso" description="Compras pagadas que continúan en preparación, retiro o entrega." orders={grouped.active} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras en curso." />
+          <OrdersSection title="Historial" description="Compras entregadas o retiradas desde este dispositivo." orders={grouped.delivered} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras entregadas." />
           {grouped.incomplete.length > 0 && (
-            <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados." orders={grouped.incomplete} onView={setSelectedOrder} empty="" secondary />
+            <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados." orders={grouped.incomplete} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary />
           )}
         </>
       )}
@@ -118,6 +154,7 @@ export default function GuestDeviceOrdersPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         requestDeliveryProof={({ id }) => getGuestDeviceOrderDeliveryProofRequest(id)}
+        actions={selectedOrder ? actionsFor(selectedOrder) : null}
       />
     </main>
   );

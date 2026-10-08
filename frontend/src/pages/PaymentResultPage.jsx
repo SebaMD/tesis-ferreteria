@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock3, Mail, ShoppingCart, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, CreditCard, Mail, RefreshCw, ShoppingCart, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,12 +15,15 @@ import {
   getOnlineOrderStatus,
   getOnlinePaymentStatus,
   isOnlineOrderPaid,
+  submitWebpayForm,
 } from "../helpers/onlineOrders.js";
 import { badgeClass } from "../helpers/uiClasses.js";
 import useCart from "../hooks/useCart.js";
 import {
   getMyOnlineOrderByIdRequest,
   getMyOnlineOrderReceiptRequest,
+  continueOnlineOrderPaymentRequest,
+  retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
 function resultIcon(status) {
@@ -50,6 +53,7 @@ export default function PaymentResultPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(Boolean(orderId));
   const [errorMessage, setErrorMessage] = useState("");
+  const [paymentAction, setPaymentAction] = useState("");
 
   useEffect(() => {
     removePurchasedItemsRef.current = removePurchasedItems;
@@ -106,6 +110,25 @@ export default function PaymentResultPage() {
   const clientName = order
     ? `${order.clientNames || ""} ${order.clientSurnames || ""}`.trim()
     : "";
+
+  const handlePaymentAction = async (action) => {
+    if (!order || paymentAction) return;
+    const canRun = action === "continue" ? order.canContinuePayment : order.canRetryPayment;
+    if (!canRun) return;
+    setPaymentAction(action);
+    let redirectStarted = false;
+    try {
+      const payment = action === "continue"
+        ? await continueOnlineOrderPaymentRequest(order.id)
+        : await retryOnlineOrderPaymentRequest(order.id);
+      submitWebpayForm(payment);
+      redirectStarted = true;
+    } catch (error) {
+      toast.error(getApiError(error, action === "continue" ? "No se pudo continuar el pago" : "No se pudo reintentar el pago"));
+    } finally {
+      if (!redirectStarted) setPaymentAction("");
+    }
+  };
 
   return (
     <main className="mx-auto grid min-h-120 w-full max-w-190 place-items-center px-6 py-10 max-[720px]:px-3.5">
@@ -221,6 +244,18 @@ export default function PaymentResultPage() {
           )}
 
           <div className="flex w-full max-w-125 flex-wrap justify-center gap-3 max-[520px]:flex-col">
+            {order.canContinuePayment && (
+              <button type="button" onClick={() => handlePaymentAction("continue")} disabled={Boolean(paymentAction)}>
+                {paymentAction === "continue" ? <RefreshCw className="animate-spin" size={17} /> : <CreditCard size={17} />}
+                {paymentAction === "continue" ? "Abriendo..." : "Continuar pago"}
+              </button>
+            )}
+            {order.canRetryPayment && (
+              <button type="button" onClick={() => handlePaymentAction("retry")} disabled={Boolean(paymentAction)}>
+                {paymentAction === "retry" ? <RefreshCw className="animate-spin" size={17} /> : <CreditCard size={17} />}
+                {paymentAction === "retry" ? "Reintentando..." : "Reintentar pago"}
+              </button>
+            )}
             <DownloadReceiptButton
               order={order}
               requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}

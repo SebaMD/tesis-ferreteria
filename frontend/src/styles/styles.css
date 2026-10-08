@@ -369,10 +369,21 @@
   background: #232c38 !important;
 }
 
-.dark .client-account-deactivation-warning {
+.dark .client-account-deactivation-warning,
+.dark .sale-return-pending-notice {
   border-color: #8a5a16 !important;
   background: #33270f !important;
   color: #fde68a !important;
+}
+
+.dark .sale-return-pending-notice button {
+  border-color: #8a5a16 !important;
+  background: #4a3514 !important;
+  color: #fde68a !important;
+}
+
+.dark .sale-return-pending-notice button:not(:disabled):hover {
+  background: #60451a !important;
 }
 
 .dark .sale-return-reason {

@@ -1,6 +1,6 @@
 // EMAIL_VERIFICATION_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55441/postgres node tests/emailVerification.integration.mjs
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -159,10 +159,23 @@ try {
 
   const transbankSdk = (await import("transbank-sdk")).default;
   let webpaySequence = 0;
-  transbankSdk.WebpayPlus.Transaction.prototype.create = async () => ({
-    token: `email-verification-webpay-${++webpaySequence}`,
-    url: "https://webpay.example.test/pay",
-  });
+  const webpayTransactions = new Map();
+  transbankSdk.WebpayPlus.Transaction.prototype.create = async (buyOrder, sessionId, amount) => {
+    const token = `email-verification-webpay-${++webpaySequence}`;
+    webpayTransactions.set(token, { buyOrder, sessionId, amount });
+    return { token, url: "https://webpay.example.test/pay" };
+  };
+  transbankSdk.WebpayPlus.Transaction.prototype.status = async (token) => {
+    const transaction = webpayTransactions.get(token);
+    if (!transaction) throw new Error("Transaccion Webpay de prueba no encontrada");
+    return {
+      status: "INITIALIZED",
+      response_code: -2,
+      amount: transaction.amount,
+      buy_order: transaction.buyOrder,
+      session_id: transaction.sessionId,
+    };
+  };
   const { default: app } = await import("../dist/app.js");
   applicationDb = (await import("../dist/db/index.js")).db;
   httpServer = app.listen(0, "127.0.0.1");
@@ -200,6 +213,40 @@ try {
     saveDeliveryAddress: false,
     ...extra,
   });
+
+  const retryState = async (orderId) => ({
+    order: (await pool.query("SELECT * FROM online_orders WHERE id=$1", [orderId])).rows,
+    items: (await pool.query("SELECT * FROM online_order_items WHERE order_id=$1 ORDER BY product_id", [orderId])).rows,
+    payments: (await pool.query("SELECT * FROM online_payments WHERE order_id=$1 ORDER BY id", [orderId])).rows,
+    stock: (await pool.query("SELECT current_stock FROM products WHERE id=$1", [productId])).rows,
+    movements: (await pool.query("SELECT * FROM inventory_movements WHERE product_id=$1 ORDER BY id", [productId])).rows,
+    accessTokens: (await pool.query("SELECT * FROM guest_order_access_tokens WHERE order_id=$1 ORDER BY id", [orderId])).rows,
+  });
+
+  const assertInStoreOnlyRetryRejected = async (orderId, route, headers, buyer) => {
+    const originalStatus = (await pool.query("SELECT status FROM online_orders WHERE id=$1", [orderId])).rows[0].status;
+    await request("PATCH", `/products/${productId}`, {
+      token: internalLogin.data.token,
+      body: { inStoreOnly: true },
+    });
+    for (const status of ["CANCELLED", "PAYMENT_FAILED", "EXPIRED"]) {
+      await pool.query("UPDATE online_orders SET status=$2 WHERE id=$1", [orderId, status]);
+      const before = await retryState(orderId);
+      const launchesBefore = webpaySequence;
+      const response = await fetch(base + route, { method: "POST", headers });
+      const payload = await response.json();
+      assert.equal(response.status, 409, `${buyer} ${status}: ${JSON.stringify(payload)}`);
+      assert.match(payload.message, /unicamente para compra presencial/);
+      assert.equal(webpaySequence, launchesBefore, "Rejected retry must not call Webpay or generate a token");
+      assert.deepEqual(await retryState(orderId), before, "Rejected retry must preserve reservation, snapshots, stock, movements, payments and access tokens");
+    }
+    await pool.query("UPDATE online_orders SET status=$2 WHERE id=$1", [orderId, originalStatus]);
+    await request("PATCH", `/products/${productId}`, {
+      token: internalLogin.data.token,
+      body: { inStoreOnly: false },
+    });
+    console.log(`PASS ${buyer}: Solo presencial blocks CANCELLED/PAYMENT_FAILED/EXPIRED retries without side effects`);
+  };
 
   const historicalLogin = await request("POST", "/auth/login", {
     body: { correo: "HISTORICAL@example.test", password: "Email-Test-2026!" },
@@ -506,6 +553,81 @@ try {
     body: checkoutBody("client-verified-0001"),
   }, 201);
   assert.ok(firstClientCheckout.data.orderId);
+
+  const activePayment = (await pool.query(
+    "SELECT token,buy_order,session_id FROM online_payments WHERE order_id=$1 ORDER BY id DESC LIMIT 1",
+    [firstClientCheckout.data.orderId],
+  )).rows[0];
+  const cancelledReturn = await fetch(`${base}/online-orders/payments/webpay/return`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      TBK_TOKEN: activePayment.token,
+      TBK_ORDEN_COMPRA: activePayment.buy_order,
+      TBK_ID_SESION: activePayment.session_id,
+    }),
+  });
+  assert.equal(cancelledReturn.status, 303);
+  assert.deepEqual((await pool.query(
+    "SELECT o.status AS order_status,p.status AS payment_status FROM online_orders o JOIN online_payments p ON p.order_id=o.id WHERE o.id=$1 ORDER BY p.id DESC LIMIT 1",
+    [firstClientCheckout.data.orderId],
+  )).rows[0], { order_status: "CANCELLED", payment_status: "CANCELLED" });
+  assert.equal((await pool.query("SELECT current_stock FROM products WHERE id=$1", [productId])).rows[0].current_stock, 50);
+
+  const checkoutAfterCancellation = await request("POST", "/online-orders/checkout", {
+    token: profileUpdated.data.token,
+    body: checkoutBody("client-after-cancellation-0001"),
+  }, 201);
+  const secondPayment = (await pool.query(
+    "SELECT token,buy_order,session_id FROM online_payments WHERE order_id=$1 ORDER BY id DESC LIMIT 1",
+    [checkoutAfterCancellation.data.orderId],
+  )).rows[0];
+  await fetch(`${base}/online-orders/payments/webpay/return`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      TBK_TOKEN: secondPayment.token,
+      TBK_ORDEN_COMPRA: secondPayment.buy_order,
+      TBK_ID_SESION: secondPayment.session_id,
+    }),
+  });
+
+  await assertInStoreOnlyRetryRejected(
+    firstClientCheckout.data.orderId,
+    `/online-orders/${firstClientCheckout.data.orderId}/retry-payment`,
+    { Authorization: `Bearer ${profileUpdated.data.token}` },
+    "CLIENT",
+  );
+  const clientItemsBeforeRetry = (await retryState(firstClientCheckout.data.orderId)).items;
+  const retriedPayment = await request(
+    "POST",
+    `/online-orders/${firstClientCheckout.data.orderId}/retry-payment`,
+    { token: profileUpdated.data.token },
+  );
+  assert.notEqual(retriedPayment.data.token, activePayment.token);
+  assert.deepEqual((await retryState(firstClientCheckout.data.orderId)).items, clientItemsBeforeRetry);
+  assert.equal((await pool.query(
+    "SELECT count(*) FROM online_payments WHERE order_id=$1",
+    [firstClientCheckout.data.orderId],
+  )).rows[0].count, "2");
+  const retriedRow = (await pool.query(
+    "SELECT token,buy_order,session_id FROM online_payments WHERE order_id=$1 ORDER BY id DESC LIMIT 1",
+    [firstClientCheckout.data.orderId],
+  )).rows[0];
+  await fetch(`${base}/online-orders/payments/webpay/return`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      TBK_TOKEN: retriedRow.token,
+      TBK_ORDEN_COMPRA: retriedRow.buy_order,
+      TBK_ID_SESION: retriedRow.session_id,
+    }),
+  });
+  console.log("PASS Webpay cancellation releases the blocker without stock changes and retry creates a new transaction");
+
   await request("DELETE", "/online-orders/delivery-address", { token: profileUpdated.data.token });
   assert.equal((await request("GET", "/online-orders/delivery-address", { token: profileUpdated.data.token })).data, null);
   console.log("PASS new CLIENT is gated until verification and can persist its own phone/address profile without cross-client identifiers");
@@ -571,6 +693,7 @@ try {
   await request("POST", "/email-verification/guest/verify", { guestSession: guestB, body: { challengeId: guestRequest.data.challengeId, pin: guestPin } }, 400);
   const guestVerified = await request("POST", "/email-verification/guest/verify", { guestSession: guestA, body: { challengeId: guestRequest.data.challengeId, pin: guestPin } });
   assert.equal(guestVerified.data.email, guestEmail);
+  const guestMailCountAfterVerification = smtp.messages.length;
   const guestBase = {
     guestName: "Invitada Segura",
     guestPhone: "+56987654321",
@@ -588,11 +711,10 @@ try {
   const repeatedGuestCheckout = await request("POST", "/online-orders/guest/checkout", {
     guestSession: guestA,
     body: checkoutBody("guest-verified-00001", { ...guestBase, guestEmail, guestEmailConfirmation: guestEmail }),
-  }, 409);
-  assert.equal(
-    repeatedGuestCheckout.message,
-    "La sesion anterior de Webpay ya no puede reutilizarse. Revisa el seguimiento del pedido.",
-  );
+  }, 201);
+  assert.equal(repeatedGuestCheckout.data.orderId, guestCheckout.data.orderId);
+  assert.equal(repeatedGuestCheckout.data.paymentId, guestCheckout.data.paymentId);
+  assert.equal(repeatedGuestCheckout.data.token, guestCheckout.data.token);
   assert.equal((await pool.query("SELECT count(*) FROM online_orders WHERE guest_session_hash IS NOT NULL")).rows[0].count, "1");
   const guestOrderOwner = (await pool.query("SELECT client_id,guest_email FROM online_orders WHERE id=$1", [guestCheckout.data.orderId])).rows[0];
   assert.equal(guestOrderOwner.client_id, null);
@@ -604,12 +726,58 @@ try {
     guestSession: guestA,
     body: checkoutBody("guest-replay-0000001", { ...guestBase, guestEmail, guestEmailConfirmation: guestEmail }),
   }, 403);
+  await assertInStoreOnlyRetryRejected(
+    guestCheckout.data.orderId,
+    "/online-orders/guest/retry-payment",
+    { "X-Guest-Order-Token": guestCheckout.data.guestAccessToken },
+    "Guest access token",
+  );
+  const guestItemsBeforeRetry = (await retryState(guestCheckout.data.orderId)).items;
   const retry = await fetch(`${base}/online-orders/guest/retry-payment`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Guest-Order-Token": guestCheckout.data.guestAccessToken },
   });
-  assert.equal(retry.status, 200, await retry.text());
-  console.log("PASS guest PIN is session/email-bound, checkout session reuse and replay are blocked, legitimate retry needs no PIN");
+  const retryPayload = await retry.json();
+  assert.equal(retry.status, 200, JSON.stringify(retryPayload));
+  assert.notEqual(retryPayload.data.token, guestCheckout.data.token);
+  assert.deepEqual((await retryState(guestCheckout.data.orderId)).items, guestItemsBeforeRetry);
+  const guestDeviceId = randomBytes(32).toString("base64url");
+  const guestDeviceHash = createHash("sha256").update(guestDeviceId, "utf8").digest("hex");
+  await pool.query(
+    "UPDATE online_orders SET status='CANCELLED',guest_device_hash=$2 WHERE id=$1",
+    [guestCheckout.data.orderId, guestDeviceHash],
+  );
+  await pool.query(
+    "UPDATE online_payments SET status='CANCELLED' WHERE order_id=$1 AND status<>'AUTHORIZED'",
+    [guestCheckout.data.orderId],
+  );
+  const wrongDeviceRetry = await fetch(
+    `${base}/online-orders/guest/device-orders/${guestCheckout.data.orderId}/retry-payment`,
+    { method: "POST", headers: { Cookie: `fyf_guest_device=${randomBytes(32).toString("base64url")}` } },
+  );
+  assert.equal(wrongDeviceRetry.status, 404);
+  await assertInStoreOnlyRetryRejected(
+    guestCheckout.data.orderId,
+    `/online-orders/guest/device-orders/${guestCheckout.data.orderId}/retry-payment`,
+    { Cookie: `fyf_guest_device=${guestDeviceId}` },
+    "Guest device",
+  );
+  const deviceRetry = await fetch(
+    `${base}/online-orders/guest/device-orders/${guestCheckout.data.orderId}/retry-payment`,
+    { method: "POST", headers: { Cookie: `fyf_guest_device=${guestDeviceId}` } },
+  );
+  const deviceRetryPayload = await deviceRetry.json();
+  assert.equal(deviceRetry.status, 200, JSON.stringify(deviceRetryPayload));
+  assert.notEqual(deviceRetryPayload.data.token, retryPayload.data.token);
+  assert.deepEqual((await retryState(guestCheckout.data.orderId)).items, guestItemsBeforeRetry);
+  assert.ok(deviceRetryPayload.data.guestAccessToken);
+  assert.notEqual(deviceRetryPayload.data.guestAccessToken, guestCheckout.data.guestAccessToken);
+  assert.equal(
+    (await pool.query("SELECT count(*) FROM online_payments WHERE order_id=$1", [guestCheckout.data.orderId])).rows[0].count,
+    "3",
+  );
+  assert.equal(smtp.messages.length, guestMailCountAfterVerification);
+  console.log("PASS guest PIN is session/email-bound; token and device-authorized retries create new Webpay attempts without purchase-confirmation mail");
 
   const concurrentSession = randomBytes(32).toString("base64url");
   const concurrentChallenge = await request("POST", "/email-verification/guest/request", { guestSession: concurrentSession, body: { email: "concurrent@example.test" } }, 201);

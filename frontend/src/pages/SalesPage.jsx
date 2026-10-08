@@ -991,7 +991,7 @@ export default function SalesPage() {
           <p>{canCreate && activeView === "sales" ? "Punto de venta presencial con carrito." : "Historial de ventas presenciales registradas."}</p>
         </div>
         {canReviewCancellation && pendingCancellationSales.length > 0 && (
-          <div className="ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
+          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
             <span className="text-sm font-bold">
               Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes
             </span>

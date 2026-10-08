@@ -10,14 +10,14 @@ const ORDER_STATUS = {
     description: "El pago fue confirmado y el pedido espera comenzar su preparación.",
   },
   PAYMENT_FAILED: {
-    label: "Pago fallido",
+    label: "Pago no completado",
     tone: "critical",
-    description: "Webpay no autorizó el pago. Puedes volver al carrito o reintentarlo desde Mis pedidos.",
+    description: "Webpay no autorizó el pago y no se realizó ningún cargo. Puedes volver a intentarlo.",
   },
   CANCELLED: {
-    label: "Cancelado",
+    label: "Compra cancelada",
     tone: "neutral",
-    description: "El proceso de pago fue cancelado y la reserva de stock fue liberada.",
+    description: "La compra fue cancelada y no se realizó ningún cargo. La reserva de stock fue liberada.",
   },
   EXPIRED: {
     label: "Reserva expirada",

@@ -112,6 +112,15 @@ export class OnlineOrderError extends Error {
   }
 }
 
+function assertProductAllowsOnlinePurchase(product: { inStoreOnly: boolean }) {
+  if (product.inStoreOnly) {
+    throw new OnlineOrderError(
+      "Uno o mas productos estan disponibles unicamente para compra presencial.",
+      409,
+    );
+  }
+}
+
 type PreparedPayment = {
   orderId: number;
   paymentId: number;
@@ -398,12 +407,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         if (!product.status) {
           throw new OnlineOrderError(`El producto ${product.name} ya no esta disponible`, 409);
         }
-        if (product.inStoreOnly) {
-          throw new OnlineOrderError(
-            "Uno o mas productos estan disponibles unicamente para compra presencial.",
-            409,
-          );
-        }
+        assertProductAllowsOnlinePurchase(product);
 
         const availableStock = calculateAvailableStock(
           product.currentStock,
@@ -612,6 +616,7 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
       if (!product || !product.status) {
         throw new OnlineOrderError("Uno de los productos ya no esta disponible", 409);
       }
+      assertProductAllowsOnlinePurchase(product);
       const availableStock = calculateAvailableStock(
         product.currentStock,
         reservedByProduct.get(product.id) || 0,
@@ -866,13 +871,16 @@ export async function getGuestDeviceOrdersService(guestDeviceId: string) {
   });
 }
 
-export async function retryGuestOnlineOrderPaymentService(accessToken: string) {
-  const orderId = await guestOrderIdFromAccessToken(accessToken);
+async function retryGuestOrderPayment(
+  orderId: number,
+  authorize: (order: Awaited<ReturnType<typeof findOrderForGuestUpdate>>) => boolean,
+  existingAccessToken?: string,
+) {
   await reconcileDueOnlinePaymentsService({ orderId });
 
   const prepared = await db.transaction(async (tx) => {
     const order = await findOrderForGuestUpdate(tx, orderId);
-    if (!order || !order.guestSessionHash) {
+    if (!order || !order.guestSessionHash || !authorize(order)) {
       throw new OnlineOrderError("Pedido no encontrado o enlace invalido", 404);
     }
     await expirePendingOrdersForGuestSession(tx, order.guestSessionHash);
@@ -897,6 +905,7 @@ export async function retryGuestOnlineOrderPaymentService(accessToken: string) {
       if (!product || !product.status) {
         throw new OnlineOrderError("Uno de los productos ya no esta disponible", 409);
       }
+      assertProductAllowsOnlinePurchase(product);
       const availableStock = calculateAvailableStock(
         product.currentStock,
         reservedByProduct.get(product.id) || 0,
@@ -910,15 +919,38 @@ export async function retryGuestOnlineOrderPaymentService(accessToken: string) {
     }
 
     await resetOrderReservation(tx, order.id, reservationExpiration());
+    const guestAccessToken = existingAccessToken
+      || await issueGuestAccessInTransaction(tx, order.id);
     return preparePaymentAttempt(tx, {
       orderId: order.id,
       ownerReference: `guest-${order.guestSessionHash.slice(0, 12)}`,
       total: order.total,
-      guestAccessToken: accessToken,
+      guestAccessToken,
     });
   });
 
   return startWebpayPayment(prepared);
+}
+
+export async function retryGuestOnlineOrderPaymentService(accessToken: string) {
+  const orderId = await guestOrderIdFromAccessToken(accessToken);
+  return retryGuestOrderPayment(orderId, () => true, accessToken);
+}
+
+export async function retryGuestDeviceOnlineOrderPaymentService(
+  guestDeviceId: string,
+  orderId: number,
+) {
+  let guestDeviceHash: string;
+  try {
+    guestDeviceHash = hashGuestDeviceId(guestDeviceId);
+  } catch {
+    throw new OnlineOrderError("El dispositivo invitado no es valido", 400);
+  }
+  return retryGuestOrderPayment(
+    orderId,
+    (order) => order?.guestDeviceHash === guestDeviceHash,
+  );
 }
 
 export async function archiveClientOrderService(clientId: number, orderId: number) {

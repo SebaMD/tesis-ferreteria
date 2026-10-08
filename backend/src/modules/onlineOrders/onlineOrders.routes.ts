@@ -24,6 +24,7 @@ import {
   saveDeliveryAddressController,
   retryPaymentController,
   retryGuestPaymentController,
+  retryGuestDevicePaymentController,
   webpayReturnController,
 } from "./onlineOrders.controller.js";
 
@@ -40,6 +41,7 @@ router.get("/guest/order/receipt", getGuestOrderReceiptController);
 router.get("/guest/device-orders", getGuestDeviceOrdersController);
 router.get("/guest/device-orders/:id/delivery-proof", getGuestDeviceOrderDeliveryProofController);
 router.get("/guest/device-orders/:id/receipt", getGuestDeviceOrderReceiptController);
+router.post("/guest/device-orders/:id/retry-payment", retryGuestDevicePaymentController);
 router.post("/guest/retry-payment", retryGuestPaymentController);
 
 router.use(authenticateJwt);

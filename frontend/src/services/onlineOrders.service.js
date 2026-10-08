@@ -137,6 +137,11 @@ export function getGuestDeviceOrderDeliveryProofRequest(orderId) {
   });
 }
 
+export async function retryGuestDeviceOrderPaymentRequest(orderId) {
+  const response = await api.post(`/online-orders/guest/device-orders/${orderId}/retry-payment`);
+  return response.data.data;
+}
+
 export const createCheckoutRequest = createOnlineOrderCheckoutRequest;
 export const retryPaymentRequest = retryOnlineOrderPaymentRequest;
 export const continuePaymentRequest = continueOnlineOrderPaymentRequest;

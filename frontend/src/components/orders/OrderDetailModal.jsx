@@ -1,12 +1,12 @@
-import { ChevronDown, ExternalLink, MapPin, Store, Truck } from "lucide-react";
+import { ChevronDown, MapPin, Store, Truck } from "lucide-react";
 import { useState } from "react";
 import AppModal from "../AppModal.jsx";
-import { buildDeliveryRouteUrl } from "../../helpers/delivery.js";
 import { formatClp, formatDate } from "../../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
   getOnlineOrderDeliveryType,
   getOnlineOrderStatus,
+  isOnlineOrderPaid,
 } from "../../helpers/onlineOrders.js";
 import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgressTimeline.jsx";
 import OrderProductImage from "./OrderProductImage.jsx";
@@ -88,7 +88,7 @@ function DetailAccordion({ id, title, summary, open, onToggle, children }) {
   );
 }
 
-export default function OrderDetailModal({ order, onClose, requestDeliveryProof }) {
+export default function OrderDetailModal({ order, onClose, requestDeliveryProof, actions }) {
   const [expandedSections, setExpandedSections] = useState({
     orderId: null,
     progress: false,
@@ -101,15 +101,6 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
   const progressOpen = expandedSections.orderId === order.id && expandedSections.progress;
   const productsOpen = expandedSections.orderId === order.id && expandedSections.products;
   const productCount = order.items?.length || 0;
-  const deliveryRouteUrl = order.deliveryType === "DELIVERY"
-    ? buildDeliveryRouteUrl({
-      latitude: order.deliveryLatitude,
-      longitude: order.deliveryLongitude,
-      address: order.deliveryAddress,
-      commune: order.deliveryCommune,
-    })
-    : "";
-
   const toggleSection = (section) => {
     setExpandedSections((current) => {
       const belongsToCurrentOrder = current.orderId === order.id;
@@ -133,7 +124,9 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
   return (
     <AppModal
       open={Boolean(order)}
-      title={`${order.status === "DELIVERED" ? "Detalle de la compra" : "Seguimiento del pedido"} ${formatOnlineOrderFolio(order.id)}`}
+      title={`${order.status === "DELIVERED"
+        ? "Detalle de la compra"
+        : isOnlineOrderPaid(order.status) ? "Seguimiento del pedido" : "Detalle del intento"} ${formatOnlineOrderFolio(order.id)}`}
       description={delivery.label}
       onClose={handleClose}
       size="large"
@@ -164,16 +157,6 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
               ) : <span className="text-xs text-slate-500">Retiro directamente en FERRETERIA FYF.</span>}
             </div>
           </div>
-          {deliveryRouteUrl && (
-            <a
-              className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-[5px] border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:w-full"
-              href={deliveryRouteUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink size={17} /> Abrir en Google Maps
-            </a>
-          )}
         </section>
 
         <DetailAccordion
@@ -208,6 +191,12 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof 
           order={order}
           requestProof={requestDeliveryProof}
         />
+
+        {actions && (
+          <section className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+            {actions}
+          </section>
+        )}
 
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-200 pt-4">
           <div>

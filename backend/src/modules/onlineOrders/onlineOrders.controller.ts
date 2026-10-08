@@ -36,6 +36,7 @@ import {
   issueGuestOrderTrackingAccessService,
   OnlineOrderError,
   retryOnlineOrderPaymentService,
+  retryGuestDeviceOnlineOrderPaymentService,
   retryGuestOnlineOrderPaymentService,
 } from "./onlineOrders.service.js";
 import { renderOrderReceiptPdf } from "./orderReceiptPdf.js";
@@ -289,6 +290,30 @@ export async function retryGuestPaymentController(req: Request, res: Response) {
   }
 }
 
+export async function retryGuestDevicePaymentController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return handleSuccess(
+      res,
+      200,
+      "Nuevo intento Webpay invitado iniciado",
+      await retryGuestDeviceOnlineOrderPaymentService(
+        ensureGuestDeviceCookie(req, res),
+        orderId,
+      ),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo reintentar el pago invitado", message(error));
+  }
+}
+
 export async function retryPaymentController(req: AuthenticatedRequest, res: Response) {
   try {
     const orderId = parseId(req.params.id);
@@ -500,7 +525,7 @@ export async function webpayReturnController(req: Request, res: Response) {
         token: tbkToken,
         buyOrder,
         sessionId,
-        outcome: !tbkToken ? "expired" : tokenWs ? "failed" : "cancelled",
+        outcome: req.method === "GET" ? "expired" : tokenWs ? "failed" : "cancelled",
       });
       return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
     }

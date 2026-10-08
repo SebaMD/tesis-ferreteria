@@ -7,6 +7,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import AppModal from "../components/AppModal.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
+import { groupBuyerOrders } from "../helpers/buyerOrderGroups.js";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import { dangerButtonClass } from "../helpers/uiClasses.js";
 import {
@@ -18,12 +19,6 @@ import {
   restoreArchivedOnlineOrderRequest,
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
-
-const ACTIVE_STATUSES = new Set([
-  "PENDING_PAYMENT", "PAYMENT_REVIEW", "PAID", "PREPARING",
-  "READY_FOR_PICKUP", "READY_FOR_DELIVERY", "OUT_FOR_DELIVERY",
-]);
-const INCOMPLETE_STATUSES = new Set(["PAYMENT_FAILED", "CANCELLED", "EXPIRED"]);
 
 function OrdersSection({ title, description, orders, renderOrder, emptyText }) {
   return (
@@ -89,11 +84,7 @@ export default function ClientOrdersPage() {
     document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [loading, location.hash, orders]);
 
-  const grouped = useMemo(() => ({
-    active: orders.filter((order) => ACTIVE_STATUSES.has(order.status)),
-    delivered: orders.filter((order) => order.status === "DELIVERED"),
-    incomplete: orders.filter((order) => INCOMPLETE_STATUSES.has(order.status)),
-  }), [orders]);
+  const grouped = useMemo(() => groupBuyerOrders(orders), [orders]);
 
   const handlePaymentAction = async (order, action) => {
     const canRun = action === "continue" ? order.canContinuePayment : order.canRetryPayment;
@@ -231,7 +222,10 @@ export default function ClientOrdersPage() {
         </section>
       ) : !loading && (
         <>
-          <OrdersSection title="Pedidos en curso" description="Pagos pendientes y pedidos que todavía están en preparación o entrega." orders={grouped.active} renderOrder={renderOrder()} emptyText="No tienes pedidos en curso." />
+          {grouped.payments.length > 0 && (
+            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" />
+          )}
+          <OrdersSection title="Pedidos en curso" description="Compras pagadas que todavía están en preparación, retiro o entrega." orders={grouped.active} renderOrder={renderOrder()} emptyText="No tienes pedidos en curso." />
           <OrdersSection title="Historial" description="Compras que ya fueron entregadas o retiradas." orders={grouped.delivered} renderOrder={renderOrder()} emptyText="Todavía no tienes compras entregadas." />
           {grouped.incomplete.length > 0 && (
             <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados que se conservan por trazabilidad." orders={grouped.incomplete} renderOrder={renderOrder(true)} emptyText="" />
@@ -242,6 +236,7 @@ export default function ClientOrdersPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         requestDeliveryProof={({ id }) => getMyOnlineOrderDeliveryProofRequest(id)}
+        actions={selectedOrder ? actionsFor(selectedOrder) : null}
       />
       <AppModal
         open={Boolean(archiveCandidate)}

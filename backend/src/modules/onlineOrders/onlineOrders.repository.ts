@@ -469,6 +469,7 @@ export async function findOrderForGuestUpdate(
       id: onlineOrdersTable.id,
       clientId: onlineOrdersTable.clientId,
       guestSessionHash: onlineOrdersTable.guestSessionHash,
+      guestDeviceHash: onlineOrdersTable.guestDeviceHash,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,

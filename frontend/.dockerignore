@@ -12,8 +12,8 @@ build/
 
 # Variables de entorno locales (¡NUNCA incluir en la imagen!)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Archivos del editor e IDE
 .vscode/

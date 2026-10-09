@@ -1,16 +1,19 @@
-# React + Vite
+# Frontend de Ferretería FYF
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interfaz React con Vite y Tailwind CSS. La instalación y configuración general se describen en el [README principal](../README.md).
 
-Currently, two official plugins are available:
+Desde este directorio:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```sh
+npm ci
+npm run dev
+```
 
-## React Compiler
+El proxy de desarrollo envía `/api` y `/uploads` a `http://localhost:3000`. `VITE_API_URL` permite utilizar un backend en otro origen; consultar [.env.example](.env.example). Esta variable es pública y se incorpora al compilar, no al iniciar Nginx.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```sh
+npm run lint
+npm run build
+```
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+El Dockerfile incluye las etapas `development`, `build` y `production`; Compose utiliza la última, que sirve los archivos mediante Nginx y conserva la navegación de la SPA.

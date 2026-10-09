@@ -26,6 +26,7 @@ La aplicación integra la gestión de productos e inventario, ventas presenciale
 ### Infraestructura
 - Docker
 - Docker Compose
+- Ejecución directa del backend mediante PM2.
 
 ## Funcionalidades principales
 
@@ -119,13 +120,20 @@ Los pedidos realizados como invitado se mantienen asociados de forma segura al d
 
 ## Ejecutar con Docker Compose
 
-Para iniciar los servicios:
+Requisitos: Docker con Compose y su motor iniciado. Desde la raíz, copiar `.env.example` a `.env` **solo si este último no existe** y reemplazar los placeholders por valores propios. No sobrescribir una configuración existente.
+
+Para validar la configuración e iniciar los servicios:
 
 ```bash
+docker compose config --quiet
 docker compose up --build
 ```
 
-Docker ejecuta las migraciones antes de iniciar el backend.
+El frontend queda disponible en `http://localhost:5173`, el backend en `http://localhost:3000` y PostgreSQL en el puerto local `5433`, salvo cambios en `.env`. Nginx envía `/api` y `/uploads` al backend, por lo que el navegador utiliza el mismo origen.
+
+Orden de inicio: PostgreSQL saludable → migraciones → etapa de seed opcional → backend saludable → frontend. Las migraciones se ejecutan con Drizzle Kit; el seed se omite por defecto.
+
+`PORT` modifica únicamente el puerto publicado del backend. Dentro de Docker, PostgreSQL utiliza `db:5432` y el backend `backend:3000`; no se debe usar `localhost` para comunicar estos contenedores. Si cambia el puerto público, ajustar también `WEBPAY_RETURN_URL`.
 
 Los datos de demostración no se cargan automáticamente. Para habilitarlos de forma intencional en una base nueva o descartable:
 
@@ -138,17 +146,19 @@ En PowerShell:
 ```powershell
 $env:SEED_DEMO_DATA="true"
 docker compose up --build
+Remove-Item Env:SEED_DEMO_DATA
 ```
+
+El seed crea cuentas, catálogo, inventario y ventas de demostración, con solicitudes pendientes/rechazadas, devoluciones parciales/completas aprobadas y una devolución revertida. Al repetirlo conserva las ventas ya creadas sin duplicarlas; no convierte datos antiguos de otro seed. No utilizarlo para inicializar una operación real ni ejecutarlo sobre una base productiva. El arranque normal no crea usuarios demo.
 
 ## Ejecutar localmente
 
-Con PostgreSQL iniciado y las variables de `backend/.env` configuradas:
+Requisitos: Node.js 22.12 o superior de la serie 22 y PostgreSQL. Copiar `backend/.env.example` a `backend/.env` únicamente si no existe, configurar la conexión y los secretos, e iniciar PostgreSQL. Ejecutar desde el directorio indicado para que Drizzle cargue ese `.env`.
 
 ```bash
 cd backend
-npm install
+npm ci
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
@@ -156,46 +166,24 @@ En otra terminal:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-El `seed` se utiliza únicamente para pruebas y demostraciones locales.
-
-No debe ejecutarse sobre una base de datos productiva que contenga información real.
+Para datos de demostración, `npm run db:seed` es una acción manual separada y solo debe ejecutarse contra una base nueva o descartable. No forma parte del inicio normal.
 
 ## Variables de entorno
 
-Ejemplo básico:
+Las listas y comentarios completos están en [.env.example](.env.example) para Compose, [backend/.env.example](backend/.env.example) para ejecución directa y [frontend/.env.example](frontend/.env.example) para Vite. El `.env` raíz configura Compose; no sustituye al `backend/.env` local.
 
-```sh
-# PostgreSQL
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=una_clave_segura
-POSTGRES_DB=ferreteria
+- `DATABASE_URL` tiene prioridad en el backend y es obligatoria para Drizzle Kit. Solo el backend admite la alternativa `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD` y `DATABASE`. Compose utiliza esta alternativa para el backend y construye `DATABASE_URL` para migraciones y seed.
+- Codificar caracteres reservados al escribir credenciales en una URL PostgreSQL. Como Compose construye la URL directamente, sus credenciales deben ser compatibles con una URI; una contraseña aleatoria hexadecimal evita este problema.
+- Configurar un `JWT_SECRET` propio y secretos independientes para correo y QR. `EMAIL_VERIFICATION_SECRET` y `LOGISTICS_QR_SECRET` requieren al menos 32 caracteres; el segundo es necesario para QR y etiquetas de preparación de despachos. Nunca exponerlos mediante variables `VITE_*`.
+- Webpay utiliza las credenciales oficiales del SDK en `integration`. En `production` exige código de comercio, API key y URLs públicas HTTPS de retorno/backend y frontend. No usar credenciales productivas para pruebas.
+- Sin `MAIL_ENABLED=true` y SMTP válido no se pueden enviar códigos o enlaces de verificación, recuperación y reactivación, incluida la verificación de invitados. Los correos informativos de compras y logística se omiten sin cancelar operaciones realizadas. Configurar `SMTP_HOST`, `MAIL_FROM` y, cuando el proveedor lo requiera, `SMTP_USER` y `SMTP_PASS` juntos. Compose no incluye Mailpit.
+- `VITE_API_URL` es la única variable del frontend y es pública: `/api` para el proxy local o mismo origen; URL absoluta terminada en `/api` si el backend usa otro origen. Cambiarla requiere un nuevo build, también en Docker.
 
-# Backend
-DB_HOST=db
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=una_clave_segura
-DATABASE=ferreteria
-PORT=3000
-
-JWT_SECRET=una_clave_jwt_segura
-COOKIE_KEY=una_clave_cookie_segura
-EMAIL_VERIFICATION_SECRET=otro_secreto_largo_e_independiente
-LOGISTICS_QR_SECRET=otro_secreto_largo_e_independiente
-
-# Frontend
-VITE_API_URL=/api
-```
-
-Las variables adicionales relacionadas con correo electrónico, Webpay y otros servicios deben configurarse de acuerdo con los archivos `.env.example` del proyecto.
-
-Las claves y secretos reales no deben almacenarse en el repositorio.
-
-## Imágenes persistentes en despliegue
+## Archivos persistentes en despliegue
 
 Las rutas almacenadas en la base de datos son relativas, por ejemplo:
 
@@ -203,7 +191,7 @@ Las rutas almacenadas en la base de datos son relativas, por ejemplo:
 products/17/imagen.webp
 ```
 
-El backend publica estos archivos mediante:
+El backend publica imágenes de productos mediante:
 
 ```text
 /uploads/products/...
@@ -223,7 +211,11 @@ En ejecuciones directas mediante PM2 se recomienda configurar `UPLOADS_ROOT` con
 UPLOADS_ROOT=/ruta/absoluta/tesis-ferreteria/backend/uploads
 ```
 
-Docker Compose mantiene `/app/uploads` mediante el volumen persistente configurado para las imágenes.
+El mismo directorio contiene imágenes de presentación/avisos (`customer-notices`) y evidencias de entrega (`deliveries`). Estas últimas son privadas y se entregan mediante endpoints autorizados, no mediante un directorio estático público.
+
+Docker Compose fija `UPLOADS_ROOT=/app/uploads` y conserva todos estos archivos en el volumen `product_uploads`. El nombre es histórico, pero sigue siendo válido y no se renombra para evitar perder acceso a datos existentes. PostgreSQL persiste en `postgres_data`. Recrear contenedores conserva los volúmenes; `docker compose down -v` los elimina. Respaldar tanto la base como los archivos.
+
+Nginx acepta solicitudes de hasta 6 MiB para permitir imágenes de 5 MiB y el envoltorio multipart; los formatos y el límite por archivo siguen siendo responsabilidad del backend.
 
 ## Migraciones
 
@@ -236,11 +228,25 @@ npm run db:migrate
 
 Las migraciones deben ejecutarse antes de iniciar una versión del backend que dependa de nuevos cambios de base de datos.
 
+Este comando aplica los archivos existentes de `backend/drizzle`; no genera nuevas migraciones ni ejecuta seed. No sustituirlo por `db:push` en una base productiva.
+
+## Ejecución directa y seguridad en producción
+
+Para desplegar el backend mediante PM2, ejecutar `npm ci`, `npm run build` y las migraciones desde `backend`, y luego administrar `dist/server.js` con PM2 usando ese directorio como `cwd`. Configurar `backend/.env` y `UPLOADS_ROOT` persistente antes de iniciar. El repositorio no incluye un archivo de configuración PM2.
+
+En producción, usar `NODE_ENV=production`, HTTPS, SMTP real y Webpay configurado para el ambiente correspondiente. La cookie de dispositivo Invitado es `Secure` en este modo. Los ejemplos usan `development` para la prueba HTTP local; no trasladar esa configuración sin ajustes a un despliegue real.
+
+Se recomienda servir frontend y backend mediante un mismo origen HTTPS. Distintos puertos del mismo host pueden funcionar con la URL absoluta y cookies; dominios distintos están sujetos a las restricciones `SameSite` del navegador y no se garantizan con solo cambiar `VITE_API_URL`. El frontend compilado necesita un servidor estático con fallback de SPA y un proxy configurado según el despliegue.
+
+Los ejemplos contienen únicamente placeholders, no credenciales utilizables en producción. No versionar `.env`, secretos ni evidencias. Las imágenes Docker excluyen `.env` y sus variantes, además de uploads locales. No ejecutar seed en producción. Restringir la exposición de PostgreSQL y del puerto backend mediante red/firewall; Compose publica esos puertos para uso local y no configura TLS ni una política CORS restrictiva.
+
 ## Consideraciones del proyecto
 
 El sistema desarrollado corresponde al alcance funcional actual del proyecto de título.
 
-El módulo de predicción de stock contemplado originalmente en la propuesta no forma parte de la versión actual del software.
+El módulo de predicción de stock contemplado originalmente en la propuesta no
+fue implementado en la versión actual del software y se considera como una
+mejora futura del proyecto.
 
 Entre las mejoras futuras consideradas se encuentran:
 
@@ -252,4 +258,6 @@ Entre las mejoras futuras consideradas se encuentran:
 
 ## Estado del proyecto
 
-El sistema se encuentra en etapa de finalización y validación para el proyecto de título de Ingeniería de Ejecución en Computación e Informática de la Universidad del Bío-Bío.
+El sistema se encuentra en etapa de finalización y validación para el proyecto
+de título de Ingeniería de Ejecución en Computación e Informática de la
+Universidad del Bío-Bío.

@@ -2,12 +2,18 @@ import bcrypt from "bcrypt";
 import { eq, inArray } from "drizzle-orm";
 import { createInitialUsers } from "../config/initDb.js";
 import { applyInventoryMovement } from "../modules/inventory/inventory.service.js";
+import {
+  decreaseReturnedQuantity,
+  increaseReturnedQuantity,
+} from "../modules/sales/sales.repository.js";
 import { db, type DbTransaction } from "./index.js";
 import {
   categoriesTable,
   productsTable,
   rolesTable,
   saleDetailsTable,
+  saleCancellationRequestItemsTable,
+  saleCancellationRequestsTable,
   salesTable,
   usersTable,
 } from "./schema/index.js";
@@ -483,6 +489,109 @@ async function seedCatalog(
   };
 }
 
+type DemoReturnScenario = "PENDING" | "REJECTED" | "PARTIAL" | "FULL" | "REVERSED";
+
+async function seedReturn(
+  tx: DbTransaction,
+  saleId: number,
+  cashierId: number,
+  adminUserId: number,
+  saleDate: Date,
+  details: Array<{ productId: number; quantity: number }>,
+  scenario: DemoReturnScenario,
+) {
+  const requestedAt = new Date(saleDate.getTime() + 45 * 60 * 1000);
+  const reviewedAt = new Date(requestedAt.getTime() + 15 * 60 * 1000);
+  const reversedAt = new Date(reviewedAt.getTime() + 15 * 60 * 1000);
+  const requestedDetails = scenario === "FULL"
+    ? details
+    : [{ productId: details[0].productId, quantity: 1 }];
+  const [request] = await tx.insert(saleCancellationRequestsTable).values({
+    saleId,
+    requestedBy: cashierId,
+    reason: "Devolución de demostración: producto no requerido por el comprador",
+    requestedAt,
+    createdAt: requestedAt,
+    updatedAt: requestedAt,
+  }).returning({ id: saleCancellationRequestsTable.id });
+
+  await tx.insert(saleCancellationRequestItemsTable).values(requestedDetails.map((detail) => ({
+    requestId: request.id,
+    productId: detail.productId,
+    requestedQuantity: detail.quantity,
+  })));
+
+  // Una solicitud pendiente o rechazada no modifica stock ni cantidades devueltas.
+  if (scenario === "PENDING") return 0;
+  if (scenario === "REJECTED") {
+    await tx.update(saleCancellationRequestsTable).set({
+      status: "REJECTED",
+      reviewedBy: adminUserId,
+      adminResponse: "Solicitud demo rechazada: no cumple las condiciones de devolución",
+      reviewedAt,
+      updatedAt: reviewedAt,
+    }).where(eq(saleCancellationRequestsTable.id, request.id));
+    return 0;
+  }
+
+  let createdMovements = 0;
+  for (const detail of [...requestedDetails].sort((left, right) => left.productId - right.productId)) {
+    await applyInventoryMovement(tx, {
+      productId: detail.productId,
+      userId: adminUserId,
+      movementType: "ENTRY",
+      quantity: detail.quantity,
+      reason: `Devolución aprobada de venta #${saleId} · solicitud #${request.id}`,
+      date: reviewedAt,
+      allowInactive: true,
+    });
+    if (!await increaseReturnedQuantity(tx, { saleId, ...detail })) {
+      throw new Error("No se pudieron registrar las cantidades devueltas de demostración");
+    }
+    createdMovements += 1;
+  }
+
+  await tx.update(saleCancellationRequestsTable).set({
+    status: "APPROVED",
+    reviewedBy: adminUserId,
+    adminResponse: "Devolución de demostración aprobada",
+    reviewedAt,
+    updatedAt: reviewedAt,
+  }).where(eq(saleCancellationRequestsTable.id, request.id));
+  await tx.update(salesTable).set({
+    status: scenario === "FULL" ? "CANCELLED" : "PARTIALLY_RETURNED",
+    updatedAt: reviewedAt,
+  }).where(eq(salesTable.id, saleId));
+
+  if (scenario === "REVERSED") {
+    for (const detail of requestedDetails) {
+      await applyInventoryMovement(tx, {
+        productId: detail.productId,
+        userId: adminUserId,
+        movementType: "EXIT",
+        quantity: detail.quantity,
+        reason: `Reversión de devolución de venta #${saleId} · solicitud #${request.id}`,
+        date: reversedAt,
+        allowInactive: true,
+      });
+      if (!await decreaseReturnedQuantity(tx, { saleId, ...detail })) {
+        throw new Error("No se pudieron revertir las cantidades devueltas de demostración");
+      }
+      createdMovements += 1;
+    }
+    await tx.update(saleCancellationRequestsTable).set({
+      status: "REVERSED",
+      reversedBy: adminUserId,
+      reversedAt,
+      updatedAt: reversedAt,
+    }).where(eq(saleCancellationRequestsTable.id, request.id));
+    await tx.update(salesTable).set({ status: "ACTIVE", updatedAt: reversedAt })
+      .where(eq(salesTable.id, saleId));
+  }
+
+  return createdMovements;
+}
+
 async function seedSales(
   tx: DbTransaction,
   products: SeededProduct[],
@@ -503,12 +612,12 @@ async function seedSales(
   const paymentMethods = ["efectivo", "debito", "credito", "transferencia"];
   const saleHours = [12, 16, 20];
   let createdSales = 0;
-  let cancelledSales = 0;
-  let reactivatedSales = 0;
+  const returnScenarios = { PENDING: 0, REJECTED: 0, PARTIAL: 0, FULL: 0, REVERSED: 0 };
   let createdMovements = 0;
 
   for (let saleIndex = 0; saleIndex < 36; saleIndex += 1) {
-    const daysAgo = Math.floor(saleIndex / 3);
+    // Todas las ventas y revisiones demo deben quedar en el pasado.
+    const daysAgo = 1 + Math.floor(saleIndex / 3);
     const slot = saleIndex % 3;
     const saleDate = demoDate(daysAgo, saleHours[slot], 10 + ((saleIndex * 7) % 40));
     const cashierId = slot === 0 ? morningCashierId : afternoonCashierId;
@@ -572,50 +681,14 @@ async function seedSales(
       createdMovements += 1;
     }
 
-    const shouldCancel = saleIndex % 11 === 7;
-    const shouldReactivate = saleIndex === 12;
-    if (shouldCancel || shouldReactivate) {
-      const cancellationDate = new Date(saleDate.getTime() + 45 * 60 * 1000);
-
-      for (const detail of details) {
-        await applyInventoryMovement(tx, {
-          productId: detail.productId,
-          userId: adminUserId,
-          movementType: "ENTRY",
-          quantity: detail.quantity,
-          reason: `Cancelacion de venta #${sale.id}`,
-          date: cancellationDate,
-        });
-        createdMovements += 1;
-      }
-
-      if (shouldReactivate) {
-        const reactivationDate = new Date(cancellationDate.getTime() + 15 * 60 * 1000);
-
-        for (const detail of details) {
-          await applyInventoryMovement(tx, {
-            productId: detail.productId,
-            userId: adminUserId,
-            movementType: "EXIT",
-            quantity: detail.quantity,
-            reason: `Deshacer cancelacion de venta V-${String(sale.id).padStart(6, "0")}`,
-            date: reactivationDate,
-          });
-          createdMovements += 1;
-        }
-
-        await tx
-          .update(salesTable)
-          .set({ status: "ACTIVE", updatedAt: reactivationDate })
-          .where(eq(salesTable.id, sale.id));
-        reactivatedSales += 1;
-      } else {
-        await tx
-          .update(salesTable)
-          .set({ status: "CANCELLED", updatedAt: cancellationDate })
-          .where(eq(salesTable.id, sale.id));
-        cancelledSales += 1;
-      }
+    const scenario: DemoReturnScenario | null = saleIndex === 4 ? "PENDING"
+      : saleIndex === 10 ? "REJECTED"
+        : saleIndex === 12 ? "REVERSED"
+          : saleIndex % 11 === 3 ? "PARTIAL"
+            : saleIndex % 11 === 7 ? "FULL" : null;
+    if (scenario) {
+      createdMovements += await seedReturn(tx, sale.id, cashierId, adminUserId, saleDate, details, scenario);
+      returnScenarios[scenario] += 1;
     }
 
     createdSales += 1;
@@ -623,8 +696,7 @@ async function seedSales(
 
   return {
     createdSales,
-    cancelledSales,
-    reactivatedSales,
+    returnScenarios,
     salesInventoryMovements: createdMovements,
   };
 }
@@ -645,7 +717,11 @@ async function seedDemoData() {
     const salesAlreadySeeded = await hasSeededSales(tx, afternoonCashierId);
     const catalogResult = await seedCatalog(tx, adminUserId, !salesAlreadySeeded);
     const salesResult = salesAlreadySeeded
-      ? { createdSales: 0, cancelledSales: 0, reactivatedSales: 0, salesInventoryMovements: 0 }
+      ? {
+        createdSales: 0,
+        returnScenarios: { PENDING: 0, REJECTED: 0, PARTIAL: 0, FULL: 0, REVERSED: 0 },
+        salesInventoryMovements: 0,
+      }
       : await seedSales(tx, catalogResult.products, adminUserId, morningCashierId, afternoonCashierId);
 
     return {
@@ -665,8 +741,11 @@ try {
   console.log(`- Productos creados: ${result.createdProducts}`);
   console.log(`- Productos existentes reutilizados: ${result.existingProductsCount}`);
   console.log(`- Ventas creadas: ${result.createdSales}`);
-  console.log(`- Ventas canceladas: ${result.cancelledSales}`);
-  console.log(`- Ventas reactivadas: ${result.reactivatedSales}`);
+  console.log(`- Solicitudes pendientes: ${result.returnScenarios.PENDING}`);
+  console.log(`- Solicitudes rechazadas: ${result.returnScenarios.REJECTED}`);
+  console.log(`- Devoluciones parciales aprobadas: ${result.returnScenarios.PARTIAL}`);
+  console.log(`- Devoluciones completas aprobadas: ${result.returnScenarios.FULL}`);
+  console.log(`- Devoluciones revertidas: ${result.returnScenarios.REVERSED}`);
   console.log(`- Movimientos creados: ${result.createdInventoryMovements + result.salesInventoryMovements}`);
   if (result.salesAlreadySeeded) {
     console.log("- Las ventas de demostracion ya existian y no fueron duplicadas");

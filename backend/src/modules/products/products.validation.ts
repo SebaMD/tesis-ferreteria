@@ -2,7 +2,7 @@ import type { NewProduct } from "../../db/schema/index.js";
 
 export type ProductBody = Pick<
   NewProduct,
-  "categoryId" | "name" | "description" | "price" | "unitMeasure" | "minimumStock" | "status"
+  "categoryId" | "name" | "brand" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "inStoreOnly" | "status"
 >;
 export type EditProductBody = Partial<ProductBody>;
 
@@ -26,12 +26,25 @@ function money(value: unknown): { success: true; value: string } | { success: fa
   return { success: true, value: number.toFixed(2) };
 }
 
+export function validateBarcode(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") {
+    return { success: false, error: "El codigo de barra debe ser texto" };
+  }
+
+  const barcode = value.trim();
+  if (!/^\d{1,64}$/.test(barcode)) {
+    return { success: false, error: "El codigo de barra debe contener entre 1 y 64 digitos" };
+  }
+
+  return { success: true, value: barcode };
+}
+
 function validateBase(body: unknown, partial: boolean): ValidationResult<EditProductBody> {
   if (!body || typeof body !== "object" || Array.isArray(body)) return { success: false, error: "Debe enviar datos validos" };
 
   const input = body as Record<string, unknown>;
   const value: EditProductBody = {};
-  const allowed = ["categoryId", "name", "description", "price", "unitMeasure", "minimumStock", "status"];
+  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "inStoreOnly", "status"];
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };
@@ -48,6 +61,25 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
     const name = text(input.name);
     if (name.length < 2 || name.length > 150) return { success: false, error: "El nombre debe tener entre 2 y 150 caracteres" };
     value.name = name;
+  }
+
+  if (input.brand !== undefined) {
+    if (input.brand !== null && typeof input.brand !== "string") {
+      return { success: false, error: "La marca debe ser texto" };
+    }
+    const brand = input.brand === null ? "" : text(input.brand as string);
+    if (brand.length > 100) return { success: false, error: "La marca admite hasta 100 caracteres" };
+    value.brand = brand || null;
+  }
+
+  if (input.barcode !== undefined) {
+    if (input.barcode === null || (typeof input.barcode === "string" && input.barcode.trim() === "")) {
+      value.barcode = null;
+    } else {
+      const parsed = validateBarcode(input.barcode);
+      if (!parsed.success) return { success: false, error: parsed.error };
+      value.barcode = parsed.value;
+    }
   }
 
   if (input.description !== undefined) {
@@ -75,6 +107,11 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
     const parsed = positiveInt(input.minimumStock, "El stock minimo", true);
     if (!parsed.success) return { success: false, error: parsed.error };
     value.minimumStock = parsed.value;
+  }
+
+  if (input.inStoreOnly !== undefined) {
+    if (typeof input.inStoreOnly !== "boolean") return { success: false, error: "Solo presencial debe ser booleano" };
+    value.inStoreOnly = input.inStoreOnly;
   }
 
   if (input.status !== undefined) {

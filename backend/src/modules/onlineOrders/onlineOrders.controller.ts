@@ -1,0 +1,551 @@
+import type { Request, Response } from "express";
+import { FRONTEND_URL } from "../../config/configEnv.js";
+import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
+import {
+  handleErrorClient,
+  handleErrorServer,
+  handleSuccess,
+  logServerError,
+} from "../../utils/helpers.js";
+import { ImageFileError } from "../../utils/imageFiles.js";
+import { WebpayConfigurationError } from "../payments/webpay.service.js";
+import {
+  archiveClientOrderService,
+  restoreArchivedClientOrderService,
+  cancelWebpayPaymentService,
+  confirmWebpayPaymentService,
+  continueOnlineOrderPaymentService,
+  continueGuestOnlineOrderPaymentService,
+  createCheckoutService,
+  createGuestCheckoutService,
+  deleteClientDeliveryAddressService,
+  findOrderIdByPaymentReturnService,
+  getClientOrderByIdService,
+  getClientOrderDeliveryProofService,
+  getClientDeliveryAddressService,
+  saveClientDeliveryAddressService,
+  getClientOrderReceiptService,
+  getClientOrdersService,
+  getGuestDeviceOrderReceiptService,
+  getGuestDeviceOrderDeliveryProofService,
+  getGuestOrderByAccessTokenService,
+  getGuestDeviceOrdersService,
+  getGuestOrderReceiptByAccessTokenService,
+  getGuestOrderDeliveryProofByAccessTokenService,
+  getGuestPendingOrderService,
+  issueGuestOrderTrackingAccessService,
+  OnlineOrderError,
+  retryOnlineOrderPaymentService,
+  retryGuestDeviceOnlineOrderPaymentService,
+  retryGuestOnlineOrderPaymentService,
+} from "./onlineOrders.service.js";
+import { renderOrderReceiptPdf } from "./orderReceiptPdf.js";
+import type { OrderCommercialModel } from "./orderCommercialModel.js";
+import {
+  validateCreateCheckoutBody,
+  validateCreateGuestCheckoutBody,
+  validateClientDeliveryAddressBody,
+} from "./onlineOrders.validation.js";
+import { ensureGuestDeviceCookie } from "./guestDeviceCookie.js";
+
+function parseId(value: unknown) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : "Error desconocido";
+}
+
+function requireClient(req: AuthenticatedRequest) {
+  if (!req.user) throw new OnlineOrderError("Token invalido o expirado", 401);
+  return req.user.id;
+}
+
+export async function createCheckoutController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const validation = validateCreateCheckoutBody(req.body);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+
+    const payment = await createCheckoutService(requireClient(req), validation.value);
+    return handleSuccess(res, 201, "Pedido reservado y pago Webpay iniciado", payment);
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo iniciar el checkout", message(error));
+  }
+}
+
+function requiredHeader(req: Request, name: string) {
+  const value = req.get(name);
+  if (!value?.trim()) throw new OnlineOrderError("La sesion o acceso de invitado no fue enviado", 400);
+  return value.trim();
+}
+
+export async function createGuestCheckoutController(req: Request, res: Response) {
+  try {
+    const validation = validateCreateGuestCheckoutBody(req.body);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+    }
+    const payment = await createGuestCheckoutService(
+      requiredHeader(req, "x-guest-session"),
+      ensureGuestDeviceCookie(req, res),
+      validation.value,
+    );
+    return handleSuccess(res, 201, "Pedido invitado reservado y pago Webpay iniciado", payment);
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo iniciar el checkout invitado", message(error));
+  }
+}
+
+export async function getGuestPendingOrderController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Pago pendiente de invitado consultado",
+      await getGuestPendingOrderService(requiredHeader(req, "x-guest-session")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo consultar el pago pendiente", message(error));
+  }
+}
+
+export async function continueGuestPaymentController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Sesion Webpay invitada recuperada",
+      await continueGuestOnlineOrderPaymentService(requiredHeader(req, "x-guest-session")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo continuar el pago invitado", message(error));
+  }
+}
+
+export async function getGuestOrderController(req: Request, res: Response) {
+  try {
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(
+      res,
+      200,
+      "Pedido invitado obtenido exitosamente",
+      await getGuestOrderByAccessTokenService(
+        requiredHeader(req, "x-guest-order-token"),
+        ensureGuestDeviceCookie(req, res),
+      ),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo obtener el pedido invitado", message(error));
+  }
+}
+
+export async function getGuestDeviceOrdersController(req: Request, res: Response) {
+  try {
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(
+      res,
+      200,
+      "Compras del dispositivo obtenidas exitosamente",
+      await getGuestDeviceOrdersService(ensureGuestDeviceCookie(req, res)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudieron obtener las compras del dispositivo", message(error));
+  }
+}
+
+function sendDeliveryProof(res: Response, proof: { absolutePath: string; mimeType: string }) {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.type(proof.mimeType);
+  return res.sendFile(proof.absolutePath);
+}
+
+function handleDeliveryProofError(res: Response, error: unknown) {
+  if (error instanceof OnlineOrderError || error instanceof ImageFileError) {
+    return handleErrorClient(res, error.statusCode, error.message);
+  }
+  return handleErrorServer(res, 500, "No se pudo obtener la evidencia de entrega", message(error));
+}
+
+export async function getGuestOrderDeliveryProofController(req: Request, res: Response) {
+  try {
+    return sendDeliveryProof(
+      res,
+      await getGuestOrderDeliveryProofByAccessTokenService(
+        requiredHeader(req, "x-guest-order-token"),
+      ),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
+  }
+}
+
+export async function getGuestDeviceOrderDeliveryProofController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return sendDeliveryProof(
+      res,
+      await getGuestDeviceOrderDeliveryProofService(
+        ensureGuestDeviceCookie(req, res),
+        orderId,
+      ),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
+  }
+}
+
+async function sendOrderReceipt(res: Response, model: OrderCommercialModel) {
+  const pdf = await renderOrderReceiptPdf(model);
+  res.status(200);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="comprobante-${model.folio}.pdf"`,
+  );
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Length", String(pdf.length));
+  return res.send(pdf);
+}
+
+function handleReceiptError(res: Response, error: unknown) {
+  if (error instanceof OnlineOrderError) {
+    return handleErrorClient(res, error.statusCode, error.message);
+  }
+  return handleErrorServer(res, 500, "No se pudo generar el comprobante", message(error));
+}
+
+export async function getGuestOrderReceiptController(req: Request, res: Response) {
+  try {
+    const model = await getGuestOrderReceiptByAccessTokenService(
+      requiredHeader(req, "x-guest-order-token"),
+    );
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
+  }
+}
+
+export async function getGuestDeviceOrderReceiptController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    const model = await getGuestDeviceOrderReceiptService(
+      ensureGuestDeviceCookie(req, res),
+      orderId,
+    );
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
+  }
+}
+
+export async function retryGuestPaymentController(req: Request, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Nuevo intento Webpay invitado iniciado",
+      await retryGuestOnlineOrderPaymentService(requiredHeader(req, "x-guest-order-token")),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo reintentar el pago invitado", message(error));
+  }
+}
+
+export async function retryGuestDevicePaymentController(req: Request, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return handleSuccess(
+      res,
+      200,
+      "Nuevo intento Webpay invitado iniciado",
+      await retryGuestDeviceOnlineOrderPaymentService(
+        ensureGuestDeviceCookie(req, res),
+        orderId,
+      ),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo reintentar el pago invitado", message(error));
+  }
+}
+
+export async function retryPaymentController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+
+    const payment = await retryOnlineOrderPaymentService(requireClient(req), orderId);
+    return handleSuccess(res, 200, "Nuevo intento Webpay iniciado", payment);
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    if (error instanceof WebpayConfigurationError) {
+      return handleErrorServer(res, 503, "Configuracion de Webpay no disponible", error);
+    }
+    return handleErrorServer(res, 500, "No se pudo reintentar el pago", message(error));
+  }
+}
+
+export async function continuePaymentController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+
+    const payment = await continueOnlineOrderPaymentService(requireClient(req), orderId);
+    return handleSuccess(res, 200, "Sesion Webpay recuperada", payment);
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo continuar el pago", message(error));
+  }
+}
+
+export async function archiveOrderController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+
+    return handleSuccess(
+      res,
+      200,
+      "Pedido ocultado del historial",
+      await archiveClientOrderService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo ocultar el pedido", message(error));
+  }
+}
+
+export async function restoreArchivedOrderController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+
+    return handleSuccess(
+      res,
+      200,
+      "Intento restaurado en Mis pedidos",
+      await restoreArchivedClientOrderService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo restaurar el intento", message(error));
+  }
+}
+
+export async function getMyOrdersController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Pedidos obtenidos exitosamente",
+      await getClientOrdersService(requireClient(req)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudieron obtener los pedidos", message(error));
+  }
+}
+
+export async function getDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho obtenida exitosamente",
+      await getClientDeliveryAddressService(requireClient(req)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo obtener la direccion de despacho", message(error));
+  }
+}
+
+export async function saveDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientDeliveryAddressBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho guardada exitosamente",
+      await saveClientDeliveryAddressService(requireClient(req), validation.value),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) return handleErrorClient(res, error.statusCode, error.message);
+    return handleErrorServer(res, 500, "No se pudo guardar la direccion", message(error));
+  }
+}
+
+export async function deleteDeliveryAddressController(req: AuthenticatedRequest, res: Response) {
+  try {
+    return handleSuccess(
+      res,
+      200,
+      "Direccion de despacho eliminada exitosamente",
+      await deleteClientDeliveryAddressService(requireClient(req)),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) return handleErrorClient(res, error.statusCode, error.message);
+    return handleErrorServer(res, 500, "No se pudo eliminar la direccion", message(error));
+  }
+}
+
+export async function getMyOrderByIdController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return handleSuccess(
+      res,
+      200,
+      "Pedido obtenido exitosamente",
+      await getClientOrderByIdService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    if (error instanceof OnlineOrderError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo obtener el pedido", message(error));
+  }
+}
+
+export async function getMyOrderReceiptController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    const model = await getClientOrderReceiptService(requireClient(req), orderId);
+    return await sendOrderReceipt(res, model);
+  } catch (error) {
+    return handleReceiptError(res, error);
+  }
+}
+
+export async function getMyOrderDeliveryProofController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    const orderId = parseId(req.params.id);
+    if (!orderId) return handleErrorClient(res, 400, "El id del pedido debe ser valido");
+    return sendDeliveryProof(
+      res,
+      await getClientOrderDeliveryProofService(requireClient(req), orderId),
+    );
+  } catch (error) {
+    return handleDeliveryProofError(res, error);
+  }
+}
+
+function returnValue(req: Request, field: string) {
+  const bodyValue = req.body && typeof req.body === "object"
+    ? (req.body as Record<string, unknown>)[field]
+    : undefined;
+  const value = bodyValue ?? req.query[field];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
+  if (orderId) {
+    const guestAccess = await issueGuestOrderTrackingAccessService(orderId, status);
+    if (guestAccess) return guestAccess.url;
+  }
+  const url = new URL("/payment-result", FRONTEND_URL);
+  if (orderId) url.searchParams.set("orderId", String(orderId));
+  url.searchParams.set("status", status);
+  return url.toString();
+}
+
+export async function webpayReturnController(req: Request, res: Response) {
+  const tokenWs = returnValue(req, "token_ws");
+  const tbkToken = returnValue(req, "TBK_TOKEN");
+  const buyOrder = returnValue(req, "TBK_ORDEN_COMPRA");
+  const sessionId = returnValue(req, "TBK_ID_SESION");
+
+  try {
+    if (tbkToken || (!tokenWs && buyOrder && sessionId)) {
+      const result = await cancelWebpayPaymentService({
+        token: tbkToken,
+        buyOrder,
+        sessionId,
+        outcome: req.method === "GET" ? "expired" : tokenWs ? "failed" : "cancelled",
+      });
+      return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
+    }
+
+    if (!tokenWs) return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
+
+    const result = await confirmWebpayPaymentService(tokenWs);
+    return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
+  } catch (error) {
+    logServerError("Error al procesar retorno Webpay", error);
+    let orderId: number | null = null;
+    try {
+      orderId = await findOrderIdByPaymentReturnService({
+        token: tbkToken || tokenWs,
+        buyOrder,
+        sessionId,
+      });
+    } catch {
+      // El resultado queda consultable desde Mis pedidos aunque falle esta recuperación.
+    }
+    return res.redirect(303, await paymentResultUrl(orderId || undefined, "PROCESSING"));
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "online_orders" ADD COLUMN "client_archived_at" timestamp;

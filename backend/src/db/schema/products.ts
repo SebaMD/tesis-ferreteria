@@ -13,16 +13,19 @@ import { categoriesTable } from "./categories.js";
 
 export const productsTable = pgTable(
   "products", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    id: integer().primaryKey().generatedByDefaultAsIdentity(),
     categoryId: integer("category_id")
       .notNull()
       .references(() => categoriesTable.id),
     name: varchar({ length: 150 }).notNull(),
+    brand: varchar({ length: 100 }),
+    barcode: varchar({ length: 64 }),
     description: text(),
     price: numeric({ precision: 12, scale: 2 }).notNull(),
     unitMeasure: varchar("unit_measure", { length: 50 }).notNull(),
     currentStock: integer("current_stock").notNull().default(0),
     minimumStock: integer("minimum_stock").notNull().default(0),
+    inStoreOnly: boolean("in_store_only").notNull().default(false),
     status: boolean().notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -32,6 +35,7 @@ export const productsTable = pgTable(
       table.categoryId,
       sql`lower(${table.name})`,
     ),
+    uniqueIndex("products_barcode_unique").on(table.barcode),
   ],
 );
 

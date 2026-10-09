@@ -1,0 +1,63 @@
+import { Router } from "express";
+import { authenticateJwt } from "../../middlewares/authentication.middleware.js";
+import { verifyRoles } from "../../middlewares/authorization.middleware.js";
+import {
+  archiveOrderController,
+  restoreArchivedOrderController,
+  continueGuestPaymentController,
+  continuePaymentController,
+  createCheckoutController,
+  createGuestCheckoutController,
+  deleteDeliveryAddressController,
+  getDeliveryAddressController,
+  getGuestDeviceOrderDeliveryProofController,
+  getGuestOrderController,
+  getGuestOrderDeliveryProofController,
+  getGuestOrderReceiptController,
+  getGuestDeviceOrderReceiptController,
+  getGuestDeviceOrdersController,
+  getGuestPendingOrderController,
+  getMyOrderByIdController,
+  getMyOrderDeliveryProofController,
+  getMyOrderReceiptController,
+  getMyOrdersController,
+  saveDeliveryAddressController,
+  retryPaymentController,
+  retryGuestPaymentController,
+  retryGuestDevicePaymentController,
+  webpayReturnController,
+} from "./onlineOrders.controller.js";
+
+const router = Router();
+
+router.get("/payments/webpay/return", webpayReturnController);
+router.post("/payments/webpay/return", webpayReturnController);
+router.get("/guest/pending", getGuestPendingOrderController);
+router.post("/guest/checkout", createGuestCheckoutController);
+router.post("/guest/continue-payment", continueGuestPaymentController);
+router.get("/guest/order", getGuestOrderController);
+router.get("/guest/order/delivery-proof", getGuestOrderDeliveryProofController);
+router.get("/guest/order/receipt", getGuestOrderReceiptController);
+router.get("/guest/device-orders", getGuestDeviceOrdersController);
+router.get("/guest/device-orders/:id/delivery-proof", getGuestDeviceOrderDeliveryProofController);
+router.get("/guest/device-orders/:id/receipt", getGuestDeviceOrderReceiptController);
+router.post("/guest/device-orders/:id/retry-payment", retryGuestDevicePaymentController);
+router.post("/guest/retry-payment", retryGuestPaymentController);
+
+router.use(authenticateJwt);
+router.use(verifyRoles(["CLIENT"]));
+
+router.get("/", getMyOrdersController);
+router.get("/delivery-address", getDeliveryAddressController);
+router.put("/delivery-address", saveDeliveryAddressController);
+router.delete("/delivery-address", deleteDeliveryAddressController);
+router.post("/checkout", createCheckoutController);
+router.post("/:id/continue-payment", continuePaymentController);
+router.post("/:id/retry-payment", retryPaymentController);
+router.patch("/:id/archive", archiveOrderController);
+router.patch("/:id/restore", restoreArchivedOrderController);
+router.get("/:id/delivery-proof", getMyOrderDeliveryProofController);
+router.get("/:id/receipt", getMyOrderReceiptController);
+router.get("/:id", getMyOrderByIdController);
+
+export default router;

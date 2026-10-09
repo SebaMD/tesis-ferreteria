@@ -1,26 +1,48 @@
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import { categoriesTable, productsTable, type NewProduct } from "../../db/schema/index.js";
+import { findProductImagesByProductIds } from "../productImages/productImages.repository.js";
+import { presentProductImage } from "../productImages/productImages.presenter.js";
 
 const productColumns = {
     id: productsTable.id,
     categoryId: productsTable.categoryId,
     categoryName: categoriesTable.name,
     name: productsTable.name,
+    brand: productsTable.brand,
+    barcode: productsTable.barcode,
     description: productsTable.description,
     price: productsTable.price,
     unitMeasure: productsTable.unitMeasure,
     currentStock: productsTable.currentStock,
     minimumStock: productsTable.minimumStock,
+    inStoreOnly: productsTable.inStoreOnly,
     status: productsTable.status,
     createdAt: productsTable.createdAt,
     updatedAt: productsTable.updatedAt,
 };
 
+async function attachProductImages<T extends { id: number }>(products: T[]) {
+    const images = await findProductImagesByProductIds(products.map((product) => product.id));
+    type PresentedImage = (typeof images)[number] & { imageUrl: string };
+    const imagesByProduct = new Map<number, PresentedImage[]>();
+
+    for (const image of images) {
+        const currentImages = imagesByProduct.get(image.productId) ?? [];
+        currentImages.push(presentProductImage(image));
+        imagesByProduct.set(image.productId, currentImages);
+    }
+
+    return products.map((product) => ({
+        ...product,
+        images: imagesByProduct.get(product.id) ?? [],
+    }));
+}
+
 export async function findProducts(includeInactive = false) {
     const query = db.select(productColumns).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
-    if (includeInactive) return query;
-    return query.where(eq(productsTable.status, true));
+    const products = includeInactive ? await query : await query.where(eq(productsTable.status, true));
+    return attachProductImages(products);
 }
 
 export async function findProductById(id: number, includeInactive = false) {
@@ -33,7 +55,9 @@ export async function findProductById(id: number, includeInactive = false) {
         .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
         .where(and(...conditions))
         .limit(1);
-    return product;
+    if (!product) return null;
+    const [productWithImages] = await attachProductImages([product]);
+    return productWithImages;
 }
 
 export async function findProductByCategoryAndName(categoryId: number, name: string, excludeId?: number) {
@@ -52,12 +76,41 @@ export async function findProductByCategoryAndName(categoryId: number, name: str
         .where(and(...conditions))
         .limit(1);
 
+    if (!product) return null;
+    const [productWithImages] = await attachProductImages([product]);
+    return productWithImages;
+}
+
+export async function findProductByBarcode(barcode: string, excludeId?: number) {
+    const conditions = [eq(productsTable.barcode, barcode)];
+
+    if (excludeId !== undefined) {
+        conditions.push(ne(productsTable.id, excludeId));
+    }
+
+    const [product] = await db
+        .select(productColumns)
+        .from(productsTable)
+        .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+        .where(and(...conditions))
+        .limit(1);
+
     return product ?? null;
 }
 
 export async function createProduct(data: NewProduct) {
     const [product] = await db.insert(productsTable).values(data).returning({ id: productsTable.id });
     return findProductById(product.id);
+}
+
+export async function createProductTx(tx: DbTransaction, data: NewProduct) {
+    const [product] = await tx.insert(productsTable).values(data).returning({
+        id: productsTable.id,
+        name: productsTable.name,
+        categoryId: productsTable.categoryId,
+        status: productsTable.status,
+    });
+    return product;
 }
 
 export async function updateProductById(id: number, data: Partial<NewProduct>) {
@@ -68,6 +121,20 @@ export async function updateProductById(id: number, data: Partial<NewProduct>) {
         .returning({ id: productsTable.id });
     if (!product) return null;
     return findProductById(product.id, true);
+}
+
+export async function updateProductByIdTx(tx: DbTransaction, id: number, data: Partial<NewProduct>) {
+    const [product] = await tx
+        .update(productsTable)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(productsTable.id, id))
+        .returning({
+            id: productsTable.id,
+            name: productsTable.name,
+            categoryId: productsTable.categoryId,
+            status: productsTable.status,
+        });
+    return product ?? null;
 }
 
 export async function deleteProductById(id: number) {
@@ -93,7 +160,8 @@ export async function findProductStockById(tx: DbTransaction, id: number) {
         })
         .from(productsTable)
         .where(eq(productsTable.id, id))
-        .limit(1);
+        .limit(1)
+        .for("update");
 
     return product ?? null;
 }

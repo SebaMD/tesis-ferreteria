@@ -1,12 +1,17 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals } from "../helpers/formatters.js";
 import { getAvailableStockStatus } from "../helpers/inventory.js";
 import {
   getCancellationRequestStatusLabel,
@@ -14,9 +19,13 @@ import {
   getSaleStatusLabel,
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
+import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
+import { formatRutInput, isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
+import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
-import { getProductsRequest } from "../services/products.service.js";
+import { getProductByBarcodeRequest, getProductsRequest } from "../services/products.service.js";
 import {
   approveCancellationRequest,
   createCancellationRequest,
@@ -59,6 +68,23 @@ const SALE_DATE_OPTIONS = {
   month: "2-digit",
   year: "numeric",
 };
+const EMPTY_SALE_DELIVERY = {
+  recipientName: "",
+  recipientRut: "",
+  phone: "",
+  address: "",
+  reference: "",
+  latitude: null,
+  longitude: null,
+};
+
+function normalizeChileanMobile(value) {
+  const compactPhone = String(value || "").trim().replace(/[\s().-]/g, "");
+  if (!/^(?:\+?56)?9\d{8}$/.test(compactPhone)) return null;
+  if (compactPhone.startsWith("+56")) return compactPhone;
+  if (compactPhone.startsWith("56")) return `+${compactPhone}`;
+  return `+56${compactPhone}`;
+}
 
 function getSaleDetails(sale) {
   if (Array.isArray(sale?.details)) return sale.details;
@@ -112,6 +138,13 @@ function preventNonIntegerQuantityPaste(event) {
   }
 }
 
+function getRemainingPosStock(product, cartQuantity = 0) {
+  return Math.max(
+    getOnlineAvailableStock(product) - Number(cartQuantity || 0),
+    0,
+  );
+}
+
 function ReturnHistoryText({ label, text }) {
   return (
     <div className="grid min-w-0 content-start gap-1.5">
@@ -134,7 +167,15 @@ export default function SalesPage() {
   const [sales, setSales] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
   const [cashReceived, setCashReceived] = useState("");
+  const [saleDeliveryType, setSaleDeliveryType] = useState("IMMEDIATE");
+  const [saleDelivery, setSaleDelivery] = useState(EMPTY_SALE_DELIVERY);
   const [cartItems, setCartItems] = useState([]);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [lastScannedProduct, setLastScannedProduct] = useState(null);
+  const [salesScannerOpen, setSalesScannerOpen] = useState(false);
+  const [scannedSalesProduct, setScannedSalesProduct] = useState(null);
+  const barcodeQueueRef = useRef(Promise.resolve());
+  const catalogSearchInputRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [requestToReverse, setRequestToReverse] = useState(null);
@@ -192,18 +233,23 @@ export default function SalesPage() {
   }, [canReviewCancellation, pendingCancellationSales, sales, salesFilter]);
   const filteredSales = useMemo(
     () => salesByStatusFilter.filter((sale) => {
+      const matchesScannedProduct = !scannedSalesProduct || getSaleDetails(sale).some(
+        (detail) => String(detail.productId) === String(scannedSalesProduct.id),
+      );
+
+      if (!matchesScannedProduct) return false;
       if (!normalizedSearch) return true;
 
       const cashierName = `${sale.userNames || ""} ${sale.userSurnames || ""}`;
-      const productValues = getSaleDetails(sale).flatMap((detail) => [
-        detail.productName,
-        detail.name,
-        detail.productId,
-      ]);
+      const saleDate = sale.date || sale.createdAt;
       const searchableValues = [
         String(sale.id),
         formatSaleFolio(sale.id),
         cashierName,
+        sale.userId,
+        saleDate,
+        formatDate(saleDate, SALE_DATE_OPTIONS, ""),
+        formatDate(saleDate, SALE_DATE_TIME_OPTIONS, ""),
         sale.paymentMethod,
         getPaymentMethodLabel(sale.paymentMethod),
         String(sale.total),
@@ -213,17 +259,18 @@ export default function SalesPage() {
         String(getSaleTotals(sale).netTotal),
         formatClp(getSaleTotals(sale).returnedTotal),
         formatClp(getSaleTotals(sale).netTotal),
-        ...productValues,
       ];
 
       return searchableValues.some((value) => String(value || "").toLocaleLowerCase("es").includes(normalizedSearch));
     }).sort(compareByNewest),
-    [normalizedSearch, salesByStatusFilter],
+    [normalizedSearch, salesByStatusFilter, scannedSalesProduct],
   );
   const salesPagination = usePagination(filteredSales, {
-    resetKey: `${salesFilter}|${normalizedSearch}|${sales.length}`,
+    resetKey: `${salesFilter}|${normalizedSearch}|${scannedSalesProduct?.id || ""}|${sales.length}`,
   });
-  const hasSalesFilters = Boolean(normalizedSearch || salesFilter !== "current");
+  const hasSalesFilters = Boolean(
+    normalizedSearch || scannedSalesProduct || salesFilter !== "current",
+  );
   const detailReturnRequests = Array.isArray(saleDetail?.cancellationRequests)
     ? saleDetail.cancellationRequests
     : [];
@@ -249,10 +296,27 @@ export default function SalesPage() {
     }
   }, []);
 
+  const refreshProducts = useCallback(async () => {
+    setProducts(await getProductsRequest());
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData().catch((err) => toast.error(getApiError(err, "No se pudieron cargar ventas")));
   }, [loadData]);
+
+  useEffect(() => {
+    if (!canCreate || activeView !== "sales") return undefined;
+
+    const refreshAvailability = () => refreshProducts().catch(() => undefined);
+    const refreshTimer = window.setInterval(refreshAvailability, 30_000);
+    window.addEventListener("focus", refreshAvailability);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshAvailability);
+    };
+  }, [activeView, canCreate, refreshProducts]);
 
   const productById = useMemo(
     () => new Map(products.map((product) => [String(product.id), product])),
@@ -280,11 +344,12 @@ export default function SalesPage() {
       activeProducts
         .filter((product) => {
           const quantityInCart = cartQuantityByProduct.get(String(product.id)) || 0;
-          const availableStock = Number(product.currentStock || 0) - quantityInCart;
+          const availableStock = getRemainingPosStock(product, quantityInCart);
           const matchesCategory = !catalogCategoryFilter || String(product.categoryId) === catalogCategoryFilter;
           const matchesSearch =
             !normalizedCatalogSearch ||
             String(product.id).includes(normalizedCatalogSearch) ||
+            String(product.barcode || "").includes(normalizedCatalogSearch) ||
             product.name.toLocaleLowerCase("es").includes(normalizedCatalogSearch) ||
             product.categoryName.toLocaleLowerCase("es").includes(normalizedCatalogSearch);
 
@@ -321,7 +386,7 @@ export default function SalesPage() {
     [cartItems, productById],
   );
   const cartTotal = cartRows.reduce((total, row) => total + row.subtotal, 0);
-  const cartHasInvalidStock = cartRows.some((row) => row.quantity < 1 || row.quantity > Number(row.product.currentStock || 0));
+  const cartHasInvalidStock = cartRows.some((row) => row.quantity < 1 || row.quantity > getOnlineAvailableStock(row.product));
   const isCashPayment = paymentMethod === "efectivo";
   const receivedAmount = Number(cashReceived || 0);
   const cashChange = receivedAmount - cartTotal;
@@ -330,7 +395,13 @@ export default function SalesPage() {
     !submitting &&
     cartRows.length > 0 &&
     !cartHasInvalidStock &&
-    (!isCashPayment || (cashReceived !== "" && receivedAmount >= cartTotal));
+    (!isCashPayment || (cashReceived !== "" && receivedAmount >= cartTotal)) &&
+    (saleDeliveryType === "IMMEDIATE" || (
+      saleDelivery.recipientName.trim().length >= 3 &&
+      isValidRut(saleDelivery.recipientRut) &&
+      Boolean(normalizeChileanMobile(saleDelivery.phone)) &&
+      Boolean(saleDelivery.address.trim())
+    ));
 
   const returnableDetails = useMemo(
     () => getSaleDetails(saleForReturn)
@@ -382,16 +453,16 @@ export default function SalesPage() {
 
   const addProductToCart = (product) => {
     const currentQuantity = getCartQuantity(product.id);
-    const availableStock = Number(product.currentStock || 0);
+    const availableStock = getOnlineAvailableStock(product);
 
     if (availableStock < 1) {
       toast.error("Este producto no tiene stock disponible para venta");
-      return;
+      return false;
     }
 
     if (currentQuantity >= availableStock) {
       toast.error("No puedes agregar más unidades que el stock disponible");
-      return;
+      return false;
     }
 
     setCartItems((current) => {
@@ -407,11 +478,72 @@ export default function SalesPage() {
 
       return [...current, { productId: String(product.id), quantity: 1 }];
     });
+
+    return true;
   };
+
+  const processBarcodeScan = async (barcode) => {
+    try {
+      setScanningBarcode(true);
+      const shouldAddToCart = canCreate && activeView === "sales";
+      const knownProduct = shouldAddToCart
+        ? null
+        : products.find((product) => String(product.barcode || "") === barcode);
+      const product = knownProduct || await getProductByBarcodeRequest(barcode);
+
+      setProducts((current) => current.some((item) => item.id === product.id)
+        ? current.map((item) => item.id === product.id ? product : item)
+        : [...current, product]);
+      setLastScannedProduct(product);
+
+      if (shouldAddToCart && addProductToCart(product)) {
+        toast.success(`${product.name}: unidad agregada al carrito`);
+      } else if (!shouldAddToCart) {
+        setScannedSalesProduct(product);
+        const productState = product.status === false ? " · producto inactivo" : "";
+        toast.success(
+          `Filtro aplicado: ${product.name} · código ${product.barcode}${productState}`,
+        );
+      }
+    } catch (err) {
+      toast.error(getApiError(err, "No se pudo procesar el código de barra"));
+    } finally {
+      setScanningBarcode(false);
+    }
+  };
+
+  const enqueueBarcodeScan = (value) => {
+    const barcode = String(value || "").trim();
+    if (!/^\d{1,64}$/.test(barcode)) {
+      toast.warning("El código de barra debe contener entre 1 y 64 dígitos");
+      return;
+    }
+
+    barcodeQueueRef.current = barcodeQueueRef.current
+      .catch(() => undefined)
+      .then(() => processBarcodeScan(barcode));
+  };
+
+
+  useBarcodeScanner({
+    captureInModal: !canCreate && salesScannerOpen,
+    enabled: canCreate ? activeView === "sales" : salesScannerOpen,
+    isInputAllowed: (target) => target === catalogSearchInputRef.current,
+    onScan: (barcode, { previousValue, target }) => {
+      if (canCreate && activeView === "sales") {
+        if (target === catalogSearchInputRef.current) {
+          setCatalogSearch(previousValue ?? "");
+        }
+      } else {
+        setSalesScannerOpen(false);
+      }
+      enqueueBarcodeScan(barcode);
+    },
+  });
 
   const updateCartQuantity = (productId, value) => {
     const product = productById.get(String(productId));
-    const availableStock = Number(product?.currentStock || 0);
+    const availableStock = getOnlineAvailableStock(product);
     const requestedQuantity = Math.max(1, Number(value || 1));
     const nextQuantity = availableStock > 0 ? Math.min(requestedQuantity, availableStock) : 1;
 
@@ -436,6 +568,8 @@ export default function SalesPage() {
     setCartItems([]);
     setPaymentMethod("efectivo");
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
   };
 
   const openPaymentModal = () => {
@@ -451,12 +585,16 @@ export default function SalesPage() {
 
     setPaymentMethod("efectivo");
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
     setPaymentModalOpen(true);
   };
 
   const closePaymentModal = () => {
     if (submitting) return;
     setCashReceived("");
+    setSaleDeliveryType("IMMEDIATE");
+    setSaleDelivery(EMPTY_SALE_DELIVERY);
     setPaymentModalOpen(false);
   };
 
@@ -485,21 +623,53 @@ export default function SalesPage() {
       }
     }
 
+    if (saleDeliveryType === "DELIVERY") {
+      if (saleDelivery.recipientName.trim().length < 3) {
+        toast.warning("Ingresa el nombre completo del destinatario");
+        return;
+      }
+      if (!isValidRut(saleDelivery.recipientRut)) {
+        toast.warning("Ingresa un RUT valido para el destinatario");
+        return;
+      }
+      if (!normalizeChileanMobile(saleDelivery.phone)) {
+        toast.warning("Ingresa un teléfono móvil chileno válido");
+        return;
+      }
+      if (!saleDelivery.address.trim()) {
+        toast.warning("Ingresa la direccion del despacho");
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
-      await createSaleRequest({
+      const salePayload = {
         paymentMethod,
         details: cartRows.map((row) => ({
           productId: Number(row.product.id),
           quantity: Number(row.quantity),
         })),
-      });
+      };
+      if (saleDeliveryType === "DELIVERY") {
+        Object.assign(salePayload, {
+          deliveryType: "DELIVERY",
+          deliveryRecipientName: saleDelivery.recipientName,
+          deliveryRecipientRut: normalizeRut(saleDelivery.recipientRut),
+          deliveryPhone: normalizeChileanMobile(saleDelivery.phone),
+          deliveryAddress: saleDelivery.address,
+          deliveryCommune: DELIVERY_COMMUNE,
+          deliveryReference: saleDelivery.reference || null,
+        });
+      }
+      await createSaleRequest(salePayload);
       clearCart();
       toast.success("Venta registrada exitosamente");
       setPaymentModalOpen(false);
       await loadData();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo registrar la venta"));
+      await refreshProducts().catch(() => undefined);
     } finally {
       setSubmitting(false);
     }
@@ -763,6 +933,54 @@ export default function SalesPage() {
     setSearch("");
   };
 
+  const saleActionsFor = (sale) => (
+    <>
+      <button
+        className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`}
+        type="button"
+        onClick={() => openDetailModal(sale)}
+        disabled={loadingSaleDetail}
+      >
+        <Eye size={17} /> Detalle
+      </button>
+      {canRequestCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && (
+        <button
+          className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
+          type="button"
+          onClick={() => openCancellationRequestModal(sale)}
+          disabled={submitting}
+        >
+          <Send size={16} /> Solicitar devolución
+        </button>
+      )}
+      {canRequestCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && (
+        <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 border-amber-400 bg-amber-50 text-amber-800 disabled:cursor-not-allowed disabled:opacity-100`} type="button" disabled>
+          <Clock3 size={16} /> Solicitud pendiente
+        </button>
+      )}
+      {canReviewCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && (
+        <button
+          className={`${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+          type="button"
+          onClick={() => openReviewModal(sale)}
+          disabled={submitting}
+        >
+          <Send size={16} /> Revisar solicitud
+        </button>
+      )}
+      {canCancel && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && (
+        <button
+          className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
+          type="button"
+          onClick={() => openDirectReturnModal(sale)}
+          disabled={submitting}
+        >
+          <RotateCcw size={17} /> Registrar devolución
+        </button>
+      )}
+    </>
+  );
+
   return (
     <section className={`${pageClass} gap-3 py-4`}>
       <LoadingOverlay active={loading} />
@@ -773,7 +991,7 @@ export default function SalesPage() {
           <p>{canCreate && activeView === "sales" ? "Punto de venta presencial con carrito." : "Historial de ventas presenciales registradas."}</p>
         </div>
         {canReviewCancellation && pendingCancellationSales.length > 0 && (
-          <div className="ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
+          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
             <span className="text-sm font-bold">
               Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes
             </span>
@@ -812,6 +1030,31 @@ export default function SalesPage() {
       </div>
 
       <AppModal
+        open={canReviewCancellation && salesScannerOpen}
+        title="Escanear producto"
+        description="El producto se utilizará como filtro del historial de ventas."
+        onClose={() => setSalesScannerOpen(false)}
+        size="small"
+        footer={(
+          <button
+            className={secondaryButtonClass}
+            type="button"
+            onClick={() => setSalesScannerOpen(false)}
+          >
+            Cancelar
+          </button>
+        )}
+      >
+        <div className="grid justify-items-center gap-3 py-4 text-center" role="status" aria-live="polite">
+          <div className="grid size-16 place-items-center rounded-full bg-rust-50 text-rust-600">
+            <ScanBarcode className="animate-pulse" size={34} />
+          </div>
+          <strong className="text-base text-ink-950">Escanee el código de barra ahora</strong>
+          <span className="text-sm text-slate-500">Esperando lectura del scanner...</span>
+        </div>
+      </AppModal>
+
+      <AppModal
         open={canCreate && paymentModalOpen}
         title="Finalizar venta"
         description="Confirma el método de pago antes de registrar la venta."
@@ -825,17 +1068,15 @@ export default function SalesPage() {
           </div>
           <label>
             Metodo de pago
-            <select
+            <AppSelect
               value={paymentMethod}
-              onChange={(event) => {
-                setPaymentMethod(event.target.value);
-                if (event.target.value !== "efectivo") setCashReceived("");
+              onChange={(nextPaymentMethod) => {
+                setPaymentMethod(nextPaymentMethod);
+                if (nextPaymentMethod !== "efectivo") setCashReceived("");
               }}
-            >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method.value} value={method.value}>{method.label}</option>
-              ))}
-            </select>
+              ariaLabel="Método de pago"
+              options={PAYMENT_METHODS}
+            />
           </label>
 
           {isCashPayment && (
@@ -865,6 +1106,87 @@ export default function SalesPage() {
               </div>
             </div>
           )}
+
+          <fieldset className="grid gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5">
+            <legend className="px-1 text-sm font-bold text-ink-950">Tipo de entrega</legend>
+            <div className="grid grid-cols-2 gap-2 max-[620px]:grid-cols-1">
+              <label className={`flex cursor-pointer items-start gap-2 rounded-[5px] border p-3 ${saleDeliveryType === "IMMEDIATE" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
+                <input
+                  className="mt-1 size-4"
+                  type="radio"
+                  name="saleDeliveryType"
+                  checked={saleDeliveryType === "IMMEDIATE"}
+                  onChange={() => setSaleDeliveryType("IMMEDIATE")}
+                />
+                <span className="grid gap-0.5"><strong className="flex items-center gap-1.5 text-sm"><Store size={16} /> Entrega inmediata</strong><span className="text-xs font-normal text-slate-500">Flujo presencial habitual.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-start gap-2 rounded-[5px] border p-3 ${saleDeliveryType === "DELIVERY" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
+                <input
+                  className="mt-1 size-4"
+                  type="radio"
+                  name="saleDeliveryType"
+                  checked={saleDeliveryType === "DELIVERY"}
+                  onChange={() => setSaleDeliveryType("DELIVERY")}
+                />
+                <span className="grid gap-0.5"><strong className="flex items-center gap-1.5 text-sm"><Truck size={16} /> Despacho a domicilio</strong><span className="text-xs font-normal text-slate-500">Crea una tarea para Bodega.</span></span>
+              </label>
+            </div>
+
+            {saleDeliveryType === "DELIVERY" && (
+              <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Nombre destinatario
+                  <input
+                    maxLength="240"
+                    value={saleDelivery.recipientName}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientName: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">RUT destinatario
+                  <input
+                    maxLength="12"
+                    placeholder="12345678-9"
+                    value={saleDelivery.recipientRut}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, recipientRut: formatRutInput(event.target.value) }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Telefono
+                  <input
+                    maxLength="20"
+                    placeholder="+56912345678"
+                    value={saleDelivery.phone}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, phone: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-bold text-slate-600">Comuna
+                  <input value={DELIVERY_COMMUNE} readOnly aria-readonly="true" />
+                </label>
+                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Direccion
+                  <input
+                    maxLength="300"
+                    value={saleDelivery.address}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, address: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="col-span-2 grid gap-1 text-xs font-bold text-slate-600 max-[620px]:col-span-1">
+                  <span className="flex items-baseline gap-1.5">
+                    <span>Referencia</span>
+                    <span className="font-normal text-slate-400">(opcional)</span>
+                  </span>
+                  <textarea
+                    className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950 placeholder:text-slate-400"
+                    maxLength="500"
+                    value={saleDelivery.reference}
+                    onChange={(event) => setSaleDelivery((current) => ({ ...current, reference: event.target.value }))}
+                    placeholder="Ej: Casa azul, portón negro, frente a la plaza"
+                  />
+                </label>
+              </div>
+            )}
+          </fieldset>
 
           <div className={formActionsClass}>
             <button className={secondaryButtonClass} type="button" onClick={closePaymentModal} disabled={submitting}>
@@ -958,6 +1280,66 @@ export default function SalesPage() {
                   Seleccionar todos
                 </label>
               </div>
+              <ResponsiveTableView
+                rows={returnableDetails}
+                getRowKey={(detail) => `${detail.saleId}-${detail.productId}`}
+                getRowLabel={(detail) => detail.productName || `producto ${detail.productId}`}
+                resetKey={`${saleForReturn?.id || ""}|${returnMode || ""}`}
+                renderSummary={(detail) => {
+                  const selected = returnQuantities[String(detail.productId)] !== undefined;
+                  return (
+                    <div className="flex min-w-0 items-center gap-3">
+                      <input
+                        className="size-5 shrink-0"
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(event) => toggleReturnProduct(detail, event.target.checked)}
+                        aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`}
+                      />
+                      <div className="min-w-0">
+                        <strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                        <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
+                      </div>
+                    </div>
+                  );
+                }}
+                renderDetails={(detail) => {
+                  const selected = returnQuantities[String(detail.productId)] !== undefined;
+                  const quantityValue = selected ? returnQuantities[String(detail.productId)] : "";
+                  const quantityError = selected ? getReturnQuantityError(quantityValue, detail.availableQuantity) : "";
+                  return (
+                    <>
+                      <MobileDetailGrid>
+                        <MobileDetailField label="Vendida">{detail.soldQuantity}</MobileDetailField>
+                        <MobileDetailField label="Ya devuelta">{detail.returnedQuantity}</MobileDetailField>
+                        <MobileDetailField label="Disponible">{detail.availableQuantity}</MobileDetailField>
+                        <MobileDetailField label="Subtotal devolución">
+                          {selected && !quantityError ? formatClp(Number(detail.unitPrice || 0) * Number(quantityValue)) : "-"}
+                        </MobileDetailField>
+                      </MobileDetailGrid>
+                      <label className="mt-4 grid gap-1 text-xs font-bold text-slate-600">
+                        Cantidad solicitada
+                        <input
+                          className={`min-h-11 w-full ${quantityError ? "border-critical-600 focus:border-critical-600" : ""}`}
+                          type="number"
+                          min="1"
+                          max={detail.availableQuantity}
+                          step="1"
+                          inputMode="numeric"
+                          value={quantityValue}
+                          onChange={(event) => updateReturnQuantity(detail, event.target.value)}
+                          onKeyDown={preventNonIntegerQuantityKey}
+                          onPaste={preventNonIntegerQuantityPaste}
+                          disabled={!selected}
+                          required={selected}
+                          aria-invalid={Boolean(quantityError)}
+                        />
+                        {quantityError && <span className="text-[11px] font-semibold text-critical-600">{quantityError}</span>}
+                      </label>
+                    </>
+                  );
+                }}
+                desktop={(
               <div className={tableScrollClass}>
                 <table className="min-w-205">
                   <thead>
@@ -1042,6 +1424,8 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
+                )}
+              />
             </div>
           )}
 
@@ -1145,7 +1529,7 @@ export default function SalesPage() {
                   </strong>
                 </div>
               </div>
-              <div className="rounded-[5px] border border-amber-200 bg-amber-50 p-3.5">
+              <div className="sale-return-reason rounded-[5px] border border-amber-200 bg-amber-50 p-3.5">
                 <span className="text-xs font-semibold text-amber-800">Motivo de la solicitud</span>
                 <p className="m-0 mt-1 text-sm text-amber-950">{requestToReview.reason}</p>
               </div>
@@ -1156,6 +1540,31 @@ export default function SalesPage() {
             <div className="border-b border-slate-200 px-3.5 py-3">
                 <h3 className="m-0 text-sm font-bold text-ink-950">Productos solicitados</h3>
             </div>
+            <ResponsiveTableView
+              rows={requestToReview?.details || []}
+              getRowKey={(detail) => `${requestToReview?.id || "request"}-${detail.productId}`}
+              getRowLabel={(detail) => detail.productName || `producto ${detail.productId}`}
+              resetKey={requestToReview?.id || ""}
+              emptyMessage="No hay productos asociados a esta solicitud."
+              renderSummary={(detail) => (
+                <div className="grid min-w-0 gap-2">
+                  <strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span>Solicitada: {detail.requestedQuantity}</span>
+                    <strong className="font-mono">{formatClp(detail.requestedSubtotal)}</strong>
+                  </div>
+                </div>
+              )}
+              renderDetails={(detail) => (
+                <MobileDetailGrid>
+                  <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
+                  <MobileDetailField label="Vendida">{detail.soldQuantity}</MobileDetailField>
+                  <MobileDetailField label="Ya devuelta">{detail.returnedQuantity}</MobileDetailField>
+                  <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
+                  <MobileDetailField label="Subtotal">{formatClp(detail.requestedSubtotal)}</MobileDetailField>
+                </MobileDetailGrid>
+              )}
+              desktop={(
             <div className={tableScrollClass}>
               <table>
                 <thead>
@@ -1189,6 +1598,8 @@ export default function SalesPage() {
                 </tbody>
               </table>
             </div>
+              )}
+            />
           </div>
 
           <label className="grid gap-2 text-sm font-semibold text-ink-700">
@@ -1284,6 +1695,31 @@ export default function SalesPage() {
                 <div className="border-b border-slate-200 px-3.5 py-3">
                   <h3 className="m-0 text-sm font-bold text-ink-950">Productos vendidos</h3>
                 </div>
+                <ResponsiveTableView
+                  rows={getSaleDetails(saleDetail)}
+                  getRowKey={(detail) => `${detail.saleId}-${detail.productId}`}
+                  getRowLabel={(detail) => detail.productName || detail.name || `producto ${detail.productId}`}
+                  resetKey={saleDetail.id}
+                  emptyMessage="No hay productos asociados a esta venta."
+                  renderSummary={(detail) => (
+                    <div className="grid min-w-0 gap-2">
+                      <strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong>
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span>Vendida: {detail.quantity}</span>
+                        <strong className="font-mono">{formatClp(detail.subtotal)}</strong>
+                      </div>
+                    </div>
+                  )}
+                  renderDetails={(detail) => (
+                    <MobileDetailGrid>
+                      <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
+                      <MobileDetailField label="Devuelta">{detail.returnedQuantity || 0}</MobileDetailField>
+                      <MobileDetailField label="Disponible">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
+                      <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
+                      <MobileDetailField label="Subtotal">{formatClp(detail.subtotal)}</MobileDetailField>
+                    </MobileDetailGrid>
+                  )}
+                  desktop={(
                 <div className={tableScrollClass}>
                   <table>
                     <thead>
@@ -1317,12 +1753,14 @@ export default function SalesPage() {
                     </tbody>
                   </table>
                 </div>
+                  )}
+                />
               </div>
 
               {detailReturnRequests.length > 0 && (
-                <div className="rounded-[5px] border border-slate-200 bg-white">
+                <div className="sale-return-history rounded-[5px] border border-slate-200 bg-white">
                   <button
-                    className="min-h-0! w-full justify-between rounded-none border-0! bg-white! px-3.5! py-3! text-ink-950 hover:bg-slate-50!"
+                    className="sale-return-history-toggle min-h-0! w-full justify-between rounded-none border-0! bg-white px-3.5! py-3! text-ink-950 hover:bg-slate-100"
                     type="button"
                     onClick={() => setReturnHistoryOpen((current) => !current)}
                     aria-expanded={returnHistoryOpen}
@@ -1340,11 +1778,11 @@ export default function SalesPage() {
 
                           return (
                             <article
-                              className="overflow-hidden rounded-[5px] border border-slate-200 bg-[#fafbfc]"
+                              className="sale-return-history-item overflow-hidden rounded-[5px] border border-slate-200 bg-[#fafbfc]"
                               key={request.id}
                             >
                               <button
-                                className="min-h-0! w-full justify-start rounded-none border-0! bg-transparent! p-3! text-left text-ink-950 hover:bg-slate-100!"
+                                className="sale-return-history-item-toggle min-h-0! w-full justify-start rounded-none border-0! bg-transparent p-3! text-left text-ink-950 hover:bg-slate-100"
                                 type="button"
                                 onClick={() => setExpandedReturnRequestId((current) => current === request.id ? null : request.id)}
                                 aria-expanded={requestOpen}
@@ -1373,7 +1811,7 @@ export default function SalesPage() {
                               </button>
 
                               {requestOpen && (
-                                <div className="grid gap-3 border-t border-slate-200 bg-white p-3.5">
+                                <div className="sale-return-history-details grid gap-3 border-t border-slate-200 bg-white p-3.5">
                                   <div className="grid grid-cols-2 gap-4 max-[720px]:grid-cols-1">
                                     <ReturnHistoryText
                                       label="Motivo"
@@ -1463,7 +1901,7 @@ export default function SalesPage() {
             <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-200 pb-2.5">
               <div>
                 <h2 className="m-0 text-base font-bold text-ink-950">Catálogo de productos</h2>
-                <p className="mt-0.75 mb-0 text-xs text-slate-500">Busca por ID, producto o categoría para agregar al carrito.</p>
+                <p className="mt-0.75 mb-0 text-xs text-slate-500">Escanea un código o busca por ID, producto o categoría para agregar al carrito.</p>
               </div>
               <span className="rounded bg-slate-100 px-2.5 py-1 font-mono text-xs font-bold text-ink-700">
                 {filteredCatalogProducts.length} productos
@@ -1474,30 +1912,35 @@ export default function SalesPage() {
               <label className="relative block min-w-65 flex-1 max-[720px]:min-w-0">
                 <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
                 <input
+                  ref={catalogSearchInputRef}
                   className="min-h-9 pl-9.75"
                   value={catalogSearch}
                   onChange={(event) => setCatalogSearch(event.target.value)}
-                  placeholder="Buscar por ID, producto o categoría"
-                  aria-label="Buscar productos para venta"
+                  placeholder="Buscar por ID, código, producto o categoría"
+                  aria-label="Buscar productos para venta por ID, código, nombre o categoría"
                 />
               </label>
-              <select
+              <AppSelect
                 className="min-h-9 w-full max-w-55 max-[720px]:max-w-none"
                 value={catalogCategoryFilter}
-                onChange={(event) => setCatalogCategoryFilter(event.target.value)}
-                aria-label="Filtrar productos por categoría"
+                onChange={(value) => setCatalogCategoryFilter(String(value))}
+                ariaLabel="Filtrar productos por categoría"
+                options={[{ value: "", label: "Todas las categorías" }, ...productCategories.map((category) => ({ value: category.id, label: category.name }))]}
+              />
+              <span
+                className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 text-xs font-bold text-positive-600"
+                role="status"
+                aria-live="polite"
               >
-                <option value="">Todas las categorías</option>
-                {productCategories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name}</option>
-                ))}
-              </select>
+                <ScanBarcode className={scanningBarcode ? "animate-pulse" : ""} size={17} />
+                {scanningBarcode ? "Procesando código..." : "Escáner activo"}
+              </span>
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 max-[980px]:grid-cols-2 max-[620px]:grid-cols-1">
               {catalogPagination.paginatedItems.map((product) => {
                 const cartQuantity = getCartQuantity(product.id);
-                const availableStock = Number(product.currentStock || 0) - cartQuantity;
+                const availableStock = getRemainingPosStock(product, cartQuantity);
                 const addButtonStatus = getAvailableStockStatus(product, availableStock);
                 const addButtonClass = addButtonStatus.tone === "warning"
                     ? "border-rust-600 bg-rust-500 text-white hover:border-rust-700 hover:bg-rust-600"
@@ -1519,7 +1962,7 @@ export default function SalesPage() {
                       </div>
                       <div className="rounded bg-white px-2 py-1.5">
                         <span className="block text-slate-500">Stock</span>
-                        <strong className="font-mono text-ink-950">{availableStock} {product.unitMeasure}</strong>
+                        <strong className="font-mono text-ink-950">{formatQuantityWithUnit(availableStock, product.unitMeasure)}</strong>
                       </div>
                     </div>
                     <button
@@ -1550,16 +1993,18 @@ export default function SalesPage() {
           </section>
 
           <aside className={`${panelClass} sticky top-4 gap-3 p-3.5 max-[1080px]:static`}>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-2.5">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2.5">
               <div>
                 <h2 className="m-0 flex items-center gap-2 text-base font-bold text-ink-950">
                   <ShoppingCart size={18} />
                   Carrito de venta
                 </h2>
-                <p className="mt-0.75 mb-0 text-xs text-slate-500">{cartRows.length} productos agregados</p>
+                <p className="mt-0.75 mb-0 text-xs text-slate-500">
+                  {cartRows.length === 1 ? "1 producto agregado" : `${cartRows.length} productos agregados`}
+                </p>
               </div>
               {cartRows.length > 0 && (
-                <button className={`${secondaryButtonClass} mr-0 min-h-8 px-2.5 text-xs`} type="button" onClick={clearCart}>
+                <button className={`${secondaryButtonClass} ml-auto mr-0! min-h-8 shrink-0 px-2.5 text-xs`} type="button" onClick={clearCart}>
                   Limpiar
                 </button>
               )}
@@ -1577,7 +2022,7 @@ export default function SalesPage() {
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="truncate text-[13px] text-ink-950">{row.product.name}</strong>
                         <span className="text-[11px] text-slate-500">
-                          {formatClp(row.product.price)} · stock {row.product.currentStock}
+                          {formatClp(row.product.price)} · stock {formatQuantityWithUnit(getRemainingPosStock(row.product, row.quantity), row.product.unitMeasure)}
                         </span>
                       </div>
                       <button
@@ -1596,7 +2041,7 @@ export default function SalesPage() {
                         <input
                           type="number"
                           min="1"
-                          max={row.product.currentStock}
+                          max={getOnlineAvailableStock(row.product)}
                           value={row.quantity}
                           onChange={(event) => updateCartQuantity(row.product.id, event.target.value)}
                           required
@@ -1611,6 +2056,17 @@ export default function SalesPage() {
                 ))
               )}
             </div>
+
+            {lastScannedProduct && (
+              <div className="rounded-[5px] border border-[#bbf7d0] bg-positive-50 px-3 py-2 text-xs text-positive-600">
+                <span className="font-semibold">Último escaneado:</span>{" "}
+                <strong>{lastScannedProduct.name}</strong>
+                {" · "}stock disponible {formatQuantityWithUnit(getRemainingPosStock(
+                  lastScannedProduct,
+                  cartQuantityByProduct.get(String(lastScannedProduct.id)) || 0,
+                ), lastScannedProduct.unitMeasure)}
+              </div>
+            )}
 
             <div className="grid gap-2.5 border-t border-slate-200 pt-2.5">
               <div className="flex items-center justify-between gap-3">
@@ -1627,39 +2083,81 @@ export default function SalesPage() {
 
       {activeView === "history" && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
-            <label className="relative block w-full max-w-120 max-[720px]:max-w-none">
-              <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-              <input
-                className="pl-9.75"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por folio, cajero, método de pago o total"
-                aria-label="Buscar ventas"
-              />
-            </label>
+          <div className="flex flex-wrap items-center gap-2.5 max-[720px]:items-stretch">
+            <div className="flex w-full max-w-134 min-w-0 items-center gap-2.5">
+              <label className="relative block min-w-0 flex-1">
+                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+                <input
+                  className="pl-9.75"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar por folio, fecha, cajero, método o total"
+                  aria-label="Buscar ventas"
+                />
+              </label>
+              {canReviewCancellation && (
+                <button
+                  className={`${secondaryButtonClass} mr-0 size-11 min-h-11 shrink-0 p-0`}
+                  type="button"
+                  onClick={() => setSalesScannerOpen(true)}
+                  aria-label="Escanear código de barra"
+                  title="Escanear código de barra"
+                >
+                  <ScanBarcode size={20} />
+                </button>
+              )}
+            </div>
+            {canReviewCancellation && scannedSalesProduct && (
+              <div className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-full border border-rust-200 bg-rust-50 py-1 pr-1.5 pl-3 text-xs text-rust-700">
+                <span className="truncate">
+                  Producto escaneado: <strong>{scannedSalesProduct.name}</strong>
+                  {scannedSalesProduct.barcode ? ` · ${scannedSalesProduct.barcode}` : ""}
+                </span>
+                <button
+                  className="size-7 min-h-7 shrink-0 rounded-full border-rust-200 bg-white p-0 text-rust-700 hover:bg-rust-100"
+                  type="button"
+                  onClick={() => setScannedSalesProduct(null)}
+                  aria-label="Quitar filtro de producto escaneado"
+                  title="Quitar filtro"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className={tablePanelClass}>
             <div className={tableHeadingClass}>
               <div>
-                <h2>
-                  {salesFilter === "partial"
+                {salesFilter !== "current" && (
+                  <h2>
+                    {salesFilter === "partial"
                     ? "Ventas devueltas parcialmente"
                     : salesFilter === "cancelled"
                     ? "Ventas canceladas"
                     : salesFilter === "pending" && canReviewCancellation
                       ? "Solicitudes pendientes"
-                      : "Ventas vigentes"}
-                </h2>
-                <p>{formatTableRecordCount({
-                  visibleCount: salesPagination.paginatedItems.length,
-                  totalCount: salesByStatusFilter.length,
-                  filteredCount: filteredSales.length,
-                  hasFilters: hasSalesFilters,
-                })}</p>
+                      : "Ventas"}
+                  </h2>
+                )}
+                <p className={salesFilter === "current" ? "m-0!" : undefined}><TableRecordCount
+                  visibleCount={salesPagination.paginatedItems.length}
+                  totalCount={salesByStatusFilter.length}
+                  filteredCount={filteredSales.length}
+                  hasFilters={hasSalesFilters}
+                  mobileTotalCount={sales.length}
+                  mobilePage={salesPagination.page}
+                  mobilePageSize={salesPagination.pageSize}
+                /></p>
               </div>
-              <div className="ml-auto flex flex-wrap justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
+              <MobileTableTools
+                hasActiveFilters={hasSalesFilters}
+                onClear={() => { setSearch(""); setScannedSalesProduct(null); applySalesFilter("current"); }}
+              >
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+              </MobileTableTools>
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
                 <button
                   className={`mr-0 min-h-9 px-3 text-xs ${salesFilter === "cancelled" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : salesFilter === "partial" ? "border-ink-950 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                   type="button"
@@ -1680,6 +2178,46 @@ export default function SalesPage() {
                 </button>
               </div>
             </div>
+            <ResponsiveTableView
+              rows={salesPagination.paginatedItems}
+              getRowKey={(sale) => sale.id}
+              getRowLabel={(sale) => formatSaleFolio(sale.id)}
+              resetKey={`${salesPagination.page}|${salesFilter}|${normalizedSearch}|${scannedSalesProduct?.id || ""}`}
+              emptyMessage={sales.length === 0
+                ? "No hay ventas registradas."
+                : salesFilter === "pending" && canReviewCancellation
+                  ? "No hay solicitudes de devolución pendientes."
+                  : salesFilter === "partial"
+                    ? "No hay ventas devueltas parcialmente con los filtros ingresados."
+                    : salesFilter === "cancelled"
+                      ? "No hay ventas canceladas con los filtros ingresados."
+                      : "No se encontraron ventas con los filtros ingresados."}
+              renderSummary={(sale) => (
+                <div className="grid min-w-0 gap-2">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <strong className="font-mono text-sm text-ink-950">{formatSaleFolio(sale.id)}</strong>
+                    <span className={badgeClass(getSaleStatusTone(sale.status))}>{getSaleStatusLabel(sale.status)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <span className="text-xs text-slate-500">{formatDate(sale.date || sale.createdAt, SALE_DATE_TIME_OPTIONS, "Sin fecha")}</span>
+                    <strong className="font-mono text-sm text-ink-950">{formatClp(getSaleTotals(sale).netTotal)}</strong>
+                  </div>
+                </div>
+              )}
+              renderDetails={(sale) => (
+                <>
+                  <MobileDetailGrid>
+                    <MobileDetailField label="Usuario" wide>{sale.userNames} {sale.userSurnames}</MobileDetailField>
+                    <MobileDetailField label="Método">{getPaymentMethodLabel(sale.paymentMethod)}</MobileDetailField>
+                    <MobileDetailField label="Total original">{formatClp(getSaleTotals(sale).originalTotal)}</MobileDetailField>
+                    <MobileDetailField label="Devuelto">{formatClp(getSaleTotals(sale).returnedTotal)}</MobileDetailField>
+                    <MobileDetailField label="Total neto">{formatClp(getSaleTotals(sale).netTotal)}</MobileDetailField>
+                    {sale.cancellationRequest?.status && <MobileDetailField label="Solicitud" wide>{getCancellationRequestStatusLabel(sale.cancellationRequest.status)}</MobileDetailField>}
+                  </MobileDetailGrid>
+                  <MobileRowActions>{saleActionsFor(sale)}</MobileRowActions>
+                </>
+              )}
+              desktop={(
             <div className={tableScrollClass}>
               <table>
                 <thead>
@@ -1720,68 +2258,7 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className="text-left">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`}
-                            type="button"
-                            onClick={() => openDetailModal(sale)}
-                            disabled={loadingSaleDetail}
-                          >
-                            <Eye size={17} />
-                            Detalle
-                          </button>
-                          {canRequestCancellation &&
-                            isReturnableSale(sale) &&
-                            sale.cancellationRequest?.status !== "PENDING" && (
-                              <button
-                                className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
-                                type="button"
-                                onClick={() => openCancellationRequestModal(sale)}
-                                disabled={submitting}
-                              >
-                                <Send size={16} />
-                                Solicitar devolución
-                              </button>
-                            )}
-                          {canRequestCancellation &&
-                            isReturnableSale(sale) &&
-                            sale.cancellationRequest?.status === "PENDING" && (
-                              <button
-                                className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 border-amber-400 bg-amber-50 text-amber-800 disabled:cursor-not-allowed disabled:opacity-100`}
-                                type="button"
-                                disabled
-                              >
-                                <Clock3 size={16} />
-                                Solicitud pendiente
-                              </button>
-                            )}
-                          {canReviewCancellation &&
-                            isReturnableSale(sale) &&
-                            sale.cancellationRequest?.status === "PENDING" && (
-                              <button
-                                className={`${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
-                                type="button"
-                                onClick={() => openReviewModal(sale)}
-                                disabled={submitting}
-                              >
-                                <Send size={16} />
-                                Revisar solicitud
-                              </button>
-                            )}
-                          {canCancel &&
-                            isReturnableSale(sale) &&
-                            sale.cancellationRequest?.status !== "PENDING" && (
-                            <button
-                              className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
-                              type="button"
-                              onClick={() => openDirectReturnModal(sale)}
-                              disabled={submitting}
-                            >
-                              <RotateCcw size={17} />
-                              Registrar devolución
-                            </button>
-                          )}
-                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">{saleActionsFor(sale)}</div>
                       </td>
                     </tr>
                   ))}
@@ -1803,6 +2280,8 @@ export default function SalesPage() {
                 </tbody>
               </table>
             </div>
+              )}
+            />
             <Pagination
               page={salesPagination.page}
               pageSize={salesPagination.pageSize}

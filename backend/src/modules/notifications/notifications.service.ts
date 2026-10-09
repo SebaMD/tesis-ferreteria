@@ -1,0 +1,238 @@
+import nodemailer, { type Transporter } from "nodemailer";
+import { logServerError } from "../../utils/helpers.js";
+import {
+  FRONTEND_URL,
+  MAIL_ENABLED,
+  MAIL_FROM,
+  SMTP_HOST,
+  SMTP_PASS,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+} from "../../config/configEnv.js";
+import type { OrderCommercialModel } from "../onlineOrders/orderCommercialModel.js";
+import { findActiveWarehouseEmails } from "./notifications.repository.js";
+import { renderPurchaseConfirmedMail } from "./purchaseConfirmedMail.js";
+import { renderOrderStatusMail } from "./orderStatusMail.js";
+
+export type ClientOrderMailEvent =
+  | "PURCHASE_CONFIRMED"
+  | "PREPARATION_STARTED"
+  | "READY_FOR_PICKUP"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED";
+
+export type WarehouseMailEvent =
+  | "NEW_ONLINE_ORDER_PAID"
+  | "NEW_SALE_DELIVERY";
+
+export type MailContent = {
+  subject: string;
+  text: string;
+  html?: string;
+};
+
+export class MailDeliveryError extends Error {
+  constructor(message = "No se pudo enviar el correo") {
+    super(message);
+    this.name = "MailDeliveryError";
+  }
+}
+
+let transporter: Transporter | null = null;
+let configurationWarningPrinted = false;
+
+function mailConfigurationIssues() {
+  const issues: string[] = [];
+  if (!SMTP_HOST) issues.push("falta SMTP_HOST");
+  if (!MAIL_FROM) issues.push("falta MAIL_FROM");
+  if (Boolean(SMTP_USER) !== Boolean(SMTP_PASS)) {
+    issues.push("SMTP_USER y SMTP_PASS deben configurarse juntos");
+  }
+  return issues;
+}
+
+function warnInvalidConfigurationOnce() {
+  if (configurationWarningPrinted) return;
+  configurationWarningPrinted = true;
+  const issues = mailConfigurationIssues();
+  console.warn(
+    `Configuracion SMTP incompleta: ${issues.join("; ")}. Los correos se omitiran sin afectar la operacion principal.`,
+  );
+}
+
+function getTransporter() {
+  if (!MAIL_ENABLED) return null;
+  if (mailConfigurationIssues().length > 0) {
+    warnInvalidConfigurationOnce();
+    return null;
+  }
+  if (transporter) return transporter;
+
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: SMTP_USER && SMTP_PASS
+      ? { user: SMTP_USER, pass: SMTP_PASS }
+      : undefined,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+  return transporter;
+}
+
+async function sendMailBestEffort(to: string, content: MailContent) {
+  const currentTransporter = getTransporter();
+  if (!currentTransporter || !MAIL_FROM || !to.trim()) return;
+
+  try {
+    await currentTransporter.sendMail({
+      from: MAIL_FROM,
+      to,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    });
+  } catch (error) {
+    logServerError("No se pudo enviar el correo informativo", error);
+  }
+}
+
+export async function sendMailRequired(to: string, content: MailContent) {
+  if (!MAIL_ENABLED) {
+    throw new MailDeliveryError("El envio de correos no esta habilitado");
+  }
+  if (mailConfigurationIssues().length > 0) {
+    warnInvalidConfigurationOnce();
+    throw new MailDeliveryError("La configuracion SMTP esta incompleta");
+  }
+  if (!MAIL_FROM || !to.trim()) {
+    throw new MailDeliveryError("El destinatario del correo no es valido");
+  }
+
+  const currentTransporter = getTransporter();
+  if (!currentTransporter) {
+    throw new MailDeliveryError("El transporte SMTP no esta disponible");
+  }
+
+  try {
+    await currentTransporter.sendMail({
+      from: MAIL_FROM,
+      to,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+    });
+  } catch {
+    console.error("No se pudo enviar un correo requerido mediante SMTP.");
+    throw new MailDeliveryError();
+  }
+}
+
+export function buildClientOrderMailContent(
+  folio: string,
+  event: ClientOrderMailEvent,
+  trackingUrl?: string,
+  recipientType: "CLIENT" | "GUEST" = "CLIENT",
+  commercialModel?: OrderCommercialModel,
+): MailContent {
+  if (event === "PURCHASE_CONFIRMED" && commercialModel) {
+    return renderPurchaseConfirmedMail(commercialModel, trackingUrl);
+  }
+  if (event !== "PURCHASE_CONFIRMED") {
+    return renderOrderStatusMail({
+      folio,
+      event,
+      trackingUrl,
+      recipientType,
+      model: commercialModel,
+    });
+  }
+  const trackingText = trackingUrl
+    ? ` Puedes seguir el pedido de forma segura en: ${trackingUrl}`
+    : recipientType === "GUEST"
+      ? " Conserva el enlace seguro mostrado al finalizar la compra para consultar su estado."
+      : " Puedes revisar su estado en Mis pedidos.";
+  const content: Record<ClientOrderMailEvent, MailContent> = {
+    PURCHASE_CONFIRMED: {
+      subject: `${folio}: compra confirmada`,
+      text: `El pago de tu pedido ${folio} fue confirmado.${trackingText}`,
+    },
+    PREPARATION_STARTED: {
+      subject: `${folio}: comenzamos a preparar tu pedido`,
+      text: `Estamos preparando tu pedido ${folio}.${trackingText}`,
+    },
+    READY_FOR_PICKUP: {
+      subject: `${folio}: pedido listo para retirar`,
+      text: `Tu pedido ${folio} esta listo para retirar en FERRETERIA FYF.${trackingText}`,
+    },
+    OUT_FOR_DELIVERY: {
+      subject: `${folio}: pedido en reparto`,
+      text: `Tu pedido ${folio} va en camino a la direccion indicada.${trackingText}`,
+    },
+    DELIVERED: {
+      subject: `${folio}: pedido entregado`,
+      text: `Tu pedido ${folio} fue entregado. Gracias por comprar en FERRETERIA FYF.${trackingText}`,
+    },
+  };
+  return content[event];
+}
+
+function warehouseContent(folio: string, event: WarehouseMailEvent): MailContent {
+  const content: Record<WarehouseMailEvent, MailContent> = {
+    NEW_ONLINE_ORDER_PAID: {
+      subject: `${folio}: nuevo pedido pendiente de preparacion`,
+      text: `El pedido online ${folio} fue pagado y esta pendiente de preparacion.`,
+    },
+    NEW_SALE_DELIVERY: {
+      subject: `${folio}: nueva venta en caja con despacho`,
+      text: `La venta ${folio} genero una entrega pendiente de preparacion.`,
+    },
+  };
+  return content[event];
+}
+
+export async function notifyClientOrderBestEffort(input: {
+  email: string;
+  folio: string;
+  event: ClientOrderMailEvent;
+  trackingUrl?: string;
+  recipientType?: "CLIENT" | "GUEST";
+  commercialModel?: OrderCommercialModel;
+}) {
+  if (!MAIL_ENABLED) return;
+  let trackingUrl = input.trackingUrl;
+  if (!trackingUrl && input.recipientType !== "GUEST" && input.commercialModel) {
+    const url = new URL("/orders", FRONTEND_URL);
+    url.hash = `order-${input.commercialModel.orderId}`;
+    trackingUrl = url.toString();
+  }
+  await sendMailBestEffort(
+    input.email,
+    buildClientOrderMailContent(
+      input.folio,
+      input.event,
+      trackingUrl,
+      input.recipientType,
+      input.commercialModel,
+    ),
+  );
+}
+
+export async function notifyWarehousesBestEffort(input: {
+  folio: string;
+  event: WarehouseMailEvent;
+}) {
+  if (!MAIL_ENABLED) return;
+
+  try {
+    const emails = await findActiveWarehouseEmails();
+    await Promise.allSettled(
+      emails.map((email) => sendMailBestEffort(email, warehouseContent(input.folio, input.event))),
+    );
+  } catch (error) {
+    logServerError("No se pudieron obtener destinatarios WAREHOUSE", error);
+  }
+}

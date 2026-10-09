@@ -3,6 +3,7 @@ export const SESSION_EXPIRED_MESSAGE = "La sesión expiró, inicia sesión nueva
 const TOKEN_KEY = "token";
 const USER_KEY = "user";
 const SESSION_NOTICE_KEY = "sessionNotice";
+const INTERNAL_VERIFICATION_KEY = "fyf-internal-email-verification";
 
 function decodeJwtPayload(token) {
   const parts = token.split(".");
@@ -31,6 +32,26 @@ export function clearStoredAuth() {
   localStorage.removeItem(USER_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(INTERNAL_VERIFICATION_KEY);
+}
+
+export function storeInternalVerificationChallenge(userId, challenge) {
+  if (!userId || !challenge) return;
+  sessionStorage.setItem(INTERNAL_VERIFICATION_KEY, JSON.stringify({ userId, challenge }));
+}
+
+export function readInternalVerificationChallenge(userId) {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(INTERNAL_VERIFICATION_KEY) || "null");
+    return Number(stored?.userId) === Number(userId) ? stored.challenge : null;
+  } catch {
+    sessionStorage.removeItem(INTERNAL_VERIFICATION_KEY);
+    return null;
+  }
+}
+
+export function clearInternalVerificationChallenge() {
+  sessionStorage.removeItem(INTERNAL_VERIFICATION_KEY);
 }
 
 export function storeAuthSession(token, user) {

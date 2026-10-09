@@ -6,14 +6,18 @@ import {
   handleSuccess,
 } from "../../utils/helpers.js";
 import {
+  ClientAccountError,
   createUserService,
+  deactivateClientAccountService,
   deleteUserService,
   editUserService,
   getUserByIdService,
+  getUserRolesService,
   getUsersService,
   updateCashierScheduleService,
+  updateClientProfileService,
 } from "./users.service.js";
-import { validateCashierScheduleBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
+import { validateCashierScheduleBody, validateClientDeactivationBody, validateClientProfileBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -74,6 +78,14 @@ export async function getUsers(_req: Request, res: Response) {
   }
 }
 
+export async function getUserRoles(_req: Request, res: Response) {
+  try {
+    return handleSuccess(res, 200, "Roles obtenidos exitosamente", await getUserRolesService());
+  } catch (error) {
+    return handleErrorServer(res, 500, "Error al obtener roles", getErrorMessage(error));
+  }
+}
+
 export async function getUserById(req: Request, res: Response) {
   try {
     const userId = parseId(req.params.id);
@@ -110,6 +122,7 @@ export async function createUser(req: Request, res: Response) {
     if (duplicateMessage) return handleErrorClient(res, 409, duplicateMessage);
 
     const message = getErrorMessage(error);
+    if (message === "El RUT ya está registrado") return handleErrorClient(res, 409, message);
     if (
       message === "Debe seleccionar un rol valido" ||
       message === "No se puede cambiar el rol de un usuario administrador" ||
@@ -119,6 +132,49 @@ export async function createUser(req: Request, res: Response) {
     }
 
     return handleErrorServer(res, 500, "Error al crear usuario", message);
+  }
+}
+
+export async function updateMyClientProfile(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientProfileBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+    return handleSuccess(
+      res,
+      200,
+      "Perfil actualizado exitosamente",
+      await updateClientProfileService(req.user.id, validation.value),
+    );
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (message === "La cuenta de cliente no está activa" || message === "Usuario no encontrado") {
+      return handleErrorClient(res, 403, message);
+    }
+    return handleErrorServer(res, 500, "No se pudo actualizar el perfil", error);
+  }
+}
+
+export async function deactivateMyClientAccount(req: AuthenticatedRequest, res: Response) {
+  const validation = validateClientDeactivationBody(req.body);
+  if (!validation.success) {
+    return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
+  }
+  try {
+    if (!req.user) return handleErrorClient(res, 401, "Token invalido o expirado");
+    return handleSuccess(
+      res,
+      200,
+      "Cuenta desactivada correctamente",
+      await deactivateClientAccountService(req.user.id, validation.value),
+    );
+  } catch (error) {
+    if (error instanceof ClientAccountError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "No se pudo desactivar la cuenta", error);
   }
 }
 
@@ -147,6 +203,7 @@ export async function editUser(req: AuthenticatedRequest, res: Response) {
 
     const duplicateMessage = uniqueUserMessage(error);
     if (duplicateMessage) return handleErrorClient(res, 409, duplicateMessage);
+    if (message === "El RUT ya está registrado") return handleErrorClient(res, 409, message);
 
     if (
       message === "Debe seleccionar un rol valido" ||

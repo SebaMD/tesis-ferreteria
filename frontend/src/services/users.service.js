@@ -1,5 +1,10 @@
 import api from "../api/httpClient.js";
 
+export async function getUserRolesRequest() {
+  const response = await api.get("/users/roles");
+  return response.data.data || [];
+}
+
 export async function getUsersRequest() {
   const response = await api.get("/users");
   return response.data.data || [];
@@ -22,5 +27,15 @@ export async function deleteUserRequest(id) {
 
 export async function updateCashierScheduleRequest(id, data) {
   const response = await api.patch(`/users/${id}/work-schedule`, data);
+  return response.data.data;
+}
+
+export async function updateMyClientProfileRequest(data) {
+  const response = await api.patch("/users/me/profile", data);
+  return response.data.data;
+}
+
+export async function deactivateMyClientAccountRequest(password) {
+  const response = await api.post("/users/me/deactivate", { password });
   return response.data.data;
 }

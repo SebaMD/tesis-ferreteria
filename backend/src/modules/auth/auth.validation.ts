@@ -1,11 +1,13 @@
+import { isValidEmail, normalizeEmail } from "../../utils/email.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
+
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
-const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
-const PHONE_REGEX = /^\+?[\d\s-]{8,20}$/;
+export const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
+export const PASSWORD_REQUIREMENTS_MESSAGE = "La contrasena debe tener 8 a 128 caracteres, una mayuscula, un numero y un caracter especial";
+const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 
 export type LoginBody = {
-  correo: string;
+  identifier: string;
   password: string;
 };
 
@@ -28,39 +30,17 @@ type ValidationResult<T> =
       error: string;
     };
 
-export function normalizeEmail(email = "") {
-  return String(email).trim().toLowerCase();
+export { normalizeEmail };
+
+export function isValidPassword(password: string) {
+  return PASSWORD_REGEX.test(password);
 }
 
 export function normalizeName(name = "") {
   return String(name).trim().replace(/\s+/g, " ");
 }
 
-export function normalizeRut(rut = "") {
-  return String(rut).trim().replace(/\./g, "").toUpperCase();
-}
-
-export function isValidRut(rut = "") {
-  const normalizedRut = normalizeRut(rut);
-  const match = normalizedRut.match(/^(\d{7,8})-([\dK])$/);
-  if (!match) return false;
-
-  const body = match[1];
-  const verifierDigit = match[2];
-
-  let sum = 0;
-  let multiplier = 2;
-
-  for (let i = body.length - 1; i >= 0; i -= 1) {
-    sum += Number(body[i]) * multiplier;
-    multiplier = multiplier === 7 ? 2 : multiplier + 1;
-  }
-
-  const remainder = 11 - (sum % 11);
-  const expectedDigit = remainder === 11 ? "0" : remainder === 10 ? "K" : String(remainder);
-
-  return verifierDigit === expectedDigit;
-}
+export { isValidRut, normalizeRut };
 
 export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -69,18 +49,26 @@ export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
 
   const input = body as Record<string, unknown>;
 
-  if (typeof input.correo !== "string") {
-    return { success: false, error: "El correo debe ser texto" };
+  const fields = Object.keys(input);
+  if (fields.some((field) => !["identifier", "correo", "password"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+
+  const rawIdentifier = input.identifier ?? input.correo;
+  if (typeof rawIdentifier !== "string") {
+    return { success: false, error: "El correo o RUT debe ser texto" };
   }
 
   if (typeof input.password !== "string") {
     return { success: false, error: "La contrasena debe ser texto" };
   }
 
-  const correo = normalizeEmail(input.correo);
+  const identifier = rawIdentifier.includes("@")
+    ? normalizeEmail(rawIdentifier)
+    : normalizeRut(rawIdentifier);
 
-  if (!EMAIL_REGEX.test(correo)) {
-    return { success: false, error: "Debe ingresar un correo valido" };
+  if (rawIdentifier.includes("@") ? !isValidEmail(identifier) : !isValidRut(identifier)) {
+    return { success: false, error: "Debe ingresar un correo o RUT valido" };
   }
 
   if (input.password.length < 1) {
@@ -90,7 +78,7 @@ export function validateLoginBody(body: unknown): ValidationResult<LoginBody> {
   return {
     success: true,
     value: {
-      correo,
+      identifier,
       password: input.password,
     },
   };
@@ -102,6 +90,13 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
   }
 
   const input = body as Record<string, unknown>;
+  const allowedFields = ["rut", "names", "surnames", "correo", "password", "phone"];
+
+  for (const field of Object.keys(input)) {
+    if (!allowedFields.includes(field)) {
+      return { success: false, error: `El campo ${field} no esta permitido en el registro publico` };
+    }
+  }
 
   if (typeof input.rut !== "string") return { success: false, error: "El RUT debe ser texto" };
   if (typeof input.names !== "string") return { success: false, error: "Los nombres deben ser texto" };
@@ -118,7 +113,7 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
   const surnames = normalizeName(input.surnames);
   const correo = normalizeEmail(input.correo);
 
-  if (!RUT_REGEX.test(rut) || !isValidRut(rut)) {
+  if (!isValidRut(rut)) {
     return { success: false, error: "El RUT no es valido" };
   }
 
@@ -130,14 +125,14 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
     return { success: false, error: "Los apellidos deben tener entre 3 y 120 caracteres y solo letras/espacios" };
   }
 
-  if (correo.length > 255 || !EMAIL_REGEX.test(correo)) {
+  if (!isValidEmail(correo)) {
     return { success: false, error: "Debe ingresar un correo valido" };
   }
 
-  if (!PASSWORD_REGEX.test(input.password)) {
+  if (!isValidPassword(input.password)) {
     return {
       success: false,
-      error: "La contrasena debe tener 8 a 128 caracteres, una mayuscula, un numero y un caracter especial",
+      error: PASSWORD_REQUIREMENTS_MESSAGE,
     };
   }
 
@@ -148,10 +143,15 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
       phone = null;
     } else {
       if (typeof input.phone !== "string") return { success: false, error: "El telefono debe ser texto" };
-      phone = input.phone.trim();
-      if (!PHONE_REGEX.test(phone)) {
-        return { success: false, error: "El telefono debe tener un formato valido" };
+      const compactPhone = input.phone.trim().replace(/[\s().-]/g, "");
+      if (!PHONE_REGEX.test(compactPhone)) {
+        return { success: false, error: "El telefono debe ser un movil chileno valido" };
       }
+      phone = compactPhone.startsWith("+56")
+        ? compactPhone
+        : compactPhone.startsWith("56")
+          ? `+${compactPhone}`
+          : `+56${compactPhone}`;
     }
   }
 
@@ -165,5 +165,72 @@ export function validateRegisterBody(body: unknown): ValidationResult<RegisterBo
       password: input.password,
       phone,
     },
+  };
+}
+
+export function validatePasswordResetRequestBody(body: unknown): ValidationResult<{ email: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe ingresar un correo electronico" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "email")) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.email !== "string") {
+    return { success: false, error: "Debe ingresar un correo electronico" };
+  }
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return { success: false, error: "Debe ingresar un correo valido" };
+  return { success: true, value: { email } };
+}
+
+export function validatePasswordResetConfirmBody(
+  body: unknown,
+): ValidationResult<{ token: string; password: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe ingresar el enlace y la nueva contrasena" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => !["token", "password"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(input.token)) {
+    return { success: false, error: "El enlace no es valido o ya expiro" };
+  }
+  if (typeof input.password !== "string" || !isValidPassword(input.password)) {
+    return { success: false, error: PASSWORD_REQUIREMENTS_MESSAGE };
+  }
+  return { success: true, value: { token: input.token, password: input.password } };
+}
+
+export function validateClientReactivationRequestBody(body: unknown): ValidationResult<LoginBody> {
+  return validateLoginBody(body);
+}
+
+export function validateClientReactivationConfirmBody(
+  body: unknown,
+): ValidationResult<LoginBody & { challengeId: number; pin: string }> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debes ingresar tus credenciales y el código de verificación" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => !["identifier", "correo", "password", "challengeId", "pin"].includes(field))) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  const credentials = validateLoginBody({
+    ...(input.identifier !== undefined ? { identifier: input.identifier } : { correo: input.correo }),
+    password: input.password,
+  });
+  if (!credentials.success) return credentials;
+  const challengeId = Number(input.challengeId);
+  if (!Number.isInteger(challengeId) || challengeId < 1) {
+    return { success: false, error: "La verificación solicitada no es válida" };
+  }
+  if (typeof input.pin !== "string" || !/^\d{6}$/.test(input.pin)) {
+    return { success: false, error: "El código debe contener exactamente 6 dígitos" };
+  }
+  return {
+    success: true,
+    value: { ...credentials.value, challengeId, pin: input.pin },
   };
 }

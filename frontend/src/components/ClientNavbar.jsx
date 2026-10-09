@@ -1,0 +1,144 @@
+import { ClipboardList, Heart, LayoutDashboard, LogIn, LogOut, Search, ShoppingCart, UserPlus, UserRound } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import useAuth from "../hooks/useAuth.js";
+import useCart from "../hooks/useCart.js";
+import BrandLogo from "./BrandLogo.jsx";
+
+function navClass({ isActive }) {
+  return `inline-flex min-h-10 items-center gap-1.5 rounded-[5px] px-3 py-2 text-sm font-bold transition-colors max-[720px]:px-2 max-[720px]:text-xs ${
+    isActive ? "bg-rust-50 text-rust-600" : "text-ink-700 hover:bg-slate-100 hover:text-ink-950"
+  }`;
+}
+
+export default function ClientNavbar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAuthenticated, logout, user } = useAuth();
+  const { totalUnits } = useCart();
+  const isClient = user?.role === "CLIENT";
+  const searchInputRef = useRef(null);
+  const catalogSearch = location.pathname === "/catalog" ? searchParams.get("search") || "" : "";
+
+  useLayoutEffect(() => {
+    if (location.pathname !== "/catalog" || !location.state?.restoreCatalogSearchFocus) return;
+
+    const input = searchInputRef.current;
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    const cursor = input.value.length;
+    input.setSelectionRange(cursor, cursor);
+  }, [location.pathname, location.state]);
+
+  const updateCatalogSearch = (value) => {
+    const next = new URLSearchParams(location.pathname === "/catalog" ? searchParams : undefined);
+    if (value) next.set("search", value);
+    else next.delete("search");
+    if (location.pathname === "/catalog") {
+      setSearchParams(next, { replace: true, preventScrollReset: true });
+    }
+    else {
+      navigate(
+        { pathname: "/catalog", search: next.toString() ? `?${next.toString()}` : "" },
+        {
+          preventScrollReset: true,
+          state: {
+            restoreCatalogSearchFocus: true,
+            scrollToCatalogResults: true,
+          },
+        },
+      );
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/catalog");
+  };
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur" data-client-navbar>
+      <div className="mx-auto flex min-h-17 w-full max-w-360 flex-wrap items-center gap-3 px-6 py-2 max-[720px]:px-3.5">
+        <div className="mr-3 flex min-w-0 items-center gap-2 text-ink-950 max-[720px]:mr-0 max-[720px]:gap-1.5">
+          <BrandLogo className="size-11 max-[720px]:size-8" />
+          <Link className="grid leading-tight text-ink-950 no-underline" to="/catalog">
+            <strong className="text-sm max-[720px]:text-xs">Ferretería FYF</strong>
+            <small className="text-[10px] font-semibold text-slate-500">Catálogo online</small>
+          </Link>
+        </div>
+
+        <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full max-[720px]:flex-nowrap" aria-label="Navegación de clientes">
+          <NavLink className={navClass} to="/catalog">Catálogo</NavLink>
+          {isClient && <NavLink className={navClass} to="/orders"><ClipboardList size={15} /><span className="max-[720px]:hidden">Mis pedidos</span><span className="hidden max-[720px]:inline">Pedidos</span></NavLink>}
+          {isClient && <NavLink className={navClass} to="/favorites"><Heart className="inline" size={15} /> Favoritos</NavLink>}
+          {!isAuthenticated && <NavLink className={navClass} to="/guest-orders"><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
+          <Link className="relative ml-auto hidden size-10 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:grid" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
+            <ShoppingCart size={20} />
+            {totalUnits > 0 && (
+              <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
+                {totalUnits > 99 ? "99+" : totalUnits}
+              </span>
+            )}
+          </Link>
+        </nav>
+
+        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-none min-[1024px]:ml-2 min-[1024px]:min-w-40 min-[1024px]:flex-1" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label className="sr-only" htmlFor="catalog-navbar-search">Buscar producto</label>
+          <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} aria-hidden="true" />
+          <input
+            id="catalog-navbar-search"
+            ref={searchInputRef}
+            className="min-h-10 w-full pl-9 text-sm"
+            type="search"
+            value={catalogSearch}
+            onChange={(event) => updateCatalogSearch(event.target.value)}
+            placeholder="Buscar producto..."
+            autoComplete="off"
+          />
+        </form>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2 min-[1024px]:ml-0">
+          <Link className="relative grid size-11 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:hidden" to="/cart" title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
+            <ShoppingCart size={20} />
+            {totalUnits > 0 && (
+              <span className="absolute -top-2 -right-2 grid min-h-5 min-w-5 place-items-center rounded-full bg-rust-500 px-1 text-[10px] font-black text-white">
+                {totalUnits > 99 ? "99+" : totalUnits}
+              </span>
+            )}
+          </Link>
+          {isAuthenticated && !isClient && (
+            <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/dashboard">
+              <LayoutDashboard size={17} />
+              <span className="max-[620px]:hidden">Sistema interno</span>
+            </Link>
+          )}
+
+          {!isAuthenticated && (
+            <>
+              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white no-underline hover:bg-ink-700" to="/login">
+                <LogIn size={17} /> <span>Iniciar sesión</span>
+              </Link>
+              <Link className="inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100 max-[520px]:hidden" to="/register" aria-label="Registrarse">
+                <UserPlus size={17} /> <span>Registrarse</span>
+              </Link>
+            </>
+          )}
+
+          {isClient && (
+            <Link className="relative grid size-10 place-items-center rounded-[5px] border border-slate-300 text-ink-700 no-underline hover:bg-slate-100" to="/account" title={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta · correo pendiente de verificación"} aria-label={user.emailVerifiedAt || user.emailVerified ? "Mi cuenta" : "Mi cuenta, correo pendiente de verificación"}>
+              <UserRound size={18} />
+              {!user.emailVerifiedAt && !user.emailVerified && <span className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full bg-rust-500 text-[11px] font-black text-white" aria-hidden="true">!</span>}
+            </Link>
+          )}
+
+          {isAuthenticated && (
+            <button className="size-10 min-h-10 border-slate-300 bg-white p-0 text-ink-700 hover:bg-slate-100" type="button" onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
+              <LogOut size={18} />
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

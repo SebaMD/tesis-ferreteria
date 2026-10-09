@@ -8,7 +8,7 @@ import {
 
 export const categoriesTable = pgTable(
     "categories", {
-        id: integer().primaryKey().generatedAlwaysAsIdentity(),
+        id: integer().primaryKey().generatedByDefaultAsIdentity(),
         name: varchar({ length: 100 }).notNull().unique(),
         description: text(),
         createdAt: timestamp("created_at").notNull().defaultNow(),

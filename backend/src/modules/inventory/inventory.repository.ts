@@ -7,6 +7,7 @@ const movementColumns = {
   productId: inventoryMovementsTable.productId,
   productName: productsTable.name,
   userId: inventoryMovementsTable.userId,
+  onlineOrderId: inventoryMovementsTable.onlineOrderId,
   userNames: usersTable.names,
   userSurnames: usersTable.surnames,
   movementType: inventoryMovementsTable.movementType,
@@ -22,7 +23,7 @@ export async function findInventoryMovements() {
     .select(movementColumns)
     .from(inventoryMovementsTable)
     .innerJoin(productsTable, eq(inventoryMovementsTable.productId, productsTable.id))
-    .innerJoin(usersTable, eq(inventoryMovementsTable.userId, usersTable.id));
+    .leftJoin(usersTable, eq(inventoryMovementsTable.userId, usersTable.id));
 }
 
 export async function findInventoryMovementById(id: number) {
@@ -30,7 +31,7 @@ export async function findInventoryMovementById(id: number) {
     .select(movementColumns)
     .from(inventoryMovementsTable)
     .innerJoin(productsTable, eq(inventoryMovementsTable.productId, productsTable.id))
-    .innerJoin(usersTable, eq(inventoryMovementsTable.userId, usersTable.id))
+    .leftJoin(usersTable, eq(inventoryMovementsTable.userId, usersTable.id))
     .where(eq(inventoryMovementsTable.id, id))
     .limit(1);
   return movement;

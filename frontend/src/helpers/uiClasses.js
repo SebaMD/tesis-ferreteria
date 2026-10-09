@@ -1,6 +1,6 @@
 export const pageClass = "mx-auto grid w-full max-w-[1440px] gap-4 px-6 py-5 max-[720px]:gap-4 max-[720px]:px-3.5 max-[720px]:py-[18px]";
 
-export const pageHeaderClass = "flex flex-wrap items-start justify-between gap-4 [&_h1]:m-0 [&_h1]:text-[21px] [&_h1]:font-bold [&_h1]:text-ink-950 max-[720px]:[&_h1]:text-[19px] [&_p]:mt-[5px] [&_p]:mb-0 [&_p]:text-sm [&_p]:text-slate-500";
+export const pageHeaderClass = "flex flex-wrap items-start justify-between gap-4 max-[720px]:justify-center max-[720px]:text-center max-[720px]:[&>div:first-child]:w-full [&_h1]:m-0 [&_h1]:text-[21px] [&_h1]:font-bold [&_h1]:text-ink-950 max-[720px]:[&_h1]:text-[19px] [&_p]:mt-[5px] [&_p]:mb-0 [&_p]:text-sm [&_p]:text-slate-500";
 
 export const panelClass = "grid content-start gap-[15px] rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.04)]";
 
@@ -8,7 +8,7 @@ export const tablePanelClass = "overflow-hidden rounded-md border border-slate-2
 
 export const tableScrollClass = "w-full overflow-x-auto";
 
-export const tableHeadingClass = "flex min-h-[58px] items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
+export const tableHeadingClass = "flex min-h-[58px] flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-ink-950 [&_p]:mt-[3px] [&_p]:mb-0 [&_p]:text-xs [&_p]:text-slate-500";
 
 export const secondaryButtonClass = "mr-auto border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:mr-0";
 
@@ -20,7 +20,7 @@ const badgeBase = "status-badge relative inline-flex min-h-[27px] items-center r
 
 const badgeTones = {
   success: "bg-positive-50 text-positive-600",
-  info: "bg-sky-50 text-sky-700",
+  info: "status-badge--info bg-sky-50 text-sky-700",
   warning: "bg-rust-50 text-rust-600",
   critical: "bg-critical-50 text-critical-600",
   neutral: "bg-slate-100 text-ink-700",

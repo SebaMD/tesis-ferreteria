@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "in_store_only" boolean DEFAULT false NOT NULL;

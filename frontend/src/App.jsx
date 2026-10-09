@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
+import ClientLayout from "./components/ClientLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import useAuth from "./hooks/useAuth.js";
@@ -11,6 +12,27 @@ import ProductsPage from "./pages/ProductsPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SalesPage from "./pages/SalesPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
+import CatalogPage from "./pages/CatalogPage.jsx";
+import ClientAccountPage from "./pages/ClientAccountPage.jsx";
+import ClientCartPage from "./pages/ClientCartPage.jsx";
+import CheckoutPage from "./pages/CheckoutPage.jsx";
+import CheckoutChoicePage from "./pages/CheckoutChoicePage.jsx";
+import GuestOrderTrackingPage from "./pages/GuestOrderTrackingPage.jsx";
+import GuestDeviceOrdersPage from "./pages/GuestDeviceOrdersPage.jsx";
+import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
+import PaymentResultPage from "./pages/PaymentResultPage.jsx";
+import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
+import ProductDetailPage from "./pages/ProductDetailPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
+import FavoritesPage from "./pages/FavoritesPage.jsx";
+import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
+import InternalEmailVerificationPage from "./pages/InternalEmailVerificationPage.jsx";
+import LogisticsScanPage from "./pages/LogisticsScanPage.jsx";
+import StatisticsPage from "./pages/StatisticsPage.jsx";
+import PromotionsPage from "./pages/PromotionsPage.jsx";
+import ClientReactivationPage from "./pages/ClientReactivationPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,12 +57,55 @@ function ProtectedPage({ children, allowedRoles }) {
   );
 }
 
+function StorePage({ children }) {
+  const { isAuthenticated, user } = useAuth();
+
+  if (isAuthenticated && user?.role !== "CLIENT") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <ClientLayout>{children}</ClientLayout>;
+}
+
+function ProtectedClientPage({ children }) {
+  return (
+    <ProtectedRoute allowedRoles={ROUTE_PERMISSIONS.client}>
+      <ClientLayout>{children}</ClientLayout>
+    </ProtectedRoute>
+  );
+}
+
+function GuestStorePage({ children }) {
+  const { isAuthenticated, user } = useAuth();
+  if (isAuthenticated) {
+    return <Navigate to={user?.role === "CLIENT" ? "/orders" : "/dashboard"} replace />;
+  }
+  return <ClientLayout>{children}</ClientLayout>;
+}
+
 export default function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/reactivate-account" element={<ClientReactivationPage />} />
+      <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
+      <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
+      <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
+      <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
+      <Route path="/checkout-options" element={<StorePage><CheckoutChoicePage /></StorePage>} />
+      <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
+      <Route path="/verify-email" element={<ProtectedClientPage><ClientEmailVerificationPage /></ProtectedClientPage>} />
+      <Route path="/checkout" element={<StorePage><CheckoutPage /></StorePage>} />
+      <Route path="/orders" element={<ProtectedClientPage><ClientOrdersPage /></ProtectedClientPage>} />
+      <Route path="/favorites" element={<ProtectedClientPage><FavoritesPage /></ProtectedClientPage>} />
+      <Route path="/payment-result" element={<ProtectedClientPage><PaymentResultPage /></ProtectedClientPage>} />
+      <Route path="/order-tracking" element={<StorePage><GuestOrderTrackingPage /></StorePage>} />
+      <Route path="/guest-orders" element={<GuestStorePage><GuestDeviceOrdersPage /></GuestStorePage>} />
       <Route
         path="/dashboard"
         element={
@@ -74,6 +139,22 @@ export default function App() {
         }
       />
       <Route
+        path="/online-orders-management"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.onlineOrdersManagement}>
+            <OnlineOrdersManagementPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
+        path="/logistics/scan"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.logisticsScan}>
+            <LogisticsScanPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
         path="/reports"
         element={
           <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.reports}>
@@ -89,7 +170,30 @@ export default function App() {
           </ProtectedPage>
         }
       />
-      <Route path="*" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
+      <Route
+        path="/"
+        element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
+      <Route
+        path="/promotions"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.promotions}>
+            <PromotionsPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
+        path="/statistics"
+        element={
+          <ProtectedPage allowedRoles={ROUTE_PERMISSIONS.statistics}>
+            <StatisticsPage />
+          </ProtectedPage>
+        }
+      />
+      <Route
+        path="*"
+        element={<Navigate to={isAuthenticated && user?.role !== "CLIENT" ? "/dashboard" : "/catalog"} replace />}
+      />
     </Routes>
   );
 }

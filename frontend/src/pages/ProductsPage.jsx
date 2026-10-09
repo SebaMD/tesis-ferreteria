@@ -1,21 +1,37 @@
-import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, Search, SlidersHorizontal, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ProductImagesManager from "../components/ProductImagesManager.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
+import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import useAuth from "../hooks/useAuth.js";
+import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
 import usePagination from "../hooks/usePagination.js";
 import { createCategoryRequest, deleteCategoryRequest, getCategoriesRequest, updateCategoryRequest } from "../services/categories.service.js";
 import { createInventoryMovementRequest, getInventoryMovementsRequest } from "../services/inventory.service.js";
-import { createProductRequest, deactivateProductRequest, getProductsRequest, updateProductRequest } from "../services/products.service.js";
+import {
+  createProductRequest,
+  deactivateProductRequest,
+  deleteProductImageRequest,
+  getProductsRequest,
+  reorderProductImagesRequest,
+  setPrimaryProductImageRequest,
+  updateProductRequest,
+  uploadProductImageRequest,
+} from "../services/products.service.js";
 import {
   badgeClass,
   codeCellClass,
@@ -43,24 +59,6 @@ const INVENTORY_DATE_OPTIONS = {
 const suggestionListClass = "mt-2 grid max-h-36 overflow-auto rounded-[5px] border border-slate-200 bg-white p-1 shadow-[0_8px_18px_rgba(16,21,31,0.08)]";
 const suggestionButtonClass = "flex min-h-8 w-full items-center justify-between rounded-[4px] border-0 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-ink-700 hover:bg-rust-50 hover:text-rust-700";
 const suggestionEmptyClass = "rounded-[5px] border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500";
-const UNIT_PLURALS = {
-  unidad: "unidades",
-  litro: "litros",
-  metro: "metros",
-  caja: "cajas",
-  paquete: "paquetes",
-  saco: "sacos",
-  bolsa: "bolsas",
-  par: "pares",
-  rollo: "rollos",
-  plancha: "planchas",
-  barra: "barras",
-  tubo: "tubos",
-  pieza: "piezas",
-  docena: "docenas",
-  set: "sets",
-  galón: "galones",
-};
 
 function normalizeEntityName(name) {
   return String(name).trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
@@ -95,19 +93,16 @@ function compareCategoriesByNewest(left, right) {
   return Number(right.id) - Number(left.id);
 }
 
-function getDisplayUnit(quantity, unitMeasure) {
-  const normalizedUnit = String(unitMeasure || "unidad").trim();
-  if (Number(quantity) === 1) return normalizedUnit;
-  return UNIT_PLURALS[normalizedUnit.toLocaleLowerCase("es")] || normalizedUnit;
-}
-
 const emptyForm = {
   categoryId: "",
   name: "",
+  brand: "",
+  barcode: "",
   description: "",
   price: "",
   unitMeasure: "unidad",
   minimumStock: 0,
+  inStoreOnly: false,
   status: true,
 };
 
@@ -149,11 +144,15 @@ export default function ProductsPage() {
   const [productSearch, setProductSearch] = useState("");
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
+  const [inventoryScannerOpen, setInventoryScannerOpen] = useState(false);
   const [productStatusTarget, setProductStatusTarget] = useState(null);
   const [linkedRegistration, setLinkedRegistration] = useState(null);
   const [submittingCategory, setSubmittingCategory] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
+  const [pendingProductImages, setPendingProductImages] = useState([]);
+  const [managingProductImages, setManagingProductImages] = useState(false);
   const [loading, setLoading] = useState(true);
+  const productBarcodeInputRef = useRef(null);
 
   const canManage = user?.role === "ADMIN";
   const canViewHistory = ["ADMIN", "MANAGER"].includes(user?.role);
@@ -162,9 +161,46 @@ export default function ProductsPage() {
   const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
   const canViewLowStockFilter = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(user?.role);
   const canViewAdministrativeStock = user?.role !== "CASHIER";
-  const inventoryTableColumnCount = 7 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
+  const inventoryTableColumnCount = 8 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
   const viewParam = searchParams.get("view");
   const filterParam = searchParams.get("filter");
+
+  useBarcodeScanner({
+    captureInModal: inventoryScannerOpen,
+    enabled: inventoryScannerOpen || activeForm === "product",
+    isInputAllowed: (target) => target === productBarcodeInputRef.current,
+    onScan: (barcode, { target }) => {
+      if (target === productBarcodeInputRef.current && activeForm === "product") {
+        setForm((current) => ({ ...current, barcode }));
+        return;
+      }
+
+      if (!inventoryScannerOpen) return;
+
+      setInventoryScannerOpen(false);
+
+      const product = products.find(
+        (item) => String(item.barcode || "") === barcode,
+      );
+
+      if (!product) {
+        toast.warning("No existe un producto visible asociado a este código de barra");
+        return;
+      }
+
+      setActiveView("inventory");
+      setSearch(barcode);
+      setCategoryFilter("");
+      setLowStockOnly(false);
+      setOutOfStockOnly(false);
+      setShowInactiveProducts(Boolean(product.status === false && canViewInactiveProducts));
+
+      toast.success(
+        `${product.name} · stock ${formatQuantityWithUnit(product.currentStock, product.unitMeasure)}`,
+      );
+    },
+  });
+
   const categoryOptions = useMemo(
     () =>
       [...new Map(products.map((product) => [product.categoryId, {
@@ -197,6 +233,7 @@ export default function ProductsPage() {
 
       return (
         String(product.id).includes(normalizedSearch) ||
+        String(product.barcode || "").includes(normalizedSearch) ||
         product.name.toLocaleLowerCase("es").includes(normalizedSearch) ||
         product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
       );
@@ -406,18 +443,30 @@ export default function ProductsPage() {
       product.categoryId === Number(form.categoryId) &&
       normalizeEntityName(product.name) === normalizeEntityName(form.name),
   );
+  const editingProduct = products.find((product) => product.id === editingProductId) || null;
+  const normalizedProductBarcode = String(form.barcode || "").trim();
+  const productBarcodeIsValid = !normalizedProductBarcode || /^\d{1,64}$/.test(normalizedProductBarcode);
+  const productBarcodeHasDuplicate = Boolean(normalizedProductBarcode) && products.some(
+    (product) =>
+      product.id !== editingProductId &&
+      String(product.barcode || "") === normalizedProductBarcode,
+  );
   const parsedProductPrice = Number(form.price);
   const parsedMinimumStock = Number(form.minimumStock);
   const linkedProductIsSaved =
     linkedRegistration?.step === "product" &&
     linkedRegistration.product?.id === editingProductId;
   const productHasPendingChanges = linkedProductIsSaved && (
+    pendingProductImages.length > 0 ||
     Number(form.categoryId) !== Number(linkedRegistration.product.categoryId) ||
     normalizeSearchValue(form.name) !== normalizeSearchValue(linkedRegistration.product.name) ||
+    normalizeSearchValue(form.brand) !== normalizeSearchValue(linkedRegistration.product.brand) ||
+    normalizedProductBarcode !== String(linkedRegistration.product.barcode || "") ||
     normalizeSearchValue(form.description) !== normalizeSearchValue(linkedRegistration.product.description) ||
     normalizeSearchValue(unitSearch) !== normalizeSearchValue(linkedRegistration.product.unitMeasure) ||
     Number(form.price) !== Number(linkedRegistration.product.price) ||
     Number(form.minimumStock) !== Number(linkedRegistration.product.minimumStock) ||
+    Boolean(form.inStoreOnly) !== Boolean(linkedRegistration.product.inStoreOnly) ||
     Boolean(form.status) !== Boolean(linkedRegistration.product.status)
   );
   const showProductContinueAction = linkedRegistration?.step === "product";
@@ -433,13 +482,79 @@ export default function ProductsPage() {
     parsedProductPrice >= 0 &&
     Number.isInteger(parsedMinimumStock) &&
     parsedMinimumStock >= 0 &&
-    !productFormHasDuplicate;
+    !productFormHasDuplicate &&
+    productBarcodeIsValid &&
+    !productBarcodeHasDuplicate;
   const categoryContinueLabel = linkedCategoryIsSaved
     ? "Actualizar y continuar"
     : "Guardar y agregar producto";
   const productContinueLabel = linkedProductIsSaved
     ? "Actualizar y registrar entrada"
     : "Guardar y registrar entrada";
+
+  const handleProductImageFiles = (files) => {
+    const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    const validFiles = files.filter((file) => {
+      if (!validTypes.has(file.type)) {
+        toast.error(`${file.name}: formato no permitido`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name}: la imagen supera 5 MB`);
+        return false;
+      }
+      return true;
+    });
+
+    setPendingProductImages((current) => [...current, ...validFiles]);
+  };
+
+  const handleSetPrimaryProductImage = async (imageId) => {
+    if (!editingProductId) return;
+    try {
+      setManagingProductImages(true);
+      await setPrimaryProductImageRequest(editingProductId, imageId);
+      await loadData();
+      toast.success("Imagen principal actualizada");
+    } catch (error) {
+      toast.error(getApiError(error, "No se pudo cambiar la imagen principal"));
+    } finally {
+      setManagingProductImages(false);
+    }
+  };
+
+  const handleDeleteProductImage = async (imageId) => {
+    if (!editingProductId) return;
+    try {
+      setManagingProductImages(true);
+      await deleteProductImageRequest(editingProductId, imageId);
+      await loadData();
+      toast.success("Imagen eliminada exitosamente");
+    } catch (error) {
+      toast.error(getApiError(error, "No se pudo eliminar la imagen"));
+    } finally {
+      setManagingProductImages(false);
+    }
+  };
+
+  const handleMoveProductImage = async (index, direction) => {
+    if (!editingProductId || !editingProduct?.images?.length) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= editingProduct.images.length) return;
+
+    const imageIds = editingProduct.images.map((image) => image.id);
+    [imageIds[index], imageIds[nextIndex]] = [imageIds[nextIndex], imageIds[index]];
+
+    try {
+      setManagingProductImages(true);
+      await reorderProductImagesRequest(editingProductId, imageIds);
+      await loadData();
+    } catch (error) {
+      toast.error(getApiError(error, "No se pudo ordenar las imagenes"));
+    } finally {
+      setManagingProductImages(false);
+    }
+  };
 
   const handleCreateCategory = async (event, shouldContinue = false) => {
     event.preventDefault();
@@ -536,6 +651,11 @@ export default function ProductsPage() {
       return;
     }
 
+    if (!productBarcodeIsValid) {
+      toast.warning("El código de barra debe contener entre 1 y 64 dígitos");
+      return;
+    }
+
     const duplicate = products.some(
       (product) =>
         product.id !== editingProductId &&
@@ -548,19 +668,51 @@ export default function ProductsPage() {
       return;
     }
 
+    if (productBarcodeHasDuplicate) {
+      toast.error("El código de barra ya está asociado a otro producto");
+      return;
+    }
+
     try {
       setSubmittingProduct(true);
       const productData = {
         ...form,
+        barcode: normalizedProductBarcode || null,
+        brand: String(form.brand || "").trim().replace(/\s+/g, " ") || null,
         categoryId: Number(form.categoryId),
         price: Number(form.price),
         unitMeasure: finalUnitMeasure,
         minimumStock: Number(form.minimumStock),
       };
 
-      const product = editingProductId
+      let product = editingProductId
         ? await updateProductRequest(editingProductId, productData)
         : await createProductRequest(productData);
+
+      if (!wasEditing) setEditingProductId(product.id);
+
+      if (pendingProductImages.length > 0) {
+        const uploadedImages = [];
+
+        try {
+          for (const file of pendingProductImages) {
+            uploadedImages.push(await uploadProductImageRequest(product.id, file));
+          }
+          product = {
+            ...product,
+            images: [...(product.images || []), ...uploadedImages],
+          };
+          setPendingProductImages([]);
+        } catch (imageError) {
+          setPendingProductImages(pendingProductImages.slice(uploadedImages.length));
+          await loadData();
+          toast.error(getApiError(
+            imageError,
+            "El producto fue guardado, pero una imagen no pudo subirse",
+          ));
+          return;
+        }
+      }
 
       if (linkedRegistration?.step === "product") {
         const nextRegistration = {
@@ -576,10 +728,13 @@ export default function ProductsPage() {
         setForm({
           categoryId: String(product.categoryId),
           name: product.name,
+          brand: product.brand || "",
+          barcode: product.barcode || "",
           description: product.description || "",
           price: product.price,
           unitMeasure: product.unitMeasure,
           minimumStock: product.minimumStock,
+          inStoreOnly: Boolean(product.inStoreOnly),
           status: product.status,
         });
         setCategorySearch(product.categoryName || "");
@@ -596,6 +751,7 @@ export default function ProductsPage() {
         setUnitSearch("unidad");
         setShowUnitSuggestions(false);
         setEditingProductId(null);
+        setPendingProductImages([]);
         setActiveForm(null);
       }
       toast.success(wasEditing ? "Producto actualizado exitosamente" : "Producto creado exitosamente");
@@ -714,6 +870,7 @@ export default function ProductsPage() {
     setActiveForm(null);
     setEditingCategoryId(null);
     setEditingProductId(null);
+    setPendingProductImages([]);
     setCategoryName("");
     setCategoryDescription("");
     setCategoryListSearch("");
@@ -750,13 +907,17 @@ export default function ProductsPage() {
 
     setLinkedRegistration({ ...registration, step: "product", direction });
     setEditingProductId(product?.id ?? null);
+    setPendingProductImages([]);
     setForm(product ? {
       categoryId: String(product.categoryId),
       name: product.name,
+      brand: product.brand || "",
+      barcode: product.barcode || "",
       description: product.description || "",
       price: product.price,
       unitMeasure: product.unitMeasure,
       minimumStock: product.minimumStock,
+      inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
     } : {
       ...emptyForm,
@@ -798,6 +959,7 @@ export default function ProductsPage() {
       entryResult: null,
     } : current);
     setEditingProductId(null);
+    setPendingProductImages([]);
     setForm({
       ...emptyForm,
       categoryId: String(category.id),
@@ -815,13 +977,17 @@ export default function ProductsPage() {
   const startEditing = (product) => {
     setEditingProductId(product.id);
     setActiveForm("product");
+    setPendingProductImages([]);
     setForm({
       categoryId: String(product.categoryId),
       name: product.name,
+      brand: product.brand || "",
+      barcode: product.barcode || "",
       description: product.description || "",
       price: product.price,
       unitMeasure: product.unitMeasure,
       minimumStock: product.minimumStock,
+      inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
     });
     setCategorySearch(product.categoryName || "");
@@ -832,6 +998,7 @@ export default function ProductsPage() {
 
   const cancelEditing = () => {
     setEditingProductId(null);
+    setPendingProductImages([]);
     setForm(emptyForm);
     setCategorySearch("");
     setShowCategorySuggestions(false);
@@ -871,6 +1038,7 @@ export default function ProductsPage() {
     setLinkedRegistration(null);
     setActiveForm("category");
     setEditingProductId(null);
+    setPendingProductImages([]);
     setEditingCategoryId(null);
     setCategoryName("");
     setCategoryDescription("");
@@ -887,6 +1055,7 @@ export default function ProductsPage() {
     setLinkedRegistration(null);
     setActiveForm("product");
     setEditingProductId(null);
+    setPendingProductImages([]);
     setForm(emptyForm);
     setCategorySearch("");
     setShowCategorySuggestions(false);
@@ -1056,6 +1225,7 @@ export default function ProductsPage() {
       columns: [
         { key: "id", header: "ID" },
         { key: "producto", header: "Producto" },
+        { key: "codigoBarra", header: "Código de barra" },
         { key: "categoria", header: "Categoría" },
         { key: "precio", header: "Precio" },
         { key: "stockActual", header: "Stock actual" },
@@ -1066,6 +1236,7 @@ export default function ProductsPage() {
       rows: filteredProducts.map((product) => ({
         id: product.id,
         producto: product.name,
+        codigoBarra: product.barcode || "",
         categoria: product.categoryName,
         precio: Number(product.price || 0),
         stockActual: Number(product.currentStock || 0),
@@ -1135,31 +1306,38 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className="flex min-w-90 flex-[0_1_540px] items-center gap-2.5 max-[980px]:min-w-0 max-[980px]:flex-1 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-col max-[720px]:items-stretch">
-          <label className="relative block w-full max-w-85 max-[720px]:max-w-none">
+        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-215 flex-none") : "w-full max-w-190 flex-none"}`}>
+          <label className="relative block min-w-0 flex-1 max-[720px]:min-w-60 max-[720px]:max-w-none">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
               className="pl-9.75"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={activeView === "history" ? "Buscar por ID de movimiento, producto o categoría" : "Buscar por ID, producto o categoría"}
+              placeholder={activeView === "history" ? "Buscar por ID de movimiento, producto o categoría" : "Buscar por ID, código, producto o categoría"}
               aria-label={activeView === "history" ? "Buscar movimientos" : "Buscar productos"}
             />
           </label>
-          <select
-            className="w-full max-w-55 flex-[0_1_220px] max-[720px]:max-w-none max-[720px]:flex-none"
+          {activeView === "inventory" && (
+            <button
+              className={`${secondaryButtonClass} mr-0 size-11 min-h-11 shrink-0 p-0`}
+              type="button"
+              onClick={() => setInventoryScannerOpen(true)}
+              aria-label="Escanear código de barra"
+              title="Escanear código de barra"
+            >
+              <ScanBarcode size={18} />
+            </button>
+          )}
+          <AppSelect
+            className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
             value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-            aria-label="Filtrar productos por categoría"
-          >
-            <option value="">Todas las categorías</option>
-            {categoryOptions.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
+            onChange={(value) => setCategoryFilter(String(value))}
+            ariaLabel="Filtrar productos por categoría"
+            options={[{ value: "", label: "Todas las categorías" }, ...categoryOptions.map((category) => ({ value: category.id, label: category.name }))]}
+          />
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.25 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[980px]:ml-0 max-[980px]:w-full max-[980px]:shrink max-[980px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
             {canManage && (
               <>
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
@@ -1187,6 +1365,31 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+
+      <AppModal
+        open={inventoryScannerOpen}
+        title="Escanear producto"
+        description="El escaneo solo localizará el producto en el inventario."
+        onClose={() => setInventoryScannerOpen(false)}
+        size="small"
+        footer={(
+          <button
+            className={secondaryButtonClass}
+            type="button"
+            onClick={() => setInventoryScannerOpen(false)}
+          >
+            Cancelar
+          </button>
+        )}
+      >
+        <div className="grid justify-items-center gap-3 py-4 text-center" role="status" aria-live="polite">
+          <div className="grid size-16 place-items-center rounded-full bg-rust-50 text-rust-600">
+            <ScanBarcode className="animate-pulse" size={34} />
+          </div>
+          <strong className="text-base text-ink-950">Escanee el código de barra ahora</strong>
+          <span className="text-sm text-slate-500">Esperando lectura del scanner...</span>
+        </div>
+      </AppModal>
 
       <AppModal
         open={canManage && activeForm === "category"}
@@ -1410,6 +1613,35 @@ export default function ProductsPage() {
               <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
             </label>
             <label>
+              Marca (opcional)
+              <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />
+            </label>
+            <label>
+              Código de barra (opcional)
+              <div className="relative">
+                <ScanBarcode className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={18} />
+                <input
+                  ref={productBarcodeInputRef}
+                  className="pl-9.75 font-mono"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={64}
+                  pattern="[0-9]*"
+                  value={form.barcode}
+                  onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.preventDefault();
+                  }}
+                  placeholder="Haz clic aquí y escanea, o escribe el código"
+                  title="Ingresa únicamente dígitos"
+                />
+              </div>
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                El Enter enviado por el lector completa el código sin guardar el formulario automáticamente.
+              </span>
+            </label>
+            <label>
               Descripción
               <input
                 value={form.description}
@@ -1473,6 +1705,30 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
+            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-ink-950">
+              <input
+                className="mt-0.5 size-4 shrink-0"
+                type="checkbox"
+                checked={Boolean(form.inStoreOnly)}
+                onChange={(event) => setForm((current) => ({ ...current, inStoreOnly: event.target.checked }))}
+              />
+              <span>
+                <strong className="block">Solo presencial</strong>
+                <small className="mt-0.5 block font-normal leading-5 text-slate-500">
+                  El producto se mostrará en el catálogo, pero no podrá comprarse en línea.
+                </small>
+              </span>
+            </label>
+            <ProductImagesManager
+              disabled={submittingProduct || managingProductImages}
+              images={editingProduct?.images || []}
+              pendingFiles={pendingProductImages}
+              onFilesSelected={handleProductImageFiles}
+              onRemovePending={(index) => setPendingProductImages((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+              onSetPrimary={handleSetPrimaryProductImage}
+              onDelete={handleDeleteProductImage}
+              onMove={handleMoveProductImage}
+            />
             <div className={formActionsClass}>
               {linkedRegistration?.step === "product" ? (
                 <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct}>
@@ -1496,8 +1752,8 @@ export default function ProductsPage() {
                     <ArrowRight size={17} />
                   </button>
                 )}
-                <button type="submit" disabled={submittingProduct}>
-                  {submittingProduct ? "Guardando..." : editingProductId ? "Actualizar producto" : "Guardar producto"}
+                <button type="submit" disabled={submittingProduct || managingProductImages}>
+                  {submittingProduct ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : "Guardar producto"}
                 </button>
               </div>
             </div>
@@ -1594,7 +1850,7 @@ export default function ProductsPage() {
         ) : (
         <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
           {movementForm.movementType === "ADJUSTMENT" && (
-            <div className="flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
+            <div className="inventory-adjustment-note flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
               <Info className="shrink-0 text-rust-600" size={19} />
               <div className="grid gap-0.75">
                 <strong className="text-[13px] text-ink-950">Este ajuste establece el stock exacto del producto.</strong>
@@ -1651,16 +1907,12 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Motivo del ajuste
-                <select
+                <AppSelect
                   value={movementForm.adjustmentReason}
-                  onChange={(event) => setMovementForm((current) => ({ ...current, adjustmentReason: event.target.value }))}
-                  required
-                >
-                  <option value="">Seleccionar motivo</option>
-                  {ADJUSTMENT_REASONS.map((reason) => (
-                    <option key={reason} value={reason}>{reason}</option>
-                  ))}
-                </select>
+                  onChange={(adjustmentReason) => setMovementForm((current) => ({ ...current, adjustmentReason }))}
+                  ariaLabel="Motivo del ajuste"
+                  options={[{ value: "", label: "Seleccionar motivo" }, ...ADJUSTMENT_REASONS.map((reason) => ({ value: reason, label: reason }))]}
+                />
               </label>
               <label>
                 Observación detallada
@@ -1723,15 +1975,39 @@ export default function ProductsPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <h2>Inventario de productos</h2>
-            <p>{formatTableRecordCount({
-              visibleCount: productsPagination.paginatedItems.length,
-              totalCount: visibleStatusProducts.length,
-              filteredCount: filteredProducts.length,
-              hasFilters: hasListFilters,
-            })}</p>
+            <p className="m-0!"><TableRecordCount
+              visibleCount={productsPagination.paginatedItems.length}
+              totalCount={visibleStatusProducts.length}
+              filteredCount={filteredProducts.length}
+              hasFilters={hasListFilters}
+              mobileTotalCount={products.length}
+              mobilePage={productsPagination.page}
+              mobilePageSize={productsPagination.pageSize}
+            /></p>
           </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools
+            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly}
+            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }}
+            exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
+            showFilters={canViewInactiveProducts || canViewLowStockFilter}
+          >
+            {canViewInactiveProducts && (
+              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} aria-pressed={showInactiveProducts}>
+                {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setShowInactiveProducts(false); setOutOfStockOnly(false); }} aria-pressed={lowStockOnly}>
+                {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
+              </button>
+            )}
+            {canViewLowStockFilter && (
+              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setShowInactiveProducts(false); setLowStockOnly(false); }} aria-pressed={outOfStockOnly}>
+                {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
+              </button>
+            )}
+          </MobileTableTools>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             {canViewInactiveProducts && (
               <button
                 className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
@@ -1788,12 +2064,62 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
+        <ResponsiveTableView
+          rows={productsPagination.paginatedItems}
+          getRowKey={(product) => product.id}
+          getRowLabel={(product) => product.name}
+          resetKey={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}`}
+          emptyMessage="No se encontraron productos con los filtros seleccionados."
+          renderSummary={(product) => {
+            const stockStatus = getStockStatus(product, user?.role);
+            return (
+              <div className="grid min-w-0 gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm text-ink-950">{product.name}</strong>
+                    {product.brand && <span className="block truncate text-xs text-slate-500">{product.brand}</span>}
+                  </div>
+                  <span className={badgeClass(product.status === false ? "neutral" : stockStatus.tone)}>
+                    {product.status === false ? "Desactivado" : stockStatus.label}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <strong className="font-mono text-ink-950">{formatClp(product.price)}</strong>
+                  <span className="font-semibold text-slate-600">Stock: {product.currentStock}</span>
+                </div>
+              </div>
+            );
+          }}
+          renderDetails={(product) => (
+            <>
+              <MobileDetailGrid>
+                <MobileDetailField label="ID">#{product.id}</MobileDetailField>
+                <MobileDetailField label="Código de barra">{product.barcode || "Sin código"}</MobileDetailField>
+                <MobileDetailField label="Categoría">{product.categoryName}</MobileDetailField>
+                <MobileDetailField label="Marca">{product.brand || "Sin marca"}</MobileDetailField>
+                <MobileDetailField label="Unidad">{getDisplayUnit(product.unitMeasure)}</MobileDetailField>
+                {canViewAdministrativeStock && <MobileDetailField label="Stock mínimo">{product.minimumStock}</MobileDetailField>}
+              </MobileDetailGrid>
+              {canManage && (
+                <MobileRowActions>
+                  <button className={secondaryButtonClass} type="button" onClick={() => startEditing(product)}><Pencil size={17} /> Editar</button>
+                  {product.status === false ? (
+                    <button type="button" onClick={() => openProductStatusModal(product)}><CheckCircle size={17} /> Activar</button>
+                  ) : (
+                    <button className={dangerButtonClass} type="button" onClick={() => openProductStatusModal(product)}><XCircle size={17} /> Desactivar</button>
+                  )}
+                </MobileRowActions>
+              )}
+            </>
+          )}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
           <thead>
             <tr>
               <th>ID</th>
               <th>Producto</th>
+              <th>Código de barra</th>
               <th>Categoria</th>
               <th>Precio</th>
               <th>Stock</th>
@@ -1810,7 +2136,8 @@ export default function ProductsPage() {
               return (
                 <tr key={product.id}>
                   <td className={codeCellClass}>#{product.id}</td>
-                  <td>{product.name}</td>
+                  <td>{product.name}{product.brand && <small className="block text-xs text-slate-500">{product.brand}</small>}</td>
+                  <td className={codeCellClass}>{product.barcode || "Sin código"}</td>
                   <td>{product.categoryName}</td>
                   <td className={numericCellClass}>{formatClp(product.price)}</td>
                   <td className={numericCellClass}>{product.currentStock}</td>
@@ -1857,6 +2184,8 @@ export default function ProductsPage() {
           </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -1871,17 +2200,22 @@ export default function ProductsPage() {
         <div className={tablePanelClass}>
           <div className={tableHeadingClass}>
             <div>
-              <h2>Historial de inventario</h2>
-              <p>{formatTableRecordCount({
-                visibleCount: movementsPagination.paginatedItems.length,
-                totalCount: sortedMovements.length,
-                filteredCount: filteredMovements.length,
-                hasFilters: hasMovementFilters,
-              })}</p>
+              <p className="m-0!"><TableRecordCount
+                visibleCount={movementsPagination.paginatedItems.length}
+                totalCount={sortedMovements.length}
+                filteredCount={filteredMovements.length}
+                hasFilters={hasMovementFilters}
+                mobilePage={movementsPagination.page}
+                mobilePageSize={movementsPagination.pageSize}
+              /></p>
             </div>
+            <MobileTableTools
+              exportAction={canExportInventory ? { onClick: handleExportMovements, disabled: filteredMovements.length === 0, label: "Exportar movimientos a Excel" } : null}
+              showFilters={false}
+            />
             {canExportInventory && (
               <button
-                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
+                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:hidden"
                 type="button"
                 onClick={handleExportMovements}
                 disabled={filteredMovements.length === 0}
@@ -1891,6 +2225,31 @@ export default function ProductsPage() {
               </button>
             )}
           </div>
+          <ResponsiveTableView
+            rows={movementsPagination.paginatedItems}
+            getRowKey={(movement) => movement.id}
+            getRowLabel={(movement) => `movimiento de ${movement.productName}`}
+            resetKey={`${movementsPagination.page}|${categoryFilter}|${normalizedSearch}`}
+            emptyMessage={sortedMovements.length === 0 ? "No hay movimientos registrados." : "No se encontraron movimientos con los filtros seleccionados."}
+            renderSummary={(movement) => (
+              <div className="grid min-w-0 gap-2">
+                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={badgeClass(getMovementTone(movement))}>{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span>
+                  <strong className="font-mono text-sm text-ink-950">{movement.quantity}</strong>
+                </div>
+                <span className="text-xs text-slate-500">{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</span>
+              </div>
+            )}
+            renderDetails={(movement) => (
+              <MobileDetailGrid>
+                <MobileDetailField label="Usuario">
+                  {movement.userNames || movement.userSurnames ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim() : "Sistema"}
+                </MobileDetailField>
+                <MobileDetailField label="Motivo" wide>{movement.reason || "Sin motivo"}</MobileDetailField>
+              </MobileDetailGrid>
+            )}
+            desktop={(
           <div className={tableScrollClass}>
             <table>
             <thead>
@@ -1934,6 +2293,8 @@ export default function ProductsPage() {
             </tbody>
             </table>
           </div>
+            )}
+          />
           <Pagination
             page={movementsPagination.page}
             pageSize={movementsPagination.pageSize}

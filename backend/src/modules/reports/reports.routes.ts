@@ -3,11 +3,19 @@ import { authenticateJwt } from "../../middlewares/authentication.middleware.js"
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import {
   getDailySalesReport,
+  getManagerStatistics,
   getSalesByCashierReport,
   getSalesReport,
 } from "./reports.controller.js";
 
 const router = Router();
+
+router.get(
+  "/manager-statistics",
+  authenticateJwt,
+  verifyRoles(["MANAGER"]),
+  getManagerStatistics,
+);
 
 router.use(authenticateJwt);
 router.use(verifyRoles(["ADMIN", "MANAGER"]));

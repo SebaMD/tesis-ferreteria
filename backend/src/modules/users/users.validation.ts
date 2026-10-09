@@ -1,8 +1,8 @@
 import type { NewUser } from "../../db/schema/index.js";
+import { isValidEmail, normalizeEmail } from "../../utils/email.js";
+import { isValidRut, normalizeRut } from "../../utils/rut.js";
 
 const NAME_REGEX = /^[\p{L} ]+$/u;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
 const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -21,6 +21,8 @@ export type CashierScheduleBody = {
   shiftEndTime: string;
   shiftNote: string | null;
 };
+export type ClientProfileBody = { phone: string | null };
+export type ClientDeactivationBody = { password: string };
 
 type ValidationResult<T> =
   | {
@@ -32,13 +34,7 @@ type ValidationResult<T> =
       error: string;
     };
 
-export function normalizeRut(value: string) {
-  return value.trim().replace(/\./g, "").toUpperCase();
-}
-
-export function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
+export { normalizeEmail };
 
 export function normalizeName(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -81,8 +77,8 @@ export function validateEditUserBody(body: unknown): ValidationResult<EditUserBo
   if (input.rut !== undefined) {
     if (typeof input.rut !== "string") return { success: false, error: "El RUT debe ser texto" };
     const rut = normalizeRut(input.rut);
-    if (!RUT_REGEX.test(rut)) {
-      return { success: false, error: "El RUT debe ir sin puntos y con guion (ej: 12345678-9)" };
+    if (!isValidRut(rut)) {
+      return { success: false, error: "El RUT no es valido" };
     }
     value.rut = rut;
   }
@@ -119,7 +115,7 @@ export function validateEditUserBody(body: unknown): ValidationResult<EditUserBo
     if (!correo) {
       return { success: false, error: "El correo electrónico es obligatorio" };
     }
-    if (correo.length > 255 || !EMAIL_REGEX.test(correo)) {
+    if (!isValidEmail(correo)) {
       return { success: false, error: "El correo electrónico no tiene un formato valido" };
     }
     value.correo = correo;
@@ -207,6 +203,44 @@ export function validateCreateUserBody(body: unknown): ValidationResult<CreateUs
       status: result.value.status ?? "ACTIVE",
     },
   };
+}
+
+export function validateClientProfileBody(body: unknown): ValidationResult<ClientProfileBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debe enviar el telefono" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "phone")) {
+    return { success: false, error: "Solo puede modificar el telefono desde este perfil" };
+  }
+  if (input.phone === null || input.phone === "") {
+    return { success: true, value: { phone: null } };
+  }
+  if (typeof input.phone !== "string") {
+    return { success: false, error: "El telefono debe ser texto" };
+  }
+  const phone = normalizePhone(input.phone);
+  if (!phone) {
+    return { success: false, error: "El teléfono debe ser un móvil chileno válido. Ejemplo: +56912345678" };
+  }
+  return { success: true, value: { phone } };
+}
+
+export function validateClientDeactivationBody(body: unknown): ValidationResult<ClientDeactivationBody> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { success: false, error: "Debes ingresar tu contraseña actual" };
+  }
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).some((field) => field !== "password")) {
+    return { success: false, error: "La solicitud contiene campos no permitidos" };
+  }
+  if (typeof input.password !== "string" || !input.password) {
+    return { success: false, error: "Debes ingresar tu contraseña actual" };
+  }
+  if (input.password.length > 128) {
+    return { success: false, error: "La contraseña no es válida" };
+  }
+  return { success: true, value: { password: input.password } };
 }
 
 export function validateCashierScheduleBody(body: unknown): ValidationResult<CashierScheduleBody> {

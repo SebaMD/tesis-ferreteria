@@ -5,11 +5,12 @@ import {
   createProductService,
   deleteProductService,
   editProductService,
+  getProductByBarcodeService,
   getProductByIdService,
   getProductsService,
   ProductError,
 } from "./products.service.js";
-import { validateCreateProductBody, validateEditProductBody } from "./products.validation.js";
+import { validateBarcode, validateCreateProductBody, validateEditProductBody } from "./products.validation.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -38,6 +39,18 @@ function databaseErrorCode(error: unknown): string | null {
   return null;
 }
 
+function databaseErrorConstraint(error: unknown): string | null {
+  if (typeof error === "object" && error !== null && "constraint" in error) {
+    return typeof error.constraint === "string" ? error.constraint : null;
+  }
+
+  if (typeof error === "object" && error !== null && "cause" in error) {
+    return databaseErrorConstraint(error.cause);
+  }
+
+  return null;
+}
+
 export async function getProducts(req: AuthenticatedRequest, res: Response) {
   try {
     const includeInactive = req.user?.role === "ADMIN" || req.user?.role === "MANAGER";
@@ -60,6 +73,27 @@ export async function getProductById(req: AuthenticatedRequest, res: Response) {
   }
 }
 
+export async function getProductByBarcode(req: Request, res: Response) {
+  try {
+    const validation = validateBarcode(req.params.barcode);
+    if (!validation.success) {
+      return handleErrorClient(res, 400, "Codigo de barra invalido", validation.error);
+    }
+
+    return handleSuccess(
+      res,
+      200,
+      "Producto encontrado",
+      await getProductByBarcodeService(validation.value),
+    );
+  } catch (error) {
+    if (error instanceof ProductError) {
+      return handleErrorClient(res, error.statusCode, error.message);
+    }
+    return handleErrorServer(res, 500, "Error al buscar producto por codigo de barra", msg(error));
+  }
+}
+
 export async function createProductController(req: Request, res: Response) {
   try {
     const validation = validateCreateProductBody(req.body);
@@ -68,6 +102,9 @@ export async function createProductController(req: Request, res: Response) {
   } catch (error) {
     if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     if (databaseErrorCode(error) === "23505") {
+      if (databaseErrorConstraint(error) === "products_barcode_unique") {
+        return handleErrorClient(res, 409, "El codigo de barra ya esta asociado a otro producto");
+      }
       return handleErrorClient(res, 409, "Ya existe un producto con ese nombre en la categoria seleccionada");
     }
     if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoria seleccionada no existe");
@@ -87,6 +124,9 @@ export async function editProduct(req: Request, res: Response) {
     const message = msg(error);
     if (message === "Producto no encontrado") return handleErrorClient(res, 404, message);
     if (databaseErrorCode(error) === "23505") {
+      if (databaseErrorConstraint(error) === "products_barcode_unique") {
+        return handleErrorClient(res, 409, "El codigo de barra ya esta asociado a otro producto");
+      }
       return handleErrorClient(res, 409, "Ya existe un producto con ese nombre en la categoria seleccionada");
     }
     if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoria seleccionada no existe");

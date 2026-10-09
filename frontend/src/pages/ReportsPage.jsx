@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
+import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals } from "../helpers/formatters.js";
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
@@ -228,7 +231,7 @@ export default function ReportsPage() {
           <div className="flex items-center gap-3">
             <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
             <div>
-              <h2 className="m-0 text-base font-bold text-ink-950">Filtros</h2>
+              <h2 className="m-0 text-base font-bold text-ink-950">Período del reporte</h2>
               <p className="mt-1 mb-0 text-xs text-slate-500">Selecciona fecha o rango. No se permiten fechas futuras.</p>
             </div>
           </div>
@@ -395,14 +398,17 @@ export default function ReportsPage() {
         <div className={tableHeadingClass}>
           <div>
             <h2>Ventas del período</h2>
-            <p>{formatTableRecordCount({
-              visibleCount: salesPagination.paginatedItems.length,
-              totalCount: reportSales.length,
-              filteredCount: reportSales.length,
-              hasFilters: true,
-            })}</p>
+            <p><TableRecordCount
+              visibleCount={salesPagination.paginatedItems.length}
+              totalCount={reportSales.length}
+              filteredCount={reportSales.length}
+              hasFilters
+              mobilePage={salesPagination.page}
+              mobilePageSize={salesPagination.pageSize}
+            /></p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools exportAction={{ onClick: handleExportSales, disabled: loading || reportSales.length === 0, label: "Exportar reporte a Excel" }} />
+          <div className="flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             <button
               className={`${secondaryButtonClass} mr-0`}
               type="button"
@@ -414,6 +420,34 @@ export default function ReportsPage() {
             </button>
           </div>
         </div>
+        <ResponsiveTableView
+          rows={salesPagination.paginatedItems}
+          getRowKey={(sale) => sale.id}
+          getRowLabel={(sale) => formatSaleFolio(sale.id)}
+          resetKey={`${salesPagination.page}|${appliedFilters.from}|${appliedFilters.to}|${appliedFilters.cashierId}|${appliedFilters.paymentMethod}`}
+          emptyMessage="No hay ventas para los filtros seleccionados."
+          renderSummary={(sale) => (
+            <div className="grid min-w-0 gap-2">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <strong className="font-mono text-sm text-ink-950">{formatSaleFolio(sale.id)}</strong>
+                <span className={badgeClass(getSaleStatusTone(sale.status))}>{getSaleStatusLabel(sale.status)}</span>
+              </div>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <span className="text-xs text-slate-500">{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</span>
+                <strong className="font-mono text-sm text-ink-950">{formatClp(getSaleTotals(sale).netTotal)}</strong>
+              </div>
+            </div>
+          )}
+          renderDetails={(sale) => (
+            <MobileDetailGrid>
+              <MobileDetailField label="Cajero" wide>{sale.cashierNames} {sale.cashierSurnames}</MobileDetailField>
+              <MobileDetailField label="Método">{getPaymentMethodLabel(sale.paymentMethod)}</MobileDetailField>
+              <MobileDetailField label="Total original">{formatClp(getSaleTotals(sale).originalTotal)}</MobileDetailField>
+              <MobileDetailField label="Devuelto">{formatClp(getSaleTotals(sale).returnedTotal)}</MobileDetailField>
+              <MobileDetailField label="Total neto">{formatClp(getSaleTotals(sale).netTotal)}</MobileDetailField>
+            </MobileDetailGrid>
+          )}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
             <thead>
@@ -452,6 +486,8 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={salesPagination.page}
           pageSize={salesPagination.pageSize}

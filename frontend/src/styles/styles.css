@@ -155,6 +155,39 @@
   }
 }
 
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .purchase-receipt,
+  .purchase-receipt * {
+    visibility: visible !important;
+  }
+
+  .purchase-receipt {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #10151f !important;
+  }
+
+  .purchase-receipt table {
+    break-inside: avoid;
+  }
+}
+
 @layer base {
   :root {
     min-width: 320px;
@@ -180,7 +213,8 @@
 
   button,
   input,
-  select {
+  select,
+  textarea {
     font: inherit;
   }
 
@@ -198,7 +232,8 @@
 
   button:focus-visible,
   input:focus-visible,
-  select:focus-visible {
+  select:focus-visible,
+  textarea:focus-visible {
     outline: 2px solid var(--color-rust-500);
     outline-offset: 2px;
   }
@@ -206,6 +241,17 @@
   button:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+
+  .back-to-top {
+    transition: opacity 240ms ease-out, translate 240ms ease-out;
+    will-change: opacity, translate;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .back-to-top {
+      transition: none;
+    }
   }
 
   input,
@@ -248,6 +294,401 @@
   }
 }
 
+/* El tema conserva el naranjo FYF y adapta las superficies, no las imágenes ni documentos. */
+.dark,
+.dark body,
+.dark #root {
+  background: #0f141c;
+  color: #e7ebef;
+}
+
+.dark .bg-white,
+.dark .bg-white\/95,
+.dark .bg-\[\#f5f6f7\],
+.dark .bg-\[\#f7f8f9\],
+.dark .bg-\[\#fafbfc\] {
+  background-color: #171e28 !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #232c38 !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #1c2530 !important;
+}
+
+.dark .bg-rust-50 {
+  background-color: #3a2718 !important;
+}
+
+.dark .bg-positive-50 {
+  background-color: #123320 !important;
+}
+
+.dark .bg-critical-50 {
+  background-color: #3b1b20 !important;
+}
+
+.dark .bg-blue-50 {
+  background-color: #12304a !important;
+}
+
+.dark .text-blue-900 {
+  color: #dbeafe !important;
+}
+
+.dark .text-positive-600 {
+  color: #4ade80 !important;
+}
+
+.dark .text-critical-600 {
+  color: #f87171 !important;
+}
+
+.dark .text-rust-600 {
+  color: #fb923c !important;
+}
+
+.dark .product-availability-panel,
+.dark .order-delivery-panel,
+.dark .client-account-surface {
+  border-color: #465260 !important;
+  background: #1c2530 !important;
+  color: #eef1f4;
+}
+
+.dark .client-account-section,
+.dark .client-account-trigger {
+  border-color: #3d4856 !important;
+  background: #171e28 !important;
+  color: #eef1f4 !important;
+}
+
+.dark .client-account-trigger:not(:disabled):hover {
+  background: #232c38 !important;
+}
+
+.dark .client-account-deactivation-warning,
+.dark .sale-return-pending-notice {
+  border-color: #8a5a16 !important;
+  background: #33270f !important;
+  color: #fde68a !important;
+}
+
+.dark .sale-return-pending-notice button {
+  border-color: #8a5a16 !important;
+  background: #4a3514 !important;
+  color: #fde68a !important;
+}
+
+.dark .sale-return-pending-notice button:not(:disabled):hover {
+  background: #60451a !important;
+}
+
+.dark .sale-return-reason {
+  border-color: #8a5a16 !important;
+  background: #33270f !important;
+}
+
+.dark .sale-return-reason .text-amber-800,
+.dark .sale-return-reason .text-amber-950 {
+  color: #fde68a !important;
+}
+
+.dark .sale-return-history,
+.dark .sale-return-history-toggle,
+.dark .sale-return-history-details {
+  background: #171e28 !important;
+}
+
+.dark .sale-return-history-item {
+  background: #1c2530 !important;
+}
+
+.dark .sale-return-history-toggle:hover,
+.dark .sale-return-history-item-toggle:hover {
+  background: #252f3b !important;
+}
+
+.dark .inventory-adjustment-note {
+  border-color: #465260 !important;
+  border-left-color: #fb923c !important;
+  background: #1c2530 !important;
+  color: #eef1f4 !important;
+}
+
+.dark .login-submit-button {
+  border-color: #526174 !important;
+  background: #354152 !important;
+  color: #ffffff !important;
+}
+
+.dark .login-submit-button:not(:disabled):hover {
+  border-color: #64748b !important;
+  background: #465466 !important;
+}
+
+.dark .status-badge--info {
+  border: 1px solid #28557a;
+  background: #12304a !important;
+  color: #bfdbfe !important;
+}
+
+.status-badge--inactive {
+  border: 1px solid var(--color-slate-300);
+}
+
+.dark .status-badge--inactive {
+  border-color: #526174 !important;
+  background: #232c38 !important;
+  color: #d7dee7 !important;
+}
+
+.dark .customer-notice-editor,
+.dark .customer-notice-presentation {
+  border-color: #b45309 !important;
+  background: #2d241c !important;
+}
+
+.dark .text-ink-950,
+.dark .text-ink-900,
+.dark .text-ink-700 {
+  color: #eef1f4 !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  color: #aeb7c2 !important;
+}
+
+.dark label,
+.dark th {
+  color: #cbd3dc;
+}
+
+.dark th {
+  background: #202936;
+}
+
+.dark td {
+  color: #dce2e8;
+}
+
+/* Algunos encabezados heredados reciben el color mediante una variante del
+   contenedor, no mediante una clase propia en el elemento. */
+.dark [class*="[&_h1]:text-ink-950"] h1,
+.dark [class*="[&_h2]:text-ink-950"] h2,
+.dark [class*="[&_h3]:text-ink-950"] h3,
+.dark [class*="[&>strong]:text-ink-950"] > strong,
+.dark [class*="[&>div>strong]:text-ink-950"] > div > strong {
+  color: #eef1f4;
+}
+
+.dark .border-slate-300,
+.dark .border-slate-200 {
+  border-color: #3d4856 !important;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea,
+.dark .app-select-trigger {
+  border-color: #465260 !important;
+  background: #1c2530 !important;
+  color: #f2f4f7 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #8792a0;
+}
+
+.dark input:disabled,
+.dark select:disabled,
+.dark textarea:disabled,
+.dark button:disabled {
+  color: #8993a0;
+}
+
+.dark tbody tr:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: #252f3b !important;
+}
+
+.dark .app-modal-panel,
+.dark .app-select-popup {
+  border-color: #465260;
+  background: #171e28;
+  color: #edf1f5;
+}
+
+.dark .app-select-option {
+  color: #edf1f5;
+}
+
+.dark .app-select-option:hover {
+  background: #283340;
+}
+
+.dark .app-select-option.bg-rust-50 {
+  background: #49301b !important;
+  color: #fdba74 !important;
+}
+
+.dark .theme-toggle {
+  border-color: #465260;
+  background: #1c2530 !important;
+  color: #f1f4f7 !important;
+}
+
+.dark .app-loading-overlay {
+  background: rgba(15, 20, 28, 0.62);
+}
+
+.dark .app-loading-indicator,
+.dark .app-loading-text {
+  color: #f1f4f7;
+}
+
+.catalog-notice-track {
+  transition: transform 420ms ease;
+  will-change: transform;
+}
+
+.catalog-notice-media {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  z-index: -20;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 58%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.catalog-notice-media-image {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgb(16 21 31 / 22%) 8%,
+    rgb(16 21 31 / 58%) 18%,
+    var(--color-ink-950) 30%,
+    var(--color-ink-950) 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgb(16 21 31 / 22%) 8%,
+    rgb(16 21 31 / 58%) 18%,
+    var(--color-ink-950) 30%,
+    var(--color-ink-950) 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.catalog-notice-mobile-overlay {
+  display: none;
+}
+
+@media (max-width: 620px) {
+  .catalog-notice-media {
+    left: 0;
+    width: 100%;
+  }
+
+  .catalog-notice-media-image {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: cover;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .catalog-notice-mobile-overlay {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: -10;
+    width: auto;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgb(16 21 31 / 92%), rgb(16 21 31 / 58%));
+  }
+}
+
+.customer-notice-card {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.customer-notice-card--dragging {
+  position: relative;
+  z-index: 5;
+  transform: translateY(-2px) scale(1.008);
+  box-shadow: 0 14px 30px rgb(16 21 31 / 18%);
+}
+
+.customer-notice-reorder-item--dragging .customer-notice-drag-handle {
+  cursor: grabbing;
+}
+
+.product-gallery-thumbnails {
+  scrollbar-color: var(--color-slate-400) transparent;
+  scrollbar-width: thin;
+}
+
+.pending-image-remove {
+  border-color: var(--color-slate-400) !important;
+  background: #ffffff !important;
+  color: #10151f !important;
+}
+
+.pending-image-remove:not(:disabled):hover {
+  border-color: var(--color-rust-600) !important;
+  background: var(--color-rust-50) !important;
+  color: #8a3415 !important;
+}
+
+.dark .pending-image-remove {
+  border-color: #526174 !important;
+  background: #232c38 !important;
+  color: #f8fafc !important;
+}
+
+.dark .pending-image-remove:not(:disabled):hover {
+  border-color: #fb923c !important;
+  background: #3a2718 !important;
+  color: #ffffff !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-select-trigger svg,
+  .catalog-notice-track,
+  .catalog-notice-indicator,
+  .customer-notice-card {
+    transition: none;
+  }
+
+  .customer-notice-card--dragging {
+    transform: none;
+  }
+}
+
 [data-sonner-toast].app-toast-success {
   color: #ffffff !important;
   background: var(--color-ink-900) !important;
@@ -265,6 +706,18 @@
   color: #ffffff !important;
   background: var(--color-critical-600) !important;
   border-color: #dc2626 !important;
+}
+
+.app-toast-action {
+  border: 1px solid #d6dbe1 !important;
+  background: #ffffff !important;
+  color: #18202b !important;
+  box-shadow: 0 1px 3px rgb(16 21 31 / 16%) !important;
+}
+
+.app-toast-action:not(:disabled):hover {
+  border-color: #aeb6c0 !important;
+  background: #f1f3f5 !important;
 }
 
 .app-loading-overlay {

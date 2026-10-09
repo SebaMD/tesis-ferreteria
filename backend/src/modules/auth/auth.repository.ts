@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { rolesTable, usersTable } from "../../db/schema/index.js";
+import { rolesTable, usersTable, type NewUser } from "../../db/schema/index.js";
+import { compactRut } from "../../utils/rut.js";
 
 const authUserColumns = {
   id: usersTable.id,
@@ -10,20 +11,71 @@ const authUserColumns = {
   names: usersTable.names,
   surnames: usersTable.surnames,
   correo: usersTable.correo,
+  emailVerifiedAt: usersTable.emailVerifiedAt,
   password: usersTable.password,
   phone: usersTable.phone,
   status: usersTable.status,
+  selfDeactivatedAt: usersTable.selfDeactivatedAt,
+  authVersion: usersTable.authVersion,
   createdAt: usersTable.createdAt,
   updatedAt: usersTable.updatedAt,
 };
 
-export async function findAuthUserByCorreo(correo: string) {
+export async function findAuthUserByIdentifier(identifier: string) {
+  const condition = identifier.includes("@")
+    ? eq(usersTable.correo, identifier)
+    : eq(
+      sql<string>`regexp_replace(upper(${usersTable.rut}), '[.\\s-]', '', 'g')`,
+      compactRut(identifier),
+    );
   const [user] = await db
     .select(authUserColumns)
     .from(usersTable)
     .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
-    .where(eq(usersTable.correo, correo))
+    .where(condition)
     .limit(1);
+
+  return user;
+}
+
+export async function findAuthUserById(id: number) {
+  const [user] = await db
+    .select(authUserColumns)
+    .from(usersTable)
+    .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
+    .where(eq(usersTable.id, id))
+    .limit(1);
+  return user;
+}
+
+export async function findRoleByName(name: string) {
+  const [role] = await db
+    .select({ id: rolesTable.id, name: rolesTable.name })
+    .from(rolesTable)
+    .where(eq(rolesTable.name, name))
+    .limit(1);
+
+  return role ?? null;
+}
+
+export async function findUserByRutOrCorreo(rut: string, correo: string) {
+  const [user] = await db
+    .select({ id: usersTable.id, rut: usersTable.rut, correo: usersTable.correo })
+    .from(usersTable)
+    .where(or(
+      eq(sql<string>`regexp_replace(upper(${usersTable.rut}), '[.\\s-]', '', 'g')`, compactRut(rut)),
+      eq(usersTable.correo, correo),
+    ))
+    .limit(1);
+
+  return user ?? null;
+}
+
+export async function createAuthUser(data: NewUser) {
+  const [user] = await db
+    .insert(usersTable)
+    .values(data)
+    .returning({ id: usersTable.id });
 
   return user;
 }

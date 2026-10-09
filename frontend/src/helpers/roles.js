@@ -3,6 +3,7 @@ export const ROLE_NAMES = {
   MANAGER: "Gerente",
   CASHIER: "Cajero",
   WAREHOUSE: "Bodeguero",
+  CLIENT: "Cliente",
 };
 
 export const ROUTE_PERMISSIONS = {
@@ -11,5 +12,10 @@ export const ROUTE_PERMISSIONS = {
   sales: ["ADMIN", "MANAGER", "CASHIER"],
   inventory: ["ADMIN", "MANAGER", "WAREHOUSE"],
   reports: ["ADMIN", "MANAGER"],
+  statistics: ["MANAGER"],
+  promotions: ["ADMIN", "MANAGER"],
   users: ["ADMIN"],
+  onlineOrdersManagement: ["ADMIN", "MANAGER", "WAREHOUSE"],
+  logisticsScan: ["WAREHOUSE"],
+  client: ["CLIENT"],
 };

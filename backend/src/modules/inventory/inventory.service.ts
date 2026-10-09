@@ -11,14 +11,20 @@ import {
   findInventoryMovementById,
   findInventoryMovements,
 } from "./inventory.repository.js";
+import {
+  calculateAvailableStock,
+  findActiveReservedQuantities,
+} from "./stockAvailability.repository.js";
 import type { InventoryMovementBody } from "./inventory.validation.js";
 
 export type InventoryMovementType = "ENTRY" | "EXIT" | "ADJUSTMENT";
 
 export type ApplyInventoryMovementData = Omit<InventoryMovementBody, "movementType"> & {
   movementType: InventoryMovementType;
-  userId: number;
+  userId: number | null;
+  onlineOrderId?: number | null;
   allowInactive?: boolean;
+  excludedReservationOrderId?: number;
 };
 
 export class InventoryMovementError extends Error {
@@ -43,6 +49,29 @@ export async function getInventoryMovementByIdService(id: number) {
 
 export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInventoryMovementData) {
   const allowsZero = data.movementType === "ADJUSTMENT";
+  const onlineOrderId = data.onlineOrderId ?? null;
+
+  if (data.userId !== null && (!Number.isInteger(data.userId) || data.userId < 1)) {
+    throw new InventoryMovementError("El usuario responsable no es valido", 400);
+  }
+
+  if (onlineOrderId !== null && (!Number.isInteger(onlineOrderId) || onlineOrderId < 1)) {
+    throw new InventoryMovementError("El pedido online de origen no es valido", 400);
+  }
+
+  if (onlineOrderId !== null && data.movementType !== "EXIT") {
+    throw new InventoryMovementError(
+      "Un pedido online solo puede originar movimientos EXIT",
+      400,
+    );
+  }
+
+  if (data.userId === null && (data.movementType !== "EXIT" || onlineOrderId === null)) {
+    throw new InventoryMovementError(
+      "El movimiento debe identificar un usuario o un pedido online de origen",
+      400,
+    );
+  }
 
   if (!Number.isInteger(data.quantity) || (allowsZero ? data.quantity < 0 : data.quantity < 1)) {
     throw new InventoryMovementError("La cantidad del movimiento no es valida", 400);
@@ -75,6 +104,23 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       break;
     }
     case "EXIT": {
+      const reservedByProduct = await findActiveReservedQuantities(
+        tx,
+        [data.productId],
+        data.excludedReservationOrderId,
+      );
+      const availableStock = calculateAvailableStock(
+        product.currentStock,
+        reservedByProduct.get(data.productId) || 0,
+      );
+
+      if (data.quantity > availableStock) {
+        throw new InventoryMovementError(
+          "Stock insuficiente: existen unidades reservadas para pedidos online",
+          409,
+        );
+      }
+
       const updatedProduct = await decreaseProductStock(
         tx,
         data.productId,
@@ -89,6 +135,16 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
       break;
     }
     case "ADJUSTMENT": {
+      const reservedByProduct = await findActiveReservedQuantities(tx, [data.productId]);
+      const reservedQuantity = reservedByProduct.get(data.productId) || 0;
+
+      if (data.quantity < reservedQuantity) {
+        throw new InventoryMovementError(
+          `El ajuste no puede dejar menos de ${reservedQuantity} unidades reservadas para pedidos online`,
+          409,
+        );
+      }
+
       const updatedProduct = await setProductStock(tx, data.productId, data.quantity);
 
       if (!updatedProduct) {
@@ -102,6 +158,7 @@ export async function applyInventoryMovement(tx: DbTransaction, data: ApplyInven
   const movementData: NewInventoryMovement = {
     productId: data.productId,
     userId: data.userId,
+    onlineOrderId,
     movementType: data.movementType,
     quantity: data.quantity,
     reason: data.reason,

@@ -5,9 +5,14 @@ import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
-import { compareByNewest, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import TableRecordCount from "../components/TableRecordCount.jsx";
+import AppSelect from "../components/AppSelect.jsx";
+import { compareByNewest, formatDate } from "../helpers/formatters.js";
 import { formatWorkSchedule, getWorkShiftLabel } from "../helpers/labels.js";
 import { ROLE_NAMES } from "../helpers/roles.js";
+import { normalizeChileanMobilePhone } from "../helpers/phone.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
   badgeClass,
   codeCellClass,
@@ -27,18 +32,13 @@ import useAuth from "../hooks/useAuth.js";
 import {
   createUserRequest,
   deleteUserRequest,
+  getUserRolesRequest,
   getUsersRequest,
   updateCashierScheduleRequest,
   updateUserRequest,
 } from "../services/users.service.js";
 
-const ROLE_ORDER = ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"];
-const ROLE_FALLBACK_IDS = {
-  ADMIN: 1,
-  MANAGER: 2,
-  CASHIER: 3,
-  WAREHOUSE: 4,
-};
+const ROLE_ORDER = ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE", "CLIENT"];
 const USER_DATE_OPTIONS = {
   day: "2-digit",
   month: "short",
@@ -72,9 +72,7 @@ const WORK_SHIFT_TIME_CONFIG = {
 };
 const NAME_REGEX = /^[\p{L} ]+$/u;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const RUT_REGEX = /^\d{7,8}-[\dKk]$/;
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,128}$/;
-const PHONE_REGEX = /^(?:\+?56)?9\d{8}$/;
 const VALID_STATUSES = ["ACTIVE", "INACTIVE"];
 
 function normalizeText(value) {
@@ -85,19 +83,8 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeRut(value) {
-  return String(value || "").trim().replace(/\./g, "").toUpperCase();
-}
-
 function normalizePhone(value) {
-  const phone = String(value || "").trim();
-  if (!phone) return null;
-
-  const compactPhone = phone.replace(/[\s().-]/g, "");
-  if (!PHONE_REGEX.test(compactPhone)) return null;
-  if (compactPhone.startsWith("+56")) return compactPhone;
-  if (compactPhone.startsWith("56")) return `+${compactPhone}`;
-  return `+56${compactPhone}`;
+  return normalizeChileanMobilePhone(value);
 }
 
 function validateUserForm(form, { isEditing, isAdminStatusLocked }) {
@@ -118,8 +105,8 @@ function validateUserForm(form, { isEditing, isAdminStatusLocked }) {
   }
 
   if (!rut) return { success: false, message: "El RUT es obligatorio." };
-  if (!RUT_REGEX.test(rut)) {
-    return { success: false, message: "El RUT debe ir sin puntos y con guion. Ejemplo: 12345678-9." };
+  if (!isValidRut(rut)) {
+    return { success: false, message: "Ingresa un RUT chileno válido." };
   }
 
   if (!correo) return { success: false, message: "El correo electrónico es obligatorio." };
@@ -223,19 +210,19 @@ function normalizeScheduleTimes(workShift, startTime, endTime) {
   };
 }
 
-function getRoleOptions(users) {
-  const roleIdByName = new Map(users.map((user) => [user.roleName, user.roleId]));
+function getRoleOptions(roles) {
+  const roleByName = new Map(roles.map((role) => [role.name, role]));
 
-  return ROLE_ORDER.map((roleName) => ({
-    id: roleIdByName.get(roleName) ?? ROLE_FALLBACK_IDS[roleName],
-    name: roleName,
-    label: ROLE_NAMES[roleName] || roleName,
-  }));
+  return ROLE_ORDER
+    .map((roleName) => roleByName.get(roleName))
+    .filter(Boolean)
+    .map((role) => ({ ...role, label: ROLE_NAMES[role.name] || role.name }));
 }
 
 export default function UsersPage() {
   const { user: authUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
   const [activeForm, setActiveForm] = useState(false);
@@ -243,14 +230,16 @@ export default function UsersPage() {
   const [scheduleUser, setScheduleUser] = useState(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState(null);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const roleOptions = useMemo(() => getRoleOptions(users), [users]);
+  const roleOptions = useMemo(() => getRoleOptions(roles), [roles]);
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const filteredUsers = useMemo(
     () => users.filter((user) => {
+      if (roleFilter && user.roleName !== roleFilter) return false;
       if (!normalizedSearch) return true;
 
       const searchableValues = [
@@ -272,12 +261,12 @@ export default function UsersPage() {
 
       return searchableValues.some((value) => String(value || "").toLocaleLowerCase("es").includes(normalizedSearch));
     }).sort(compareByNewest),
-    [normalizedSearch, users],
+    [normalizedSearch, roleFilter, users],
   );
   const usersPagination = usePagination(filteredUsers, {
-    resetKey: `${normalizedSearch}|${users.length}`,
+    resetKey: `${normalizedSearch}|${roleFilter}|${users.length}`,
   });
-  const hasUserFilters = Boolean(normalizedSearch);
+  const hasUserFilters = Boolean(normalizedSearch || roleFilter);
   const isEditing = Boolean(editingUserId);
   const editingUser = users.find((user) => user.id === editingUserId);
   const isEditingOwnUser = isEditing && Number(editingUser?.id) === Number(authUser?.id);
@@ -293,8 +282,12 @@ export default function UsersPage() {
     setLoading(true);
 
     try {
-      const data = await getUsersRequest();
-      setUsers(data);
+      const [usersData, rolesData] = await Promise.all([
+        getUsersRequest(),
+        getUserRolesRequest(),
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
     } finally {
       setLoading(false);
     }
@@ -343,18 +336,26 @@ export default function UsersPage() {
     setActiveForm(false);
   };
 
-  const closeForm = () => {
-    if (submitting) return;
+  const resetForm = () => {
     setForm(emptyForm);
     setEditingUserId(null);
     setShowPassword(false);
     setActiveForm(false);
   };
 
-  const closeScheduleForm = () => {
+  const closeForm = () => {
     if (submitting) return;
+    resetForm();
+  };
+
+  const resetScheduleForm = () => {
     setScheduleUser(null);
     setScheduleForm(emptyScheduleForm);
+  };
+
+  const closeScheduleForm = () => {
+    if (submitting) return;
+    resetScheduleForm();
   };
 
   const openDeleteUserModal = () => {
@@ -425,7 +426,12 @@ export default function UsersPage() {
         await createUserRequest(payload);
       }
       toast.success(isEditing ? "Usuario actualizado exitosamente" : "Usuario creado exitosamente");
-      closeForm();
+      if (!isEditing && ["MANAGER", "CASHIER", "WAREHOUSE"].includes(formValue.roleName)) {
+        toast.info("Deberá verificar su correo al iniciar sesión por primera vez.");
+      } else if (isEditing && ["MANAGER", "CASHIER", "WAREHOUSE"].includes(formValue.roleName) && editingUser?.correo !== formValue.correo) {
+        toast.info("El nuevo correo deberá verificarse en el próximo inicio de sesión.");
+      }
+      resetForm();
       await loadUsers();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo guardar el usuario"));
@@ -486,7 +492,7 @@ export default function UsersPage() {
         shiftNote: scheduleForm.shiftNote.trim() || null,
       });
       toast.success("Horario de cajero actualizado exitosamente");
-      closeScheduleForm();
+      resetScheduleForm();
       await loadUsers();
     } catch (err) {
       toast.error(getApiError(err, "No se pudo actualizar el horario del cajero"));
@@ -521,21 +527,24 @@ export default function UsersPage() {
       <div className={pageHeaderClass}>
         <div>
           <h1>Usuarios</h1>
-          <p>Creación y edición de usuarios internos del sistema.</p>
+          <p>Administración de usuarios internos y cuentas de clientes.</p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3.5 max-[720px]:flex-col max-[720px]:items-stretch">
-        <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
-          <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-          <input
-            className="pl-9.75"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por nombre, correo, RUT o rol"
-            aria-label="Buscar usuarios"
-          />
-        </label>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 max-[720px]:flex-col max-[720px]:items-stretch">
+          <label className="relative block w-full max-w-110 max-[720px]:max-w-none">
+            <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
+            <input
+              className="pl-9.75"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nombre, correo o RUT"
+              aria-label="Buscar usuarios"
+            />
+          </label>
+          <AppSelect className="w-full max-w-55 max-[720px]:max-w-none" value={roleFilter} onChange={setRoleFilter} ariaLabel="Filtrar usuarios por rol" options={[{ value: "", label: "Todos los roles" }, ...roleOptions.map((role) => ({ value: role.name, label: role.label }))]} />
+        </div>
         <button type="button" onClick={openCreateForm}>
           <UserPlus size={18} />
           Nuevo usuario
@@ -545,7 +554,7 @@ export default function UsersPage() {
       <AppModal
         open={activeForm}
         title={isEditing ? "Editar usuario" : "Nuevo usuario"}
-        description="Los usuarios internos son creados únicamente por el Administrador."
+        description="El Administrador puede gestionar usuarios internos y cuentas de clientes."
         onClose={closeForm}
         size="large"
       >
@@ -566,7 +575,8 @@ export default function UsersPage() {
               <input
                 value={form.rut}
                 onChange={(event) => setForm((current) => ({ ...current, rut: event.target.value }))}
-                placeholder="12345678-9"
+                onBlur={() => setForm((current) => ({ ...current, rut: normalizeRut(current.rut) }))}
+                placeholder="10120345-K"
                 required
               />
             </label>
@@ -617,32 +627,28 @@ export default function UsersPage() {
             <div className={`grid gap-3 max-[720px]:grid-cols-1 ${isEditing ? "grid-cols-2" : "grid-cols-1"}`}>
               <label>
                 Rol
-                <select
+                <AppSelect
                   value={form.roleName}
-                  onChange={(event) => {
-                    const roleName = event.target.value;
+                  onChange={(roleName) => {
                     setForm((current) => ({
                       ...current,
                       roleName,
                       status: roleName === "ADMIN" ? "ACTIVE" : current.status,
                     }));
                   }}
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role.name} value={role.name}>{role.label}</option>
-                  ))}
-                </select>
+                  ariaLabel="Rol del usuario"
+                  options={roleOptions.map((role) => ({ value: role.name, label: role.label }))}
+                />
               </label>
               {isEditing && (
                 <label>
                   Estado
-                  <select
+                  <AppSelect
                     value={form.status}
-                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-                  >
-                    <option value="ACTIVE">Activo</option>
-                    <option value="INACTIVE">Inactivo</option>
-                  </select>
+                    onChange={(status) => setForm((current) => ({ ...current, status }))}
+                    ariaLabel="Estado del usuario"
+                    options={[{ value: "ACTIVE", label: "Activo" }, { value: "INACTIVE", label: "Inactivo" }]}
+                  />
                 </label>
               )}
             </div>
@@ -695,40 +701,31 @@ export default function UsersPage() {
         <form className="grid gap-3.75" onSubmit={handleScheduleSubmit}>
           <label>
             Turno
-            <select
+            <AppSelect
               value={scheduleForm.workShift}
-              onChange={(event) => handleScheduleShiftChange(event.target.value)}
-              required
-            >
-              {WORK_SHIFT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+              onChange={handleScheduleShiftChange}
+              ariaLabel="Turno del cajero"
+              options={WORK_SHIFT_OPTIONS}
+            />
           </label>
           <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
             <label>
               Hora de inicio
-              <select
+              <AppSelect
                 value={scheduleForm.shiftStartTime}
-                onChange={(event) => handleScheduleStartTimeChange(event.target.value)}
-                required
-              >
-                {shiftStartOptions.map((time) => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+                onChange={handleScheduleStartTimeChange}
+                ariaLabel="Hora de inicio"
+                options={shiftStartOptions.map((time) => ({ value: time, label: time }))}
+              />
             </label>
             <label>
               Hora de término
-              <select
+              <AppSelect
                 value={scheduleForm.shiftEndTime}
-                onChange={(event) => setScheduleForm((current) => ({ ...current, shiftEndTime: event.target.value }))}
-                required
-              >
-                {shiftEndOptions.map((time) => (
-                  <option key={time} value={time}>{time}</option>
-                ))}
-              </select>
+                onChange={(shiftEndTime) => setScheduleForm((current) => ({ ...current, shiftEndTime }))}
+                ariaLabel="Hora de término"
+                options={shiftEndOptions.map((time) => ({ value: time, label: time }))}
+              />
             </label>
           </div>
           <label>
@@ -751,15 +748,57 @@ export default function UsersPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <h2>Usuarios registrados</h2>
-            <p>{formatTableRecordCount({
-              visibleCount: usersPagination.paginatedItems.length,
-              totalCount: users.length,
-              filteredCount: filteredUsers.length,
-              hasFilters: hasUserFilters,
-            })}</p>
+            <p className="m-0!"><TableRecordCount
+              visibleCount={usersPagination.paginatedItems.length}
+              totalCount={users.length}
+              filteredCount={filteredUsers.length}
+              hasFilters={hasUserFilters}
+              mobilePage={usersPagination.page}
+              mobilePageSize={usersPagination.pageSize}
+            /></p>
           </div>
         </div>
+        <ResponsiveTableView
+          rows={usersPagination.paginatedItems}
+          getRowKey={(user) => user.id}
+          getRowLabel={(user) => `${user.names} ${user.surnames}`}
+          resetKey={`${usersPagination.page}|${normalizedSearch}|${roleFilter}`}
+          emptyMessage={users.length === 0 ? "No hay usuarios registrados." : "No se encontraron usuarios con la búsqueda ingresada."}
+          renderSummary={(user) => (
+            <div className="grid min-w-0 gap-2">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm text-ink-950">{user.names} {user.surnames}</strong>
+                  <span className="font-mono text-[11px] text-slate-500">#{user.id}</span>
+                </div>
+                <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
+                  {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-slate-600">{ROLE_NAMES[user.roleName] || user.roleName}</span>
+            </div>
+          )}
+          renderDetails={(user) => (
+            <>
+              <MobileDetailGrid>
+                <MobileDetailField label="RUT">{user.rut}</MobileDetailField>
+                <MobileDetailField label="Rol">{ROLE_NAMES[user.roleName] || user.roleName}</MobileDetailField>
+                <MobileDetailField label="Correo" wide><span className="break-all">{user.correo}</span></MobileDetailField>
+                <MobileDetailField label="Teléfono">{user.phone || "-"}</MobileDetailField>
+                <MobileDetailField label="Creado">{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</MobileDetailField>
+                {user.roleName === "CASHIER" && <MobileDetailField label="Horario" wide>{formatWorkSchedule(user)}</MobileDetailField>}
+              </MobileDetailGrid>
+              <MobileRowActions>
+                <button className={secondaryButtonClass} type="button" onClick={() => startEditing(user)}><Pencil size={17} /> Editar</button>
+                {user.roleName === "CASHIER" && (
+                  <button className={secondaryButtonClass} type="button" onClick={() => openScheduleForm(user)}>
+                    <Clock3 size={16} /> {user.workShift ? "Modificar horario" : "Configurar horario"}
+                  </button>
+                )}
+              </MobileRowActions>
+            </>
+          )}
+          desktop={(
         <div className={tableScrollClass}>
           <table className="min-w-315">
             <thead>
@@ -818,6 +857,8 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={usersPagination.page}
           pageSize={usersPagination.pageSize}

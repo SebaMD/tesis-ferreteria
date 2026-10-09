@@ -1,21 +1,34 @@
-import { LockKeyhole, Mail } from "lucide-react";
+import { ContactRound, Eye, EyeOff, LockKeyhole, Store, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import loginBackground from "../assets/fondo-login.png";
 import BrandLogo from "../components/BrandLogo.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
-import { clearSessionNotice, readSessionNotice } from "../helpers/session.js";
+import { clearSessionNotice, readSessionNotice, storeInternalVerificationChallenge } from "../helpers/session.js";
+import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
+import { checkoutContinuationState } from "../helpers/checkoutIntent.js";
+
+const getAuthenticatedDestination = (user, requestedPath) => {
+  if (user?.role === "CLIENT") return requestedPath || "/catalog";
+  if (user?.role === "WAREHOUSE" && requestedPath?.startsWith("/logistics/scan?token=")) {
+    return requestedPath;
+  }
+  return "/dashboard";
+};
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, login } = useAuth();
-  const [correo, setCorreo] = useState("");
+  const location = useLocation();
+  const { isAuthenticated, login, user } = useAuth();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
   const [loading, setLoading] = useState(false);
+  const checkoutState = checkoutContinuationState(location.state);
 
   useEffect(() => {
     if (!sessionNotice) return;
@@ -23,7 +36,18 @@ export default function LoginPage() {
     clearSessionNotice();
   }, [sessionNotice]);
 
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  const requestedPath = typeof location.state?.from === "string"
+    && location.state.from.startsWith("/")
+    && !location.state.from.startsWith("//")
+    ? location.state.from
+    : null;
+
+  if (isAuthenticated) {
+    const destination = user?.requiresEmailVerification
+      ? "/verify-work-email"
+      : getAuthenticatedDestination(user, requestedPath);
+    return <Navigate to={destination} replace state={user?.role === "CLIENT" ? checkoutState : undefined} />;
+  }
 
   const clearExpiredSessionMessage = () => {
     if (!sessionNotice) return;
@@ -37,9 +61,27 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login({ correo, password });
-      navigate("/dashboard");
+      const normalizedIdentifier = identifier.includes("@") ? identifier.trim().toLowerCase() : normalizeRut(identifier);
+      if (!identifier.includes("@") && !isValidRut(normalizedIdentifier)) {
+        toast.error("Ingresa un RUT chileno válido");
+        return;
+      }
+      const session = await login({ identifier: normalizedIdentifier, password }, checkoutState);
+      if (session.user.requiresEmailVerification) {
+        storeInternalVerificationChallenge(session.user.id, session.emailVerification);
+      }
+      navigate(session.user.requiresEmailVerification
+        ? "/verify-work-email"
+        : getAuthenticatedDestination(session.user, requestedPath), {
+          state: session.user.role === "CLIENT" ? checkoutState : undefined,
+        });
     } catch (err) {
+      if (err?.response?.data?.code === "CLIENT_SELF_DEACTIVATED") {
+        navigate("/reactivate-account", {
+          state: { identifier: identifier.trim() },
+        });
+        return;
+      }
       toast.error(getApiError(err, "No se pudo iniciar sesion"));
     } finally {
       setLoading(false);
@@ -56,10 +98,10 @@ export default function LoginPage() {
           <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
         </div>
         <div className="relative z-1 w-full max-w-120 -translate-y-20 place-self-center py-8 text-left max-[980px]:-translate-y-12">
-          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Control de inventario y ventas, con reportes</h1>
-          <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Gestión interna de productos, stock y ventas presenciales para la ferretería.</p>
+          <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Ferretería FYF, todo en un solo lugar</h1>
+          <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Accede a tu cuenta para comprar, consultar pedidos o continuar con tu trabajo.</p>
         </div>
-        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · USO INTERNO</span>
+        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · ACCESO SEGURO</span>
       </section>
 
       <img
@@ -79,22 +121,25 @@ export default function LoginPage() {
           </div>
           <div>
             <h2 className="m-0 text-2xl font-bold text-ink-950">Iniciar sesión</h2>
-            <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta institucional para continuar.</p>
+            <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta para continuar.</p>
           </div>
 
           <label>
-            Correo electrónico
+            Correo electrónico o RUT
             <span className="relative block">
-              <Mail className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
+              <ContactRound className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
               <input
                 className="pl-9.75"
-                type="email"
-                value={correo}
+                type="text"
+                value={identifier}
                 onChange={(event) => {
                   clearExpiredSessionMessage();
-                  setCorreo(event.target.value);
+                  setIdentifier(event.target.value);
                 }}
-                placeholder="correo@ejemplo.cl"
+                onBlur={() => {
+                  if (identifier && !identifier.includes("@")) setIdentifier(normalizeRut(identifier));
+                }}
+                placeholder="correo@ejemplo.cl o 10120345-K"
                 autoComplete="username"
                 required
               />
@@ -106,8 +151,8 @@ export default function LoginPage() {
             <span className="relative block">
               <LockKeyhole className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
               <input
-                className="pl-9.75"
-                type="password"
+                className="pr-12 pl-9.75"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
                   clearExpiredSessionMessage();
@@ -117,12 +162,33 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
               />
+              <button
+                className="absolute top-1/2 right-1.5 z-2 grid size-9 min-h-0 -translate-y-1/2 place-items-center border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950"
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </span>
           </label>
 
-          <button className="mt-0.5 w-full" type="submit" disabled={loading}>
+          <Link className="-mt-3 justify-self-end text-xs font-bold text-rust-600" to="/forgot-password">
+            ¿Olvidaste tu contraseña?
+          </Link>
+
+          <button className="login-submit-button mt-0.5 w-full" type="submit" disabled={loading}>
             Ingresar
           </button>
+          <div className="grid grid-cols-2 gap-2 max-[420px]:grid-cols-1">
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/register" state={requestedPath ? { from: requestedPath, ...checkoutState } : undefined}>
+              <UserPlus size={17} /> Registrarse
+            </Link>
+            <Link className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] border border-slate-300 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">
+              <Store size={17} /> Ver catálogo
+            </Link>
+          </div>
         </form>
       </section>
     </main>

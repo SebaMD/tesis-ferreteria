@@ -12,8 +12,11 @@ build/
 
 # Variables de entorno locales (¡NUNCA incluir en la imagen!)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Archivos persistentes y privados: se montan mediante volumen, no se copian.
+uploads/
 
 # Archivos del editor e IDE
 .vscode/

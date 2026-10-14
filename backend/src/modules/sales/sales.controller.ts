@@ -20,6 +20,7 @@ import {
   validateCancellationReviewBody,
   validateCreateSaleBody,
 } from "./sales.validation.js";
+import { buildSaleSummaryModel, renderSaleSummaryPdf } from "./saleSummaryPdf.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -48,6 +49,23 @@ export async function getSaleById(req: Request, res: Response) {
     const message = msg(error);
     if (message === "Venta no encontrada") return handleErrorClient(res, 404, message);
     return handleErrorServer(res, 500, "Error al obtener venta", message);
+  }
+}
+
+export async function getSaleSummaryPdf(req: Request, res: Response) {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
+    const model = buildSaleSummaryModel(await getSaleByIdService(id));
+    const pdf = await renderSaleSummaryPdf(model);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="resumen-venta-${model.folio}.pdf"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.status(200).send(pdf);
+  } catch (error) {
+    if (msg(error) === "Venta no encontrada") return handleErrorClient(res, 404, "Venta no encontrada");
+    return handleErrorServer(res, 500, "No se pudo generar el resumen de venta", msg(error));
   }
 }
 

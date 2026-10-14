@@ -26,6 +26,7 @@ import {
   findLogisticsTaskById,
   findLogisticsTaskForUpdate,
   findLogisticsTasks,
+  findOnlineAdministrativeOrder,
   OPERATIONAL_ORDER_STATUSES,
   updateLogisticsTask,
   type LogisticsOrigin,
@@ -33,6 +34,16 @@ import {
   type LogisticsStatus,
   type LogisticsTask,
 } from "./orderLogistics.repository.js";
+import { buildAdministrativeOrderModel } from "./administrativeOrderModel.js";
+
+export async function getAdministrativeOrderSummaryService(orderId: number, user: { role: string }) {
+  if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    throw new OrderLogisticsError("No tienes permisos para consultar la ficha administrativa", 403);
+  }
+  const order = await findOnlineAdministrativeOrder(orderId);
+  if (!order) throw new OrderLogisticsError("Pedido no encontrado", 404);
+  return buildAdministrativeOrderModel(order);
+}
 
 export class OrderLogisticsError extends Error {
   constructor(message: string, public readonly statusCode: number) {

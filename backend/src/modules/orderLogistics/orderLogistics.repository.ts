@@ -1,8 +1,9 @@
-import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import {
   onlineOrderItemsTable,
   onlineOrdersTable,
+  onlinePaymentsTable,
   productsTable,
   saleDeliveriesTable,
   saleDetailsTable,
@@ -62,6 +63,30 @@ const onlineColumns = {
   createdAt: onlineOrdersTable.createdAt,
   updatedAt: onlineOrdersTable.updatedAt,
 };
+
+export async function findOnlineAdministrativeOrder(orderId: number) {
+  const [order] = await db.select(onlineColumns).from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(eq(onlineOrdersTable.id, orderId)).limit(1);
+  if (!order) return null;
+  const [items, payments] = await Promise.all([
+    db.select({
+      productId: onlineOrderItemsTable.productId, productName: productsTable.name,
+      unitMeasure: productsTable.unitMeasure, quantity: onlineOrderItemsTable.quantity,
+      unitPrice: onlineOrderItemsTable.unitPrice, subtotal: onlineOrderItemsTable.subtotal,
+      discountAmount: onlineOrderItemsTable.discountAmount, promotionId: onlineOrderItemsTable.promotionId,
+      promotionTypeSnapshot: onlineOrderItemsTable.promotionTypeSnapshot,
+      promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
+      promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
+    }).from(onlineOrderItemsTable).innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+      .where(eq(onlineOrderItemsTable.orderId, orderId)),
+    db.select({ buyOrder: onlinePaymentsTable.buyOrder, authorizationCode: onlinePaymentsTable.authorizationCode,
+      amount: onlinePaymentsTable.amount, transactionDate: onlinePaymentsTable.transactionDate })
+      .from(onlinePaymentsTable).where(and(eq(onlinePaymentsTable.orderId, orderId), eq(onlinePaymentsTable.status, "AUTHORIZED")))
+      .orderBy(desc(onlinePaymentsTable.id)).limit(1),
+  ]);
+  return { ...order, items, authorizedPayment: payments[0] ?? null };
+}
 
 const saleColumns = {
   id: saleDeliveriesTable.saleId,

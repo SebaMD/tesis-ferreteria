@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import DownloadSaleSummaryButton from "../components/orders/DownloadSaleSummaryButton.jsx";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -1650,6 +1651,8 @@ export default function SalesPage() {
 
           {saleDetail && (
             <>
+              <div className="flex flex-wrap gap-2"><DownloadSaleSummaryButton saleId={saleDetail.id} /></div>
+              <p className="m-0 text-xs leading-5 text-slate-500">La fecha y las cantidades no devueltas son informativas; no constituyen autorización legal ni comercial para una devolución.</p>
               <div className="grid grid-cols-3 gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[900px]:grid-cols-2 max-[720px]:grid-cols-1">
                 <div>
                   <span className="text-xs font-semibold text-slate-500">Folio</span>
@@ -1714,7 +1717,7 @@ export default function SalesPage() {
                     <MobileDetailGrid>
                       <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
                       <MobileDetailField label="Devuelta">{detail.returnedQuantity || 0}</MobileDetailField>
-                      <MobileDetailField label="Disponible">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
+                      <MobileDetailField label="No devuelta">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
                       <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
                       <MobileDetailField label="Subtotal">{formatClp(detail.subtotal)}</MobileDetailField>
                     </MobileDetailGrid>
@@ -1728,7 +1731,7 @@ export default function SalesPage() {
                         <th>Producto</th>
                         <th>Vendida</th>
                         <th>Devuelta</th>
-                        <th>Disponible</th>
+                        <th>No devuelta</th>
                         <th>Precio unitario</th>
                         <th>Subtotal</th>
                       </tr>

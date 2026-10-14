@@ -9,6 +9,7 @@ import {
   createSaleController,
   getCancellationRequestsController,
   getSaleById,
+  getSaleSummaryPdf,
   getSales,
   rejectCancellationRequestController,
   undoCancellationRequestController,
@@ -39,6 +40,7 @@ router.patch(
   verifyRoles(["ADMIN"]),
   undoCancellationRequestController,
 );
+router.get("/:id/summary", verifyRoles(["ADMIN", "MANAGER", "CASHIER"]), getSaleSummaryPdf);
 router.get("/:id", verifyRoles(["ADMIN", "MANAGER", "CASHIER"]), getSaleById);
 router.post("/", verifyRoles(["CASHIER"]), createSaleController);
 router.post(

@@ -4,6 +4,7 @@ import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils
 import { ImageFileError } from "../../utils/imageFiles.js";
 import {
   getDeliveryProofFileService,
+  getAdministrativeOrderSummaryService,
   getLogisticsHandoffService,
   getLogisticsOrderByIdService,
   getLogisticsOrdersService,
@@ -48,6 +49,18 @@ function handleControllerError(res: Response, error: unknown, fallback: string) 
     fallback,
     error instanceof Error ? error.message : "Error desconocido",
   );
+}
+
+export async function getAdministrativeOrderSummaryController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) throw new OrderLogisticsError("El id del pedido debe ser valido", 400);
+    const model = await getAdministrativeOrderSummaryService(id, authenticatedUser(req));
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(res, 200, "Ficha administrativa obtenida", model);
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo obtener la ficha administrativa");
+  }
 }
 
 export async function getLogisticsOrdersController(req: AuthenticatedRequest, res: Response) {

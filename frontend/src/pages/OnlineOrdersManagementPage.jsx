@@ -22,6 +22,7 @@ import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
+import AdministrativeOrderCard from "../components/orders/AdministrativeOrderCard.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { buildDeliveryRouteUrl } from "../helpers/delivery.js";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
@@ -670,6 +671,10 @@ export default function OnlineOrdersManagementPage() {
                   />
                 )}
               </section>
+            )}
+
+            {["ADMIN", "MANAGER"].includes(user?.role) && selectedOrder.origin === "ONLINE" && (
+              <AdministrativeOrderCard key={selectedOrder.id} orderId={selectedOrder.id} role={user.role} />
             )}
 
             <dl className="grid grid-cols-3 gap-3 max-[800px]:grid-cols-2 max-[520px]:grid-cols-1">

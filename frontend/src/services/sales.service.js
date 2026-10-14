@@ -10,6 +10,10 @@ export async function getSaleByIdRequest(id) {
   return response.data.data;
 }
 
+export function getSaleSummaryPdfRequest(id) {
+  return api.get(`/sales/${id}/summary`, { responseType: "blob" });
+}
+
 export async function createSaleRequest(data) {
   const response = await api.post("/sales", data);
   return response.data.data;

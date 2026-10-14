@@ -33,6 +33,7 @@ import LogisticsScanPage from "./pages/LogisticsScanPage.jsx";
 import StatisticsPage from "./pages/StatisticsPage.jsx";
 import PromotionsPage from "./pages/PromotionsPage.jsx";
 import ClientReactivationPage from "./pages/ClientReactivationPage.jsx";
+import ReturnsInformationPage from "./pages/ReturnsInformationPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -95,6 +96,7 @@ export default function App() {
       <Route path="/reactivate-account" element={<ClientReactivationPage />} />
       <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
+      <Route path="/changes-and-returns" element={<StorePage><ReturnsInformationPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
       <Route path="/checkout-options" element={<StorePage><CheckoutChoicePage /></StorePage>} />

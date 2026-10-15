@@ -1,5 +1,12 @@
-// Completar solo después de que FYF autorice estos datos. No se guardan en la BD.
-export const FYF_CONTACT = Object.freeze({ phone: null, whatsapp: null, email: null, address: null });
+// Publicar cada dato solo cuando FYF lo autorice. Teléfonos con código de país.
+// Para confirmar la dirección, verificar también que la búsqueda de Maps corresponda al local.
+export const FYF_CONTACT = Object.freeze({
+  phone: null,
+  whatsapp: null,
+  email: null,
+  address: "Cañete & Pedro Aguirre Cerda, Santa Juana, Bío Bío, Chile",
+  confirmed: Object.freeze({ phone: false, whatsapp: false, email: false, address: false }),
+});
 
 export const RETURNS_INFORMATION = [
   {
@@ -38,9 +45,14 @@ export function getStoreContactDetails(contact = FYF_CONTACT) {
   const details = [];
   const phone = value => typeof value === "string" && /^\+?\d{8,15}$/.test(value.trim()) ? value.trim() : null;
   const telephone = phone(contact.phone), whatsapp = phone(contact.whatsapp);
-  if (telephone) details.push({ label: "Teléfono", text: telephone, href: `tel:${telephone}` });
-  if (whatsapp) details.push({ label: "WhatsApp", text: whatsapp, href: `https://wa.me/${whatsapp.replace(/^\+/, "")}` });
-  if (typeof contact.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) details.push({ label: "Correo", text: contact.email, href: `mailto:${contact.email}` });
-  if (typeof contact.address === "string" && contact.address.trim()) details.push({ label: "Local", text: contact.address.trim(), href: null });
+  if (contact.confirmed?.phone === true && telephone) details.push({ kind: "phone", label: "Teléfono", text: telephone, href: `tel:${telephone}`, action: "Llamar" });
+  if (contact.confirmed?.whatsapp === true && whatsapp) details.push({ kind: "whatsapp", label: "WhatsApp", text: whatsapp, href: `https://wa.me/${whatsapp.replace(/^\+/, "")}`, action: "WhatsApp", external: true });
+  const email = typeof contact.email === "string" ? contact.email.trim() : "";
+  if (contact.confirmed?.email === true && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) details.push({ kind: "email", label: "Correo", text: email, href: `mailto:${email}`, action: "Enviar correo" });
+  if (contact.confirmed?.address === true && typeof contact.address === "string" && contact.address.trim()) {
+    const address = contact.address.trim();
+    const query = new URLSearchParams({ api: "1", query: address });
+    details.push({ kind: "address", label: "Dirección de referencia", text: address, href: `https://www.google.com/maps/search/?${query}`, action: "Abrir en Google Maps", external: true });
+  }
   return details;
 }

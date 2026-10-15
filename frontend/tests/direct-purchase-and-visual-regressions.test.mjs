@@ -94,7 +94,7 @@ test("el aviso de devoluciones pendientes adapta solo dark mode y conserva conta
   assert.match(sales, /canReviewCancellation && pendingCancellationSales\.length > 0/);
   assert.match(notice, /border-amber-300 bg-amber-50[^"]*text-amber-950/);
   assert.match(notice, /border-amber-700 bg-amber-600[^"]*text-white hover:bg-amber-700/);
-  assert.match(notice, /Tienes \{pendingCancellationSales\.length\} solicitudes de devolución pendientes/);
+  assert.match(notice, /Tienes <\/span>\{getPendingReturnNoticeLabel\(pendingCancellationSales\.length\)\}/);
   assert.match(notice, /setActiveView\("history"\)/);
   assert.match(notice, /applySalesFilter\(salesFilter === "pending" \? "current" : "pending"\)/);
   assert.match(notice, /"Ver ventas vigentes" : "Ver solicitudes"/);

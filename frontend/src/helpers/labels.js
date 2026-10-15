@@ -33,6 +33,10 @@ export function getCancellationRequestStatusLabel(status) {
   return CANCELLATION_REQUEST_STATUS_LABELS[status] || status;
 }
 
+export function getPendingReturnNoticeLabel(count) {
+  return `${count} ${count === 1 ? "solicitud de devolución pendiente" : "solicitudes de devolución pendientes"}`;
+}
+
 export function getPaymentMethodLabel(value = "") {
   return PAYMENT_METHODS.find((method) => method.value === String(value).toLowerCase())?.label || value;
 }

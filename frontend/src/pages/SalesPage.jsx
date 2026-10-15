@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, EyeOff, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { getAvailableStockStatus } from "../helpers/inventory.js";
 import {
   getCancellationRequestStatusLabel,
   getPaymentMethodLabel,
+  getPendingReturnNoticeLabel,
   getSaleStatusLabel,
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
@@ -992,19 +993,21 @@ export default function SalesPage() {
           <p>{canCreate && activeView === "sales" ? "Punto de venta presencial con carrito." : "Historial de ventas presenciales registradas."}</p>
         </div>
         {canReviewCancellation && pendingCancellationSales.length > 0 && (
-          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
-            <span className="text-sm font-bold">
-              Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes
+          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:gap-2">
+            <span className="min-w-0 flex-1 text-left text-sm font-bold">
+              <span className="max-[720px]:hidden">Tienes </span>{getPendingReturnNoticeLabel(pendingCancellationSales.length)}
             </span>
             <button
-              className="min-h-8 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700"
+              className="min-h-8 shrink-0 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700 max-[720px]:size-11 max-[720px]:min-h-11 max-[720px]:p-0"
               type="button"
+              aria-label={salesFilter === "pending" ? "Volver a ventas vigentes" : "Ver solicitudes pendientes"}
               onClick={() => {
                 setActiveView("history");
                 applySalesFilter(salesFilter === "pending" ? "current" : "pending");
               }}
             >
-              {salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}
+              <span className="max-[720px]:hidden">{salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}</span>
+              <span className="hidden max-[720px]:inline-flex" aria-hidden="true">{salesFilter === "pending" ? <EyeOff size={20} /> : <Eye size={20} />}</span>
             </button>
           </div>
         )}

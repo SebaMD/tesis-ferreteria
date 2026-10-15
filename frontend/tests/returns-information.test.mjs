@@ -33,8 +33,7 @@ test("página permanente enlazada desde el footer reutiliza layout y no llama en
   const [app, layout, page, catalog] = await Promise.all([read("App.jsx"), read("components/ClientLayout.jsx"), read("pages/ReturnsInformationPage.jsx"), read("pages/CatalogPage.jsx")]);
   assert.match(app, /path="\/changes-and-returns" element=\{<StorePage><ReturnsInformationPage/);
   assert.match(layout, /to="\/changes-and-returns"/);
-  assert.match(catalog, /<Link[^>]+to="\/changes-and-returns">Cambios y devoluciones<\/Link>/);
-  assert.ok(catalog.indexOf('to="/changes-and-returns"') < catalog.indexOf("<CatalogNoticeCarousel />"));
+  assert.doesNotMatch(catalog, /to="\/changes-and-returns"/);
   assert.match(page, /contacts\.length > 0 && <section[^>]+aria-label="Contacto de FYF"/);
   assert.doesNotMatch(page, /se publicarán|pendientes|confirmación y autorización por FYF/);
   assert.match(page, /https:\/\/www\.sernac\.cl\/portal\/618\/articles-84009_archivo_01\.pdf/);

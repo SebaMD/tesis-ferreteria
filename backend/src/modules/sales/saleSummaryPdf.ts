@@ -83,21 +83,94 @@ export function renderSaleSummaryPdf(model: ReturnType<typeof buildSaleSummaryMo
     for (const item of model.items) row([item.productName, String(item.quantity), String(item.returnedQuantity),
       String(item.remainingQuantity), formatOrderMoney(item.unitPrice), formatOrderMoney(item.subtotal)]);
     doc.moveDown();
-    paragraph(`Total original: ${formatOrderMoney(model.total)}`, true);
-    paragraph(`Total devuelto: ${formatOrderMoney(model.returnedTotal)}`, true);
-    paragraph(`Total neto: ${formatOrderMoney(model.netTotal)}`, true);
+    const totals = [
+      `Total original: ${formatOrderMoney(model.total)}`,
+      `Total devuelto: ${formatOrderMoney(model.returnedTotal)}`,
+      `Total neto: ${formatOrderMoney(model.netTotal)}`,
+    ].map((text) => {
+      let size = 9.5;
+      doc.font("Helvetica-Bold").fontSize(size);
+      while (doc.widthOfString(text) > width / 3 - 18 && size > 8) {
+        size -= 0.5;
+        doc.fontSize(size);
+      }
+      return { text, size, height: doc.heightOfString(text, { width: width / 3 - 18 }) };
+    });
+    const totalsHeight = Math.max(20, ...totals.map((total) => total.height)) + 16;
+    ensureSpace(totalsHeight);
+    const totalsTop = doc.y;
+    totals.forEach((total, index) => {
+      doc.font("Helvetica-Bold").fontSize(total.size).fillColor("#111827")
+        .text(total.text, 50 + index * width / 3 + 9, totalsTop + 8, { width: width / 3 - 18, align: "center" });
+    });
+    for (const index of [1, 2]) doc.moveTo(50 + index * width / 3, totalsTop + 4)
+      .lineTo(50 + index * width / 3, totalsTop + totalsHeight - 4).lineWidth(0.5).strokeColor("#cbd5e1").stroke();
+    doc.x = 50;
+    doc.y = totalsTop + totalsHeight + 8;
     paragraph("Las cantidades no devueltas son informativas y no constituyen autorización legal ni comercial para una devolución.");
+    ensureSpace(model.returns.length ? 110 : 65);
+    doc.moveTo(50, doc.y + 8).lineTo(545, doc.y + 8).lineWidth(0.6).strokeColor("#cbd5e1").stroke();
+    doc.y += 20;
     paragraph("Historial de devoluciones", true, 11);
     if (!model.returns.length) paragraph("Sin solicitudes ni devoluciones registradas.");
-    for (const request of model.returns) {
-      ensureSpace(75);
-      paragraph(`Solicitud #${request.id} - ${request.status}`, true);
-      paragraph(`Solicitud: ${formatOrderDate(request.requestedAt)}`);
-      if (request.reviewedAt) paragraph(`Revisión: ${formatOrderDate(request.reviewedAt)}`);
-      if (request.reversedAt) paragraph(`Reversión: ${formatOrderDate(request.reversedAt)}`);
-      paragraph(`Motivo: ${request.reason}`);
-      if (request.response) paragraph(`Respuesta: ${request.response}`);
-      for (const item of request.items) paragraph(`${item.productName}: ${item.quantity} unidad(es) solicitada(s)`);
+    const wrapCardText = (text: string) => {
+      doc.font("Helvetica").fontSize(9);
+      const lines: string[] = [];
+      for (const originalLine of text.split(/\r?\n/)) {
+        let line = "";
+        for (const word of originalLine.split(/\s+/).filter(Boolean)) {
+          if (doc.widthOfString(word) > width - 24) {
+            if (line) { lines.push(line); line = ""; }
+            for (const character of Array.from(word)) {
+              if (line && doc.widthOfString(line + character) > width - 24) { lines.push(line); line = ""; }
+              line += character;
+            }
+          } else if (line && doc.widthOfString(`${line} ${word}`) > width - 24) {
+            lines.push(line); line = word;
+          } else line = line ? `${line} ${word}` : word;
+        }
+        lines.push(line);
+      }
+      return lines;
+    };
+    for (const [requestIndex, request] of model.returns.entries()) {
+      const fields = [`Solicitud: ${formatOrderDate(request.requestedAt)}`];
+      if (request.reviewedAt) fields.push(`Revisión: ${formatOrderDate(request.reviewedAt)}`);
+      if (request.reversedAt) fields.push(`Reversión: ${formatOrderDate(request.reversedAt)}`);
+      fields.push(`Motivo: ${request.reason}`);
+      if (request.response) fields.push(`Respuesta: ${request.response}`);
+      for (const item of request.items) fields.push(`${item.productName}: ${item.quantity} unidad(es) solicitada(s)`);
+      const lines = fields.flatMap((field) => {
+        const wrapped = wrapCardText(field);
+        return wrapped.map((text, index) => ({ text, height: index === wrapped.length - 1 ? 16 : 12 }));
+      });
+      const wholeHeight = 44 + lines.reduce((sum, line) => sum + line.height, 0);
+      // Mantener tarjetas cortas juntas; las extensas se dividen con encabezado de continuación.
+      if (requestIndex > 0 && wholeHeight <= 685 && doc.y + wholeHeight > 735) doc.addPage();
+      let offset = 0;
+      while (offset < lines.length) {
+        if (doc.y + 60 > 735) doc.addPage();
+        const top = doc.y;
+        let end = offset, bodyHeight = 0;
+        while (end < lines.length && top + 44 + bodyHeight + lines[end].height <= 735) {
+          bodyHeight += lines[end].height;
+          end++;
+        }
+        const height = 44 + bodyHeight;
+        doc.rect(50, top, width, height).lineWidth(0.6).strokeColor("#cbd5e1").stroke();
+        doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827")
+          .text(`Solicitud #${request.id} - ${request.status}${offset ? " (continuación)" : ""}`, 62, top + 12, { width: width - 24, lineBreak: false });
+        let y = top + 32;
+        doc.font("Helvetica").fontSize(9);
+        for (let index = offset; index < end; index++) {
+          doc.text(lines[index].text, 62, y, { width: width - 24, lineBreak: false });
+          y += lines[index].height;
+        }
+        doc.x = 50;
+        doc.y = top + height + 12;
+        offset = end;
+        if (offset < lines.length) doc.addPage();
+      }
     }
     const pages = doc.bufferedPageRange();
     for (let i = pages.start; i < pages.start + pages.count; i++) {

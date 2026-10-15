@@ -43,7 +43,7 @@ export default function AdministrativeOrderCard({ orderId, role }) {
     catch { toast.error("No se pudo abrir la impresión de la ficha"); }
   };
   const sections = model ? getAdministrativeOrderSections(model) : [];
-  const fieldsSection = (section, economic = false) => <section className="grid gap-2.5" key={section.title}>
+  const fieldsSection = (section, economic = false, boxed = false) => <section className={boxed ? "grid min-w-0 gap-2.5 rounded-md border border-slate-200 bg-slate-50 p-3" : "grid gap-2.5"} key={section.title}>
     <h4 className="m-0 text-xs font-bold uppercase tracking-wide text-slate-600">{section.title}</h4>
     <dl className={`m-0 grid gap-x-4 gap-y-2.5 max-[620px]:grid-cols-1 ${economic ? "grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-3" : "grid-cols-2"}`}>
       {section.fields.map(([label, value]) => <div key={label}><dt className="text-xs font-semibold text-slate-500">{label}</dt><dd className="mt-1 ml-0 break-words text-sm font-semibold text-ink-950">{value}</dd></div>)}
@@ -64,8 +64,8 @@ export default function AdministrativeOrderCard({ orderId, role }) {
       {error && <p className="m-0 text-sm text-critical-600" role="alert">{error}</p>}
       {model && <>
         <p className="m-0 text-xs leading-5 text-slate-600">{model.notice}</p>
-        {fieldsSection(sections[0])}
-        {fieldsSection(sections[1])}
+        {fieldsSection(sections[0], false, true)}
+        {fieldsSection(sections[1], false, true)}
         <section className="grid min-w-0 gap-2.5">
           <h4 className="m-0 text-xs font-bold uppercase tracking-wide text-slate-600">Productos comprados</h4>
         <ResponsiveTableView rows={model.items} getRowKey={(item) => item.productId} getRowLabel={(item) => item.productName} resetKey={model.folio}

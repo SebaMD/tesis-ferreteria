@@ -377,13 +377,19 @@
 }
 
 .dark .sale-return-pending-notice button {
-  border-color: #8a5a16 !important;
-  background: #4a3514 !important;
-  color: #fde68a !important;
+  border-color: var(--color-amber-700) !important;
+  background: var(--color-amber-600) !important;
+  color: #10151f !important;
 }
 
 .dark .sale-return-pending-notice button:not(:disabled):hover {
-  background: #60451a !important;
+  background: var(--color-amber-700) !important;
+  color: #ffffff !important;
+}
+
+.dark .sale-return-pending-notice button:focus-visible {
+  outline: 2px solid #fdba74;
+  outline-offset: 2px;
 }
 
 .dark .sale-return-reason {
@@ -488,6 +494,22 @@
 .dark .border-slate-300,
 .dark .border-slate-200 {
   border-color: #3d4856 !important;
+}
+
+/* Bordes exclusivos de tablas: no cambiar tarjetas que usen border-slate-200. */
+.dark table,
+.dark [data-responsive-table="mobile"] {
+  border: 1px solid #465260;
+}
+
+.dark table th,
+.dark table td,
+.dark [data-mobile-table-row] {
+  border-bottom-color: #2c3745 !important;
+}
+
+.dark table thead th {
+  border-bottom-color: #3d4856 !important;
 }
 
 .dark input:not([type="checkbox"]):not([type="radio"]),

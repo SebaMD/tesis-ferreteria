@@ -32,11 +32,31 @@ const large = buildSaleSummaryModel({ ...sale, details: Array.from({ length: 70 
 })) });
 const pdf = await renderSaleSummaryPdf(large);
 assert.ok((pdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length >= 3);
+const normal = buildSaleSummaryModel({ ...sale, status: "ACTIVE", returnedTotal: "0.00", netTotal: "4000.00",
+  details: [{ ...sale.details[0], returnedQuantity: 0 }], cancellationRequests: [] });
+const normalPdf = await renderSaleSummaryPdf(normal);
+assert.equal((normalPdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length, 1);
+const partialPdf = await renderSaleSummaryPdf(summary);
+const longHistory = { ...summary, total: "9999999999.00", returnedTotal: "1000.00", netTotal: "9999998999.00",
+  returns: summary.returns.map((request, index) => ({ ...request,
+    reason: index === 0 ? `${"Detalle extenso del producto recibido, revisión de sus componentes y descripción de la situación observada. ".repeat(65)}FINAL_MOTIVO` : `Motivo de ${request.status}. ${"Detalle de revisión. ".repeat(10)}`,
+    response: index === 0 ? `${"Respuesta administrativa informativa que documenta las observaciones recibidas sin modificar el resultado comercial. ".repeat(30)}FINAL_RESPUESTA` : request.response,
+  })) };
+const historyBefore = JSON.stringify(longHistory);
+const historyPdf = await renderSaleSummaryPdf(longHistory);
+assert.ok((historyPdf.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length >= 3);
+assert.equal(JSON.stringify(longHistory), historyBefore);
+if (process.env.SALE_SUMMARY_PDF_QA_DIR) {
+  await mkdir(process.env.SALE_SUMMARY_PDF_QA_DIR, { recursive: true });
+  for (const [name, content] of [["normal", normalPdf], ["partial", partialPdf], ["long-history", historyPdf]]) {
+    await writeFile(`${process.env.SALE_SUMMARY_PDF_QA_DIR}/${name}.pdf`, content);
+  }
+}
 if (process.env.SALE_SUMMARY_PDF_OUTPUT) {
   await mkdir(dirname(process.env.SALE_SUMMARY_PDF_OUTPUT), { recursive: true });
   await writeFile(process.env.SALE_SUMMARY_PDF_OUTPUT, pdf);
 }
-console.log("PASS resumen de ventas conserva importes existentes, cantidades, cuatro estados de devolución y PDF multipágina");
+console.log("PASS resumen de ventas: importes intactos, venta normal de una página, devolución parcial, cuatro estados y tarjetas extensas multipágina");
 
 const source = {
   id: 12, status: "PAID", total: "1800.00", createdAt: date, paidAt: date,

@@ -1,6 +1,6 @@
 import { AlertTriangle, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -201,9 +201,6 @@ export default function CatalogPage() {
   return (
     <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
-      <div className="flex justify-end">
-        <Link className="text-xs font-semibold text-rust-600 underline underline-offset-4" to="/changes-and-returns">Cambios y devoluciones</Link>
-      </div>
       <CatalogNoticeCarousel />
 
       {loadError && (

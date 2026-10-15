@@ -99,7 +99,7 @@ test("el aviso de devoluciones pendientes adapta solo dark mode y conserva conta
   assert.match(notice, /applySalesFilter\(salesFilter === "pending" \? "current" : "pending"\)/);
   assert.match(notice, /"Ver ventas vigentes" : "Ver solicitudes"/);
   assert.match(styles, /\.dark \.sale-return-pending-notice \{\s*border-color: #8a5a16 !important;\s*background: #33270f !important;\s*color: #fde68a !important;/);
-  assert.match(styles, /\.dark \.sale-return-pending-notice button \{\s*border-color: #8a5a16 !important;\s*background: #4a3514 !important;\s*color: #fde68a !important;/);
-  assert.match(styles, /\.dark \.sale-return-pending-notice button:not\(:disabled\):hover \{\s*background: #60451a !important;/);
+  assert.match(styles, /\.dark \.sale-return-pending-notice button \{\s*border-color: var\(--color-amber-700\) !important;\s*background: var\(--color-amber-600\) !important;\s*color: #10151f !important;/);
+  assert.match(styles, /\.dark \.sale-return-pending-notice button:not\(:disabled\):hover \{\s*background: var\(--color-amber-700\) !important;/);
   assert.doesNotMatch(styles, /(?:^|\n)\.sale-return-pending-notice/);
 });

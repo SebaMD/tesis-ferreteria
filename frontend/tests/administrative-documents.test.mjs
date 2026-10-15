@@ -119,6 +119,11 @@ test("vista compartida protege ficha y conserva descargas con permisos de ventas
   assert.match(card, /<\/div>\s*<div[^>]+aria-label="Acciones de la ficha administrativa"/);
   assert.match(card, /max-\[620px\]:grid-cols-1/);
   assert.match(card, /getAdministrativeOrderSections\(model\)/);
+  assert.match(card, /boxed \? "grid min-w-0 gap-2\.5 rounded-md border border-slate-200 bg-slate-50 p-3"/);
+  assert.match(card, /fieldsSection\(sections\[0\], false, true\)/);
+  assert.match(card, /fieldsSection\(sections\[1\], false, true\)/);
+  assert.match(card, /fieldsSection\(sections\[2\], true\)/);
+  assert.match(card, /fieldsSection\(sections\[3\]\)/);
   assert.match(sales, /DownloadSaleSummaryButton saleId=\{saleDetail\.id\}/);
   assert.match(sales, /no constituyen autorización legal ni comercial/);
   assert.match(button, /Descargar resumen de venta \(PDF\)/);

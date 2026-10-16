@@ -81,7 +81,11 @@ export default function ClientOrdersPage() {
 
   useEffect(() => {
     if (loading || !location.hash.startsWith("#order-")) return;
-    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({
+      behavior: reducedMotion ? "instant" : "smooth",
+      block: "center",
+    });
   }, [loading, location.hash, orders]);
 
   const grouped = useMemo(() => groupBuyerOrders(orders), [orders]);

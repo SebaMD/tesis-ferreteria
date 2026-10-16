@@ -1,10 +1,42 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { groupBuyerOrders } from "../src/helpers/buyerOrderGroups.js";
 import { getOnlineOrderStatus } from "../src/helpers/onlineOrders.js";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("Mis pedidos respeta movimiento reducido al desplazarse al pedido sin cambiar el destino", async () => {
+  const source = await read("src/pages/ClientOrdersPage.jsx");
+  const effect = source.match(/useEffect\(\(\) => \{\s*(if \(loading \|\| !location\.hash\.startsWith\("#order-"\)\) return;[\s\S]*?)\}, \[loading, location\.hash, orders\]\);/)?.[1];
+  assert.ok(effect, "debe conservar el efecto de navegación al pedido");
+  const runEffect = ({ reducedMotion = false, loading = false, hash = "#order-42", exists = true } = {}) => {
+    const calls = [];
+    const queries = [];
+    const ids = [];
+    runInNewContext(`(() => { ${effect} })()`, {
+      loading,
+      location: { hash },
+      window: { matchMedia: query => { queries.push(query); return { matches: reducedMotion }; } },
+      document: { getElementById: id => {
+        ids.push(id);
+        return exists ? { scrollIntoView: options => calls.push({ ...options }) } : null;
+      } },
+    });
+    return { calls, queries, ids };
+  };
+  for (const reducedMotion of [false, true]) {
+    const result = runEffect({ reducedMotion });
+    assert.deepEqual(result.queries, ["(prefers-reduced-motion: reduce)"]);
+    assert.deepEqual(result.ids, ["order-42"]);
+    assert.deepEqual(result.calls, [{ behavior: reducedMotion ? "instant" : "smooth", block: "center" }]);
+  }
+  for (const input of [{ loading: true }, { hash: "" }, { hash: "#other" }]) {
+    assert.deepEqual(runEffect(input), { calls: [], queries: [], ids: [] });
+  }
+  assert.deepEqual(runEffect({ exists: false }).calls, []);
+});
 
 test("los intentos de pago no se clasifican como pedidos operativos", () => {
   const orders = [

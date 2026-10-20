@@ -64,6 +64,7 @@ export default function ProductDetailPage() {
             <span className="text-xs font-extrabold text-rust-600">{product.categoryName}</span>
             <div className="flex items-start justify-between gap-3"><h1 className="mt-2 mb-2 min-w-0 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">{product.name}</h1><FavoriteButton product={product} /></div>
             {product.brand && <p className="text-sm text-slate-500">Marca: {product.brand}</p>}
+            {product.familyId && <Link to={`/catalog/families/${product.familyId}?variant=${product.id}`} state={location.state} className="text-sm font-bold">Ver otras opciones de esta familia</Link>}
             <ProductPromotionPrice product={product} size="detail" />
           </div>
           <p className="m-0 leading-7 text-slate-600">{product.description || "Este producto no tiene una descripción disponible."}</p>

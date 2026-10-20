@@ -216,7 +216,7 @@ export default function CatalogPage() {
         <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
           <div>
             <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
-            <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos en catálogo</span>
+            <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos o familias en catálogo</span>
             {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
           </div>
 
@@ -252,7 +252,7 @@ export default function CatalogPage() {
           </aside>
           <div className="min-w-0">
             <section className="grid grid-cols-3 gap-4 max-[1250px]:grid-cols-2 max-[600px]:gap-2.5" aria-label="Productos del catálogo">
-              {products.map((product) => <ProductCard key={product.id} product={product} detailOrigin={detailOrigin} />)}
+              {products.map((product) => <ProductCard key={`${product.kind || "product"}:${product.id}`} product={product} detailOrigin={detailOrigin} />)}
             </section>
             {!loading && !loadError && products.length === 0 && (
               <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-sm text-slate-500">
@@ -273,7 +273,7 @@ export default function CatalogPage() {
           </div>
         </div>
       </section>
-      <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small" footer={<button type="button" onClick={() => setFiltersOpen(false)}>Ver {pagination.totalItems} productos</button>}><CatalogFilters {...filterProps} /></AppModal>
+      <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small" footer={<button type="button" onClick={() => setFiltersOpen(false)}>Ver {pagination.totalItems} resultados</button>}><CatalogFilters {...filterProps} /></AppModal>
       <BackToTop />
     </main>
   );

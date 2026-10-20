@@ -12,6 +12,11 @@ export async function getCatalogProductByIdRequest(id) {
   return resolveProductAssets(response.data.data);
 }
 
+export async function getCatalogFamilyRequest(id) {
+  const { data } = await api.get(`/catalog/families/${id}`);
+  return { ...data.data, variants: resolveProductListAssets(data.data.variants) };
+}
+
 export async function getCatalogProductsByIdsRequest(ids = []) {
   const uniqueIds = [...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
   const products = await Promise.all(uniqueIds.map(async (id) => {

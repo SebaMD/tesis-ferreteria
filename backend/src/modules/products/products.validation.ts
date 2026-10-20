@@ -3,7 +3,7 @@ import type { NewProduct } from "../../db/schema/index.js";
 export type ProductBody = Pick<
   NewProduct,
   "categoryId" | "name" | "brand" | "barcode" | "description" | "price" | "unitMeasure" | "minimumStock" | "inStoreOnly" | "status"
->;
+> & { familyId?: number | null; variantOptionIds?: number[]; associationReason?: string };
 export type EditProductBody = Partial<ProductBody>;
 
 type ValidationResult<T> = { success: true; value: T } | { success: false; error: string };
@@ -44,7 +44,21 @@ function validateBase(body: unknown, partial: boolean): ValidationResult<EditPro
 
   const input = body as Record<string, unknown>;
   const value: EditProductBody = {};
-  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "inStoreOnly", "status"];
+  const allowed = ["categoryId", "name", "brand", "barcode", "description", "price", "unitMeasure", "minimumStock", "inStoreOnly", "status", "familyId", "variantOptionIds", "associationReason"];
+
+  if (input.familyId !== undefined) {
+    if (input.familyId === null) value.familyId = null;
+    else { const parsed = positiveInt(input.familyId, "La familia"); if (!parsed.success) return parsed; value.familyId = parsed.value; }
+  }
+  if (input.variantOptionIds !== undefined) {
+    if (!Array.isArray(input.variantOptionIds) || input.variantOptionIds.length > 8
+      || input.variantOptionIds.some((id) => !Number.isInteger(id) || id < 1)) return { success: false, error: "Opciones de variante inválidas" };
+    value.variantOptionIds = input.variantOptionIds;
+  }
+  if (input.associationReason !== undefined) {
+    if (typeof input.associationReason !== "string" || input.associationReason.length > 500) return { success: false, error: "Motivo de asociación inválido" };
+    value.associationReason = text(input.associationReason);
+  }
 
   for (const field of Object.keys(input)) {
     if (!allowed.includes(field)) return { success: false, error: `El campo ${field} no esta permitido` };

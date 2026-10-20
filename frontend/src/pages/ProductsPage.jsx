@@ -8,6 +8,7 @@ import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
+import ProductVariantFields from "../components/ProductFamilyManager.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
 import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
@@ -94,6 +95,9 @@ function compareCategoriesByNewest(left, right) {
 }
 
 const emptyForm = {
+  familyId: null,
+  variantOptionIds: [],
+  associationReason: "",
   categoryId: "",
   name: "",
   brand: "",
@@ -736,6 +740,9 @@ export default function ProductsPage() {
           minimumStock: product.minimumStock,
           inStoreOnly: Boolean(product.inStoreOnly),
           status: product.status,
+          familyId: product.familyId ?? null,
+          variantOptionIds: product.variantOptionIds || [],
+          associationReason: "",
         });
         setCategorySearch(product.categoryName || "");
         setShowCategorySuggestions(false);
@@ -919,6 +926,9 @@ export default function ProductsPage() {
       minimumStock: product.minimumStock,
       inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
+      familyId: product.familyId ?? null,
+      variantOptionIds: product.variantOptionIds || [],
+      associationReason: "",
     } : {
       ...emptyForm,
       categoryId: String(category.id),
@@ -989,6 +999,9 @@ export default function ProductsPage() {
       minimumStock: product.minimumStock,
       inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
+      familyId: product.familyId ?? null,
+      variantOptionIds: product.variantOptionIds || [],
+      associationReason: "",
     });
     setCategorySearch(product.categoryName || "");
     setShowCategorySuggestions(false);
@@ -1719,6 +1732,7 @@ export default function ProductsPage() {
                 </small>
               </span>
             </label>
+            <ProductVariantFields form={form} onChange={setForm} categories={categories} products={products} editingProduct={editingProduct} onEditProduct={startEditing} onDetached={(id) => setProducts((current) => current.map((p) => p.id === id ? { ...p, familyId: null, familyName: null, variantKey: null, variantOptionIds: [], variantValues: [] } : p))} disabled={submittingProduct || managingProductImages} />
             <ProductImagesManager
               disabled={submittingProduct || managingProductImages}
               images={editingProduct?.images || []}

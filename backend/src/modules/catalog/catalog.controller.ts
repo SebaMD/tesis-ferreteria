@@ -2,6 +2,16 @@ import type { Request, Response } from "express";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { getCatalogProductByIdService, getCatalogProductsService } from "./catalog.service.js";
 import { validateCatalogQuery } from "./catalog.validation.js";
+import { findCatalogFamilyById } from "./catalog.repository.js";
+
+export async function getCatalogFamily(req: Request, res: Response) {
+  const id = parseId(req.params.id);
+  if (!id) return handleErrorClient(res, 400, "Familia inválida");
+  try {
+    const family = await findCatalogFamilyById(id);
+    return family ? handleSuccess(res, 200, "Familia encontrada", family) : handleErrorClient(res, 404, "Familia no disponible");
+  } catch { return handleErrorServer(res, 500, "No se pudo obtener la familia"); }
+}
 
 function parseId(value: unknown) {
   const id = Number(value);

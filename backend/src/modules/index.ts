@@ -13,6 +13,7 @@ import favoritesRoutes from "./favorites/favorites.routes.js";
 import emailVerificationRoutes from "./emailVerification/emailVerification.routes.js";
 import customerNoticeRoutes from "./customerNotice/customerNotice.routes.js";
 import promotionsRoutes from "./promotions/promotions.routes.js";
+import productFamiliesRoutes from "./productFamilies/productFamilies.routes.js";
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use("/inventory", inventoryRoutes);
 router.use("/online-orders", onlineOrdersRoutes);
 router.use("/order-logistics", orderLogisticsRoutes);
 router.use("/products", productsRoutes);
+router.use("/product-families", productFamiliesRoutes);
 router.use("/reports", reportsRoutes);
 router.use("/sales", salesRoutes);
 router.use("/users", usersRoutes);

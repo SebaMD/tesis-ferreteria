@@ -15,6 +15,8 @@ await admin.connect();
 const databaseName = `fyf_seed_demo_${randomBytes(8).toString("hex")}`;
 let created = false;
 let pool;
+let server;
+let applicationDb;
 try {
   const directory = (await admin.query("SHOW data_directory")).rows[0].data_directory.replaceAll("\\", "/");
   assert.match(directory, /\/fyf-seed-audit-[a-f0-9]+\/data$/,
@@ -24,12 +26,18 @@ try {
   const target = new URL(rootUrl);
   target.pathname = `/${databaseName}`;
   pool = new pg.Pool({ connectionString: target.href });
-  const env = { ...process.env, DATABASE_URL: target.href, MAIL_ENABLED: "false", TZ: "America/Santiago" };
-  const run = (args) => execFileSync(process.execPath, args, { env, stdio: "inherit" });
+  const env = { ...process.env, DATABASE_URL: target.href, SEED_DEMO_DATA: "true", NODE_ENV: "test",
+    WEBPAY_ENVIRONMENT: "integration", MAIL_ENABLED: "false", TZ: "America/Santiago" };
+  const run = (args, overrides = {}) => execFileSync(process.execPath, args, { env: { ...env, ...overrides }, stdio: "inherit" });
   run(["node_modules/drizzle-kit/bin.cjs", "migrate"]);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
   assert.equal(Number((await pool.query("SELECT count(*) FROM drizzle.__drizzle_migrations")).rows[0].count), journal.entries.length);
   console.log(`PASS ${journal.entries.length} migraciones desde cero en base descartable`);
+  assert.throws(() => run(["--import", "tsx", "src/db/seed.ts"], { SEED_DEMO_DATA: "false" }));
+  assert.throws(() => run(["--import", "tsx", "src/db/seed.ts"], { NODE_ENV: "production" }));
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM users")).rows[0].n, 0);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM products")).rows[0].n, 0);
+  console.log("PASS opt-in obligatorio y rechazo de producción sin escrituras");
   run(["--import", "tsx", "src/db/seed.ts"]);
 
   const counts = async () => {
@@ -41,8 +49,8 @@ try {
   const firstCounts = await counts();
   assert.equal(firstCounts.roles, 5);
   assert.ok(firstCounts.users >= 6);
-  assert.equal(firstCounts.categories, 10);
-  assert.equal(firstCounts.products, 100);
+  assert.equal(firstCounts.categories, 8);
+  assert.equal(firstCounts.products, 96);
   assert.equal(firstCounts.sales, 36);
   assert.equal(firstCounts.sale_details, 90);
   assert.equal(firstCounts.sale_cancellation_requests, 9);
@@ -86,21 +94,81 @@ try {
       FROM inventory_movements m WHERE m.product_id=p.id AND m.movement_type IN ('ENTRY','EXIT')
       AND m.id > COALESCE((SELECT max(a.id) FROM inventory_movements a WHERE a.product_id=p.id AND a.movement_type='ADJUSTMENT'), 0)), 0)`, "stock no negativo y conciliado con movimientos");
   await zero("SELECT count(*) FROM inventory_movements WHERE reason ILIKE '%cancelacion%' OR reason ILIKE '%reactiv%'", "sin movimientos del antiguo flujo cancelar/reactivar venta");
+  await zero("SELECT count(*) FROM products WHERE barcode IS NOT NULL", "ningún código de proveedor se interpreta como código de barras");
+  await zero("SELECT count(*) FROM products WHERE description NOT LIKE 'DEMOSTRACIÓN:%'", "todos los precios y stocks identificados como ficticios");
+  await zero("SELECT count(*) FROM product_images", "imágenes de proveedores no publicadas");
+  await zero("SELECT count(*) FROM online_payments", "ningún intento Webpay creado por la seed");
+  await zero("SELECT count(*) FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE c.id IS NULL", "categorías relacionadas correctamente");
+  await zero("SELECT count(*) FROM (SELECT category_id,lower(name) FROM products GROUP BY category_id,lower(name) HAVING count(*)>1) d", "sin productos duplicados");
+
+  // Real HTTP reads and a POS sale against this disposable database only.
+  Object.assign(process.env, env, {
+    SESSION_SECRET: randomBytes(32).toString("hex"),
+    EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"),
+    LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"),
+  });
+  const { default: app } = await import("../dist/app.js");
+  applicationDb = (await import("../dist/db/index.js")).db;
+  server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const request = async (route, options = {}) => {
+    const response = await fetch(base + route, options);
+    const payload = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(payload));
+    return payload.data;
+  };
+  const catalog = await request("/catalog/products?limit=100");
+  assert.equal(catalog.totalItems, 43); // 19 families + 24 active simple products
+  assert.equal(catalog.facets.categories.length, 8);
+  const meshId = catalog.facets.categories.find((category) => category.name === "Mallas y cercos").id;
+  assert.equal((await request(`/catalog/products?categoryId=${meshId}&limit=100`)).totalItems, 2);
+  assert.equal((await request("/catalog/products?availability=in-stock&limit=100")).totalItems, 43);
+  const priceFilter = await request("/catalog/products?minPrice=5000&maxPrice=10000&limit=100");
+  assert.ok(priceFilter.items.length > 0 && priceFilter.items.every((item) => Number(item.fromPrice ?? item.price) >= 5000 && Number(item.fromPrice ?? item.price) <= 10000));
+  assert.equal((await request("/catalog/products?brand=rex&limit=100")).totalItems, 3);
+  assert.equal((await request("/catalog/products?search=BP5820")).totalItems, 1);
+  const { token: adminToken } = await request("/auth/login", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: "admin@gmail.com", password: "@dmin.2026" }) });
+  const { token: cashierToken } = await request("/auth/login", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: "cajero@gmail.com", password: "Cajero123." }) });
+  const stock = await request("/products", { headers: { Authorization: `Bearer ${cashierToken}` } });
+  const posProduct = stock.find((product) => product.status && product.availableStock > 5);
+  assert.ok(posProduct);
+  const saleResponse = await fetch(base + "/sales", { method: "POST",
+    headers: { Authorization: `Bearer ${cashierToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ paymentMethod: "efectivo", details: [{ productId: posProduct.id, quantity: 1 }] }) });
+  assert.equal(saleResponse.status, 201, await saleResponse.text());
+  assert.equal(Number((await pool.query("SELECT current_stock FROM products WHERE id=$1", [posProduct.id])).rows[0].current_stock), posProduct.currentStock - 1);
+  const movements = await request("/inventory", { headers: { Authorization: `Bearer ${adminToken}` } });
+  assert.ok(movements.length > 0);
+  assert.equal((await pool.query("SELECT title FROM catalog_presentation WHERE id=1")).rows[0].title, "Catálogo de demostración FYF");
+  assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/docs/seed-catalog-review/images/cot-5003027.png`)).status, 404);
+  console.log("PASS catálogo, marca, búsqueda, categorías, inventario y nueva venta POS con descuento exacto");
 
   const snapshot = async () => {
     const result = {};
-    for (const table of ["products", "sales", "sale_details", "inventory_movements", "sale_cancellation_requests", "sale_cancellation_request_items"]) {
+    const tables = (await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")).rows;
+    for (const { table_name: table } of tables) {
       result[table] = (await pool.query(`SELECT row_to_json(t) AS row FROM ${table} t ORDER BY row_to_json(t)::text`)).rows;
     }
     return result;
   };
   const before = await snapshot();
+  const beforeCounts = await counts();
   run(["--import", "tsx", "src/db/seed.ts"]);
-  assert.deepEqual(await counts(), firstCounts);
+  assert.deepEqual(await counts(), beforeCounts);
   assert.deepEqual(await snapshot(), before);
   console.log("PASS segunda ejecución sin duplicar ventas/devoluciones/movimientos ni modificar stock o totales");
   console.log("Datos demo:", JSON.stringify(firstCounts));
+  // Even with explicit opt-in, an unmarked database containing this history is rejected.
+  await pool.query(`COMMENT ON DATABASE "${databaseName}" IS NULL`);
+  assert.throws(() => run(["--import", "tsx", "src/db/seed.ts"]));
+  assert.deepEqual(await snapshot(), before);
+  console.log("PASS rechaza base no vacía sin marca; historial intacto");
 } finally {
+  if (server) await new Promise((resolve) => server.close(resolve));
+  await applicationDb?.$client.end();
   await pool?.end();
   if (created) {
     await admin.query(`DROP DATABASE "${databaseName}"`);

@@ -138,18 +138,28 @@ Orden de inicio: PostgreSQL saludable → migraciones → etapa de seed opcional
 Los datos de demostración no se cargan automáticamente. Para habilitarlos de forma intencional en una base nueva o descartable:
 
 ```bash
-SEED_DEMO_DATA=true docker compose up --build
+POSTGRES_DB=fyf_demo_catalog NODE_ENV=development SEED_DEMO_DATA=true docker compose up --build
 ```
 
 En PowerShell:
 
 ```powershell
 $env:SEED_DEMO_DATA="true"
+$env:POSTGRES_DB="fyf_demo_catalog"
+$env:NODE_ENV="development"
 docker compose up --build
 Remove-Item Env:SEED_DEMO_DATA
 ```
 
-El seed crea cuentas, catálogo, inventario y ventas de demostración, con solicitudes pendientes/rechazadas, devoluciones parciales/completas aprobadas y una devolución revertida. Al repetirlo conserva las ventas ya creadas sin duplicarlas; no convierte datos antiguos de otro seed. No utilizarlo para inicializar una operación real ni ejecutarlo sobre una base productiva. El arranque normal no crea usuarios demo.
+Usar esas opciones únicamente en un entorno Compose nuevo y descartable, con su volumen PostgreSQL propio; cambiar POSTGRES_DB no cambia el contenido de un volumen existente. No borrar volúmenes existentes para probar el catálogo. Para aislarlo sin reutilizar Compose, utilizar el procedimiento local de abajo.
+
+El seed crea **96 productos en ocho categorías**, basados en referencias de proveedores, con precios, stock y disponibilidad **ficticios y exclusivos de desarrollo**. Mantiene seis usuarios internos demo, 36 ventas, solicitudes pendientes/rechazadas, devoluciones parciales/completas aprobadas y una devolución revertida. No publica imágenes de proveedores ni utiliza correo/Webpay.
+
+Exige `SEED_DEMO_DATA=true`, `MAIL_ENABLED=false`, ambientes no productivos y una base llamada `fyf_demo_*` o `fyf_seed_demo_*`. Rechaza bases no vacías sin su marca de inicialización. La marca se guarda como comentario de la base, dentro de la misma transacción (no crea tablas ni migraciones). Una segunda ejecución es un no-op, incluso después de operar manualmente en la demo: no reinicia stock ni actualiza usuarios, productos o ventas. No convierte ni elimina datos de la seed anterior. El arranque normal no crea usuarios demo.
+
+El [catálogo para revisión](docs/seed-catalog-review/README.md) contiene la distribución, procedencia y las imágenes pendientes de autorización. Los 96 artículos siguen siendo productos independientes; no hay familias ni cantidades fraccionarias.
+
+La inicialización excepcional de `ferreteria` en `localhost:5433` requiere una autorización efímera de un solo uso en la base y en el proceso de carga. No se guarda en `.env`, no habilita borrados y queda consumida al terminar. Una demo local ya inicializada solo admite el mismo no-op; volver a ejecutar la seed nunca reinicia los datos.
 
 ## Ejecutar localmente
 
@@ -170,7 +180,50 @@ npm ci
 npm run dev
 ```
 
-Para datos de demostración, `npm run db:seed` es una acción manual separada y solo debe ejecutarse contra una base nueva o descartable. No forma parte del inicio normal.
+Para datos de demostración, `npm run db:seed` es una acción manual separada y protegida; no forma parte del inicio normal.
+
+### Ver el catálogo nuevo en una base PostgreSQL aislada (PowerShell)
+
+Este ejemplo crea un clúster local temporal nuevo, sin usar la base normal. Requiere PostgreSQL instalado; ajustar únicamente la ruta de sus binarios. Si el puerto 55444 está ocupado, elegir otro libre en **todos** los comandos. No apuntar a un directorio de datos existente.
+
+Desde `backend`:
+
+```powershell
+$pgBin = "C:/Program Files/PostgreSQL/18/bin"
+$demoRoot = Join-Path $env:TEMP ("fyf-demo-" + [guid]::NewGuid().ToString("N"))
+& "$pgBin/initdb.exe" -D "$demoRoot/data" -U postgres -A trust -E UTF8 --locale=C
+if ($LASTEXITCODE -ne 0) { throw "No se creó el clúster demo" }
+& "$pgBin/pg_ctl.exe" -D "$demoRoot/data" -l "$demoRoot/postgres.log" -o "-h 127.0.0.1 -p 55444" -w start
+if ($LASTEXITCODE -ne 0) { throw "No se inició el clúster demo" }
+& "$pgBin/createdb.exe" -h 127.0.0.1 -p 55444 -U postgres fyf_demo_catalog
+if ($LASTEXITCODE -ne 0) { throw "No se creó la base demo" }
+$env:DATABASE_URL="postgresql://postgres@127.0.0.1:55444/fyf_demo_catalog"
+$env:NODE_ENV="development"
+$env:WEBPAY_ENVIRONMENT="integration"
+$env:MAIL_ENABLED="false"
+$env:SEED_DEMO_DATA="true"
+npm run db:migrate
+if ($LASTEXITCODE -ne 0) { throw "Migración demo fallida" }
+npm run db:seed
+if ($LASTEXITCODE -ne 0) { throw "Carga demo fallida" }
+Remove-Item Env:SEED_DEMO_DATA
+npm run dev
+```
+
+Los secretos de desarrollo deben estar configurados como indica `.env.example`.
+No ejecutar simultáneamente otro backend en el puerto 3000. En otra terminal,
+iniciar el frontend con `npm run dev` desde `frontend` y abrir
+`http://localhost:5173/catalog`. Se muestran 94 artículos activos; los otros dos
+permiten probar la consulta administrativa de productos desactivados. Hay seis
+artículos sin stock y ocho configurados como Solo presencial, todo ficticio.
+Las credenciales demo siguen definidas en `backend/src/config/initDb.ts`.
+
+`MAIL_ENABLED=false` impide completar flujos que requieren códigos por correo;
+este ejemplo no pretende probar verificación/checkout Invitado ni cobros reales.
+Al terminar, detener backend/frontend con Ctrl+C y detener **solo** este clúster:
+`& "$pgBin/pg_ctl.exe" -D "$demoRoot/data" -m fast -w stop` en la consola que
+conserva `$demoRoot`. No usar estos datos, cuentas ni autenticación local trust
+en producción.
 
 ## Variables de entorno
 
@@ -218,6 +271,50 @@ Docker Compose fija `UPLOADS_ROOT=/app/uploads` y conserva todos estos archivos 
 Nginx acepta solicitudes de hasta 6 MiB para permitir imágenes de 5 MiB y el envoltorio multipart; los formatos y el límite por archivo siguen siendo responsabilidad del backend.
 
 ## Migraciones
+
+### Familias y variantes
+
+La migración aditiva `0027_charming_carnage.sql` amplía las 27 anteriores. No
+reemplaza productos: cada variante conserva su ID, stock, precio, imágenes y
+referencias comerciales. Los productos simples mantienen `family_id` nulo.
+Antes de usar este backend, aplicar la nueva migración en la base autorizada.
+
+ADMIN gestiona familias desde **Inventario → Nuevo producto / Editar producto**,
+en la sección junto a **Solo presencial**. **Crear nueva familia** reutiliza la
+categoría y marca del producto y permite definir atributos y opciones. Elegir
+una familia compatible y una opción por atributo; al editar se conserva la
+asociación actual. **Administrar familias y atributos** permite revisar sus
+miembros sin un panel independiente. El stock se ingresa
+mediante las operaciones de inventario habituales. Las combinaciones deben ser
+únicas. Los productos con historial conservan su identidad; su primera asociación
+requiere un motivo y una variante ya utilizada no puede cambiar de combinación.
+
+Para asociar el catálogo demo ya existente, sin ejecutar seed ni reiniciar datos,
+después de autorizar y aplicar la migración, desde `backend` en PowerShell:
+
+```powershell
+$env:ASSOCIATE_DEMO_FAMILIES = 'true'
+try { npm run db:associate-families } finally { Remove-Item Env:ASSOCIATE_DEMO_FAMILIES }
+```
+
+Este comando exige PostgreSQL local, puerto explícito distinto de 5432, entorno
+no productivo y la marca de la seed revisada. Verifica nombre, categoría, marca,
+unidad y referencia documental antes de asociar. Crea 19 familias para 71 de los
+96 artículos y mantiene 25 simples. Su repetición es un no-op; no modifica precios,
+existencias, imágenes ni operaciones. La seed de una base nueva incluye estas
+asociaciones; una seed ya completada sigue sin reescribir datos.
+
+El catálogo agrupa antes de paginar. **Ver opciones** abre únicamente las
+combinaciones existentes mediante botones compactos por atributo. La tarjeta
+muestra el precio de variantes comprables online y usa **Desde** solo si difieren.
+El carrito, el POS y Webpay utilizan siempre el ID del
+producto concreto. Las promociones 2x1 no se combinan entre variantes.
+
+Pruebas aisladas en Windows: compilar backend y ejecutar
+`node scripts/test-product-families.mjs` desde `backend`. Requiere PostgreSQL 18
+en su ruta habitual (o `PG_TEST_BIN`) y puertos 55440/55441/55444/55445 libres.
+Crea y elimina solo su propio clúster temporal, sin utilizar 5432/5433. Webpay y
+SMTP están simulados localmente. No publica las imágenes de proveedores.
 
 Para aplicar las migraciones manualmente:
 

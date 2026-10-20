@@ -7,6 +7,7 @@ import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
 import FavoriteButton from "./FavoriteButton.jsx";
 import useCart from "../hooks/useCart.js";
 import ProductPromotionPrice from "./ProductPromotionPrice.jsx";
+import ProductFamilyCard from "./ProductFamilyCard.jsx";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
@@ -17,6 +18,10 @@ function isPlainPrimaryClick(event) {
 }
 
 export default function ProductCard({ product, detailOrigin = null }) {
+  return product.kind === "family" ? <ProductFamilyCard product={product} detailOrigin={detailOrigin} /> : <ConcreteProductCard product={product} detailOrigin={detailOrigin} />;
+}
+
+function ConcreteProductCard({ product, detailOrigin }) {
   const navigate = useNavigate();
   const primaryImage = getPrimaryImage(product);
   const availableStock = getOnlineAvailableStock(product);

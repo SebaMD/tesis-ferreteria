@@ -23,6 +23,7 @@ import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
 import PaymentResultPage from "./pages/PaymentResultPage.jsx";
 import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
 import ProductDetailPage from "./pages/ProductDetailPage.jsx";
+import ProductFamilyPage from "./pages/ProductFamilyPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import FavoritesPage from "./pages/FavoritesPage.jsx";
 import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx";
@@ -98,6 +99,7 @@ export default function App() {
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/changes-and-returns" element={<StorePage><ReturnsInformationPage /></StorePage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
+      <Route path="/catalog/families/:id" element={<StorePage><ProductFamilyPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
       <Route path="/checkout-options" element={<StorePage><CheckoutChoicePage /></StorePage>} />
       <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />

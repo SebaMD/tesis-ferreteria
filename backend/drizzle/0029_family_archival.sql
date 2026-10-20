@@ -1,0 +1,3 @@
+ALTER TABLE "product_family_events" ALTER COLUMN "product_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "product_families" ADD COLUMN "archived_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "product_family_events" ADD CONSTRAINT "product_family_events_subject_check" CHECK ("product_family_events"."product_id" is not null or "product_family_events"."family_id" is not null);

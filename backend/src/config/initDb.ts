@@ -1,9 +1,9 @@
 import bcrypt from "bcrypt";
 import { inArray } from "drizzle-orm";
-import { db } from "../db/index.js";
+import { db, type DbTransaction } from "../db/index.js";
 import { rolesTable, usersTable } from "../db/schema/index.js";
 
-export async function createInitialUsers() {
+export async function createInitialUsers(executor: typeof db | DbTransaction = db) {
   const roleDefinitions = [
     {
       name: "ADMIN",
@@ -27,17 +27,17 @@ export async function createInitialUsers() {
     },
   ];
 
-  await db
+  await executor
     .insert(rolesTable)
     .values(roleDefinitions)
     .onConflictDoNothing({ target: rolesTable.name });
 
-  const roles = await db
+  const roles = await executor
     .select({ id: rolesTable.id, name: rolesTable.name })
     .from(rolesTable)
     .where(inArray(rolesTable.name, roleDefinitions.map((role) => role.name)));
 
-  const existingUsers = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+  const existingUsers = await executor.select({ id: usersTable.id }).from(usersTable).limit(1);
   if (existingUsers.length > 0) return;
 
   const roleByName = new Map(roles.map((role) => [role.name, role.id]));
@@ -109,6 +109,6 @@ export async function createInitialUsers() {
     },
   ];
 
-  await db.insert(usersTable).values(users);
+  await executor.insert(usersTable).values(users);
   console.log("=> Usuarios iniciales creados exitosamente");
 }

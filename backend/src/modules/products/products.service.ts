@@ -1,4 +1,7 @@
 import { db } from "../../db/index.js";
+import { eq, sql } from "drizzle-orm";
+import { productsTable } from "../../db/schema/index.js";
+import { assignVariant, FamilyError, getFamily, productHasHistory } from "../productFamilies/productFamilies.service.js";
 import {
   calculateAvailableStock,
   findActiveReservedQuantities,
@@ -59,7 +62,7 @@ export async function getProductByBarcodeService(barcode: string) {
   return (await attachAvailableStock([product]))[0];
 }
 
-export async function createProductService(data: ProductBody) {
+export async function createProductService(data: ProductBody, actorId: number | null = null) {
   const duplicate = await findProductByCategoryAndName(data.categoryId, data.name);
   if (duplicate) {
     throw new ProductError("Ya existe un producto con ese nombre en la categoria seleccionada", 409);
@@ -72,7 +75,10 @@ export async function createProductService(data: ProductBody) {
   let createdId: number;
   try {
     createdId = await db.transaction(async (tx) => {
-      const product = await createProductTx(tx, data);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
+      const { familyId, variantOptionIds, associationReason, ...base } = data;
+      const product = await createProductTx(tx, base);
+      if (familyId || variantOptionIds?.length) await assignVariant(tx, product.id, familyId ?? null, variantOptionIds ?? [], actorId, associationReason ?? "Creación de variante", true);
       await assertProductPromotionCompatibilityTx(tx, {
         productId: product.id,
         productName: product.name,
@@ -82,7 +88,7 @@ export async function createProductService(data: ProductBody) {
       return product.id;
     });
   } catch (error) {
-    if (error instanceof PromotionError) {
+    if (error instanceof PromotionError || error instanceof FamilyError) {
       throw new ProductError(error.message, error.statusCode);
     }
     throw error;
@@ -90,7 +96,7 @@ export async function createProductService(data: ProductBody) {
   return findProductById(createdId, true);
 }
 
-export async function editProductService(id: number, data: EditProductBody) {
+export async function editProductService(id: number, data: EditProductBody, actorId: number | null = null) {
   const currentProduct = await findProductById(id, true);
   if (!currentProduct) throw new ProductError("Producto no encontrado", 404);
 
@@ -108,6 +114,21 @@ export async function editProductService(id: number, data: EditProductBody) {
 
   try {
     await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
+      const [locked] = await tx.select().from(productsTable).where(eq(productsTable.id, id)).for("update");
+      if (!locked) throw new ProductError("Producto no encontrado", 404);
+      const { familyId, variantOptionIds, associationReason, ...base } = data;
+      if (await productHasHistory(id, tx) && ((base.name !== undefined && base.name !== locked.name)
+        || (base.brand !== undefined && base.brand !== locked.brand)
+        || (base.unitMeasure !== undefined && base.unitMeasure !== locked.unitMeasure))) {
+        throw new ProductError("Producto con historial: conserve nombre, marca y unidad; cree otro producto para otro artículo", 409);
+      }
+      const finalFamilyId = familyId === undefined ? locked.familyId : familyId;
+      if (finalFamilyId) {
+        const family = await getFamily(finalFamilyId, tx);
+        const nextBrand = base.brand === undefined ? locked.brand : base.brand;
+        if (family.categoryId !== categoryId || (family.brand ?? "").trim().toLowerCase() !== (nextBrand ?? "").trim().toLowerCase()) throw new FamilyError("Categoría y marca incompatibles con la familia");
+      }
       const prospective = {
         productId: id,
         productName: data.name ?? currentProduct.name,
@@ -115,12 +136,16 @@ export async function editProductService(id: number, data: EditProductBody) {
         status: data.status ?? currentProduct.status,
       };
       await assertProductPromotionCompatibilityTx(tx, prospective);
-      if (!await updateProductByIdTx(tx, id, data)) {
+      if (Object.keys(base).length && !await updateProductByIdTx(tx, id, base)) {
         throw new ProductError("Producto no encontrado", 404);
+      }
+      if (familyId !== undefined || variantOptionIds !== undefined) {
+        const ids = variantOptionIds ?? (locked.variantKey ? locked.variantKey.split(",").map(Number) : []);
+        await assignVariant(tx, id, finalFamilyId, ids, actorId, associationReason ?? "");
       }
     });
   } catch (error) {
-    if (error instanceof PromotionError) {
+    if (error instanceof PromotionError || error instanceof FamilyError) {
       throw new ProductError(error.message, error.statusCode);
     }
     throw error;

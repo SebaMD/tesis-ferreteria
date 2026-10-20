@@ -2,6 +2,8 @@ export * from "./roles.js";
 export * from "./users.js";
 export * from "./categories.js";
 export * from "./products.js";
+export * from "./productFamilies.js";
+export * from "./productVariantValues.js";
 export * from "./productImages.js";
 export * from "./sales.js";
 export * from "./saleDeliveries.js";

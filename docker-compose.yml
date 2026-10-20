@@ -100,6 +100,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD debe estar definido}@db:5432/${POSTGRES_DB:-ferreteria}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      NODE_ENV: ${NODE_ENV:-production}
+      WEBPAY_ENVIRONMENT: ${WEBPAY_ENVIRONMENT:-integration}
+      MAIL_ENABLED: "false"
     depends_on:
       migrate:
         condition: service_completed_successfully

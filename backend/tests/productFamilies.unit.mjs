@@ -38,5 +38,6 @@ test("family state actions require explicit confirmation and a valid expected re
 test("migration journal remains chronological so incremental runs cannot skip the archival migration", async () => {
   const journal = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
   for (let i = 1; i < journal.entries.length; i++) assert.ok(journal.entries[i].when > journal.entries[i - 1].when, journal.entries[i].tag);
-  assert.equal(journal.entries.at(-1).tag, "0029_family_archival");
+  assert.equal(journal.entries[29].tag, "0029_family_archival");
+  assert.equal(journal.entries[30].tag, "0030_delivery_tariffs");
 });

@@ -71,6 +71,11 @@ type CommercialOrderItemSource = {
 };
 
 export type CommercialOrderSource = {
+  productsSubtotal?: string | null;
+  productsDiscountTotal?: string | null;
+  deliveryFee?: string | null;
+  deliveryIsDemo?: boolean | null;
+  deliveryFeeReason?: string | null;
   id: number;
   status: string;
   buyerType: "CLIENT" | "GUEST";
@@ -90,6 +95,10 @@ export type CommercialOrderSource = {
 };
 
 export type OrderCommercialModel = {
+  productsNet: string;
+  deliveryFee: string | null;
+  deliveryFeeLabel: string;
+  deliveryIsDemo: boolean;
   orderId: number;
   folio: string;
   status: string;
@@ -172,8 +181,12 @@ export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCo
       email: order.buyerEmail?.trim() || "",
     },
     items,
-    baseSubtotal: baseSubtotal.toFixed(2),
-    totalDiscount: totalDiscount.toFixed(2),
+    baseSubtotal: order.productsSubtotal ?? baseSubtotal.toFixed(2),
+    totalDiscount: order.productsDiscountTotal ?? totalDiscount.toFixed(2),
+    productsNet: (Number(order.total) - Number(order.deliveryFee ?? 0)).toFixed(2),
+    deliveryFee: order.deliveryFee ?? null,
+    deliveryFeeLabel: order.deliveryFee == null ? "Sin cargo de despacho registrado (histórico)" : order.deliveryFeeReason === "FREE_THRESHOLD" ? "Despacho gratuito por monto de productos" : "Costo de despacho",
+    deliveryIsDemo: order.deliveryIsDemo === true,
     total: order.total,
     delivery: {
       type: deliveryType,

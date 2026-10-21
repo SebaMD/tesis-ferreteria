@@ -1,9 +1,8 @@
 import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getRemainingCartCapacity } from "../helpers/cartQuantity.js";
+import { getProductCartAvailability } from "../helpers/cartQuantity.js";
 import { createDirectPurchaseItem } from "../helpers/directPurchase.js";
-import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import useCartActions from "../hooks/useCartActions.js";
@@ -16,8 +15,7 @@ export default function ProductPurchaseControls({ product, compact = false, show
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
   const [validDraft, setValidDraft] = useState(true);
-  const inCart = Number(items.find((item) => Number(item.product.id) === Number(product.id))?.quantity || 0);
-  const remaining = getRemainingCartCapacity(getOnlineAvailableStock(product), inCart);
+  const { remaining } = getProductCartAvailability(product, items);
 
   if (product.inStoreOnly) {
     return (

@@ -1,4 +1,8 @@
 import api from "../api/httpClient.js";
+export async function quoteOnlineOrderRequest(data) {
+  const response = await api.post("/online-orders/quote", data);
+  return response.data.data;
+}
 import { getOrCreateGuestSessionId } from "../helpers/guestCheckout.js";
 import {
   resolveOrderListProductAssets,

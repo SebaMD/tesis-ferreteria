@@ -23,6 +23,10 @@ export function buildAdministrativeOrderModel(source: NonNullable<Awaited<Return
     baseSubtotal: commercial.baseSubtotal,
     totalDiscount: commercial.totalDiscount,
     total: commercial.total,
+    productsNet: commercial.productsNet,
+    deliveryFee: commercial.deliveryFee,
+    deliveryFeeLabel: commercial.deliveryFeeLabel,
+    deliveryIsDemo: commercial.deliveryIsDemo,
     delivery: commercial.delivery,
     authorizedPayment: paymentConfirmed && source.authorizedPayment ? {
       provider: "WEBPAY_PLUS",

@@ -211,6 +211,13 @@
       "when": 1792530000001,
       "tag": "0029_family_archival",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792532707174,
+      "tag": "0030_delivery_tariffs",
+      "breakpoints": true
     }
   ]
 }

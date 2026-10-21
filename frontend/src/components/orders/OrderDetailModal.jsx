@@ -12,6 +12,7 @@ import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgress
 import OrderProductImage from "./OrderProductImage.jsx";
 import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
 import OrderItemPromotion from "./OrderItemPromotion.jsx";
+import OrderAmounts from "./OrderAmounts.jsx";
 
 function AccordionContent({ id, open, children }) {
   return (
@@ -198,6 +199,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
           </section>
         )}
 
+        <OrderAmounts order={order} />
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-200 pt-4">
           <div>
             <span className="block text-xs font-bold text-slate-500">Fecha de compra</span>

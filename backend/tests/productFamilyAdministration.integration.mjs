@@ -36,7 +36,14 @@ try {
   applicationDb = (await import("../dist/db/index.js")).db;
   server = app.listen(0, "127.0.0.1"); await new Promise((resolve) => server.once("listening", resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  await (await import("../dist/modules/deliverySettings/deliverySettings.service.js")).saveDeliverySettings(users.ADMIN, {
+    expectedRevisionId: null, pickupEnabled: true, deliveryEnabled: true, flatFee: 3000, minimumProductsTotal: null, freeShippingFrom: null, isDemo: true,
+  });
   const request = async (method, route, body, role = "ADMIN", expected = 200) => {
+    if (method === "POST" && route === "/online-orders/checkout" && expected === 201) {
+      const q = await fetch(base + "/online-orders/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: body.items, deliveryType: body.deliveryType }) });
+      assert.equal(q.status, 200); body = { ...body, quoteFingerprint: (await q.json()).data.quoteFingerprint };
+    }
     const res = await fetch(base + route, { method, headers: { "Content-Type": "application/json", ...(role ? { Authorization: `Bearer ${jwt.sign({ id: users[role] }, process.env.SESSION_SECRET)}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const payload = await res.json(); assert.equal(res.status, expected, JSON.stringify(payload)); return payload;
   };

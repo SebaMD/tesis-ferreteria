@@ -11,6 +11,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.js";
+import { deliveryPolicyRevisionsTable } from "./deliverySettings.js";
 
 export const onlineOrdersTable = pgTable(
   "online_orders",
@@ -26,6 +27,12 @@ export const onlineOrdersTable = pgTable(
     checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
     status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
     total: numeric({ precision: 12, scale: 2 }).notNull(),
+    // NULL identifies legacy orders, not an explicit free delivery policy.
+    productsSubtotal: numeric("products_subtotal", { precision: 12, scale: 2 }),
+    productsDiscountTotal: numeric("products_discount_total", { precision: 12, scale: 2 }),
+    deliveryFee: numeric("delivery_fee", { precision: 12, scale: 2 }),
+    deliveryPolicyRevisionId: integer("delivery_policy_revision_id").references(() => deliveryPolicyRevisionsTable.id, { onDelete: "restrict" }),
+    deliveryFeeReason: varchar("delivery_fee_reason", { length: 30 }),
     deliveryType: varchar("delivery_type", { length: 20 }).notNull().default("PICKUP"),
     deliveryRecipientName: varchar("delivery_recipient_name", { length: 240 }),
     deliveryPhone: varchar("delivery_phone", { length: 20 }),
@@ -56,6 +63,15 @@ export const onlineOrdersTable = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => [
+    check("online_orders_delivery_breakdown_check", sql`(
+      ${table.productsSubtotal} is null and ${table.productsDiscountTotal} is null and ${table.deliveryFee} is null and ${table.deliveryPolicyRevisionId} is null and ${table.deliveryFeeReason} is null
+    ) or (
+      ${table.productsSubtotal} is not null and ${table.productsDiscountTotal} is not null and ${table.deliveryFee} is not null and ${table.deliveryPolicyRevisionId} is not null and ${table.deliveryFeeReason} is not null
+      and ${table.productsSubtotal} >= ${table.productsDiscountTotal} and ${table.productsDiscountTotal} >= 0 and ${table.deliveryFee} >= 0
+      and ${table.total} = ${table.productsSubtotal} - ${table.productsDiscountTotal} + ${table.deliveryFee}
+      and ${table.deliveryFeeReason} in ('PICKUP', 'FLAT', 'FREE_THRESHOLD')
+      and (${table.deliveryType} <> 'PICKUP' or (${table.deliveryFee} = 0 and ${table.deliveryFeeReason} = 'PICKUP'))
+    )`),
     index("online_orders_client_id_idx").on(table.clientId),
     index("online_orders_status_idx").on(table.status),
     index("online_orders_delivery_type_idx").on(table.deliveryType),

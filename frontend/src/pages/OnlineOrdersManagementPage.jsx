@@ -25,6 +25,8 @@ import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
 import AdministrativeOrderCard from "../components/orders/AdministrativeOrderCard.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { buildDeliveryRouteUrl } from "../helpers/delivery.js";
+import DeliverySettingsManager from "../components/DeliverySettingsManager.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
   formatOnlineOrderFolio,
@@ -476,8 +478,8 @@ export default function OnlineOrdersManagementPage() {
         )}
       </header>
 
-      <section className="flex flex-wrap items-center justify-between gap-3">
-        <div className="grid min-w-0 max-w-215 flex-1 grid-cols-[minmax(0,1fr)_220px] items-center gap-2.5 max-[720px]:w-full max-[720px]:max-w-none max-[720px]:grid-cols-1">
+      <section className="flex flex-wrap items-center gap-3" aria-label="Buscar y filtrar pedidos">
+        <div className="grid w-full min-w-0 max-w-[670px] flex-none grid-cols-[minmax(0,1fr)_220px] items-center gap-2.5 max-[720px]:max-w-none max-[720px]:grid-cols-1">
           <label className="relative block min-w-0">
             <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
             <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} aria-label={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
@@ -498,16 +500,19 @@ export default function OnlineOrdersManagementPage() {
             />
           </div>
         </div>
-        {(search || status !== "ALL") && (
-          <button
-            className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"
-            type="button"
-            onClick={() => {
-              setSearch("");
-              setStatus("ALL");
-            }}
-          >Limpiar filtros</button>
-        )}
+        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3">
+          {(search || status !== "ALL") && (
+            <button
+              className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setStatus("ALL");
+              }}
+            >Limpiar filtros</button>
+          )}
+          <DeliverySettingsManager role={user?.role} />
+        </div>
       </section>
 
       <section className={tablePanelClass}>
@@ -709,6 +714,7 @@ export default function OnlineOrdersManagementPage() {
               </a>
             )}
 
+            {selectedOrder.origin === "ONLINE" && <OrderAmounts order={selectedOrder} />}
             {canManage && selectedOrder.deliveryType === "DELIVERY" && !hasDeliveryDetails && (
               <p className="m-0 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
                 Los datos privados del destino se habilitan únicamente al bodeguero responsable cuando inicia el reparto.

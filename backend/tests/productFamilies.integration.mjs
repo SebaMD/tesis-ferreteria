@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { initializeTestDelivery, acceptTestQuote } from "./helpers/deliveryQuote.mjs";
 import { randomBytes, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -156,7 +157,8 @@ try {
   assert.equal(offers.items.find((p) => p.kind === "family" && p.id === family.id).variantCount, 2);
   assert.equal(offers.items.find((p) => p.kind === "family" && p.id === family.id).hasOffers, true);
   assert.equal(offers.items.find((p) => p.kind === "family" && p.id === family.id).onlineHasOffers, true);
-  const checkout = await request("POST", "/online-orders/checkout", { checkoutKey: "variant-checkout-001", items: [{ productId: sku.id, quantity: 1 }, { productId: sku2.id, quantity: 1 }], deliveryType: "PICKUP", saveDeliveryAddress: false }, "CLIENT", 201);
+  await initializeTestDelivery(users.ADMIN);
+  const checkout = await request("POST", "/online-orders/checkout", await acceptTestQuote(base, { checkoutKey: "variant-checkout-001", items: [{ productId: sku.id, quantity: 1 }, { productId: sku2.id, quantity: 1 }], deliveryType: "PICKUP", saveDeliveryAddress: false }), "CLIENT", 201);
   assert.equal(checkout.total, 4980); // no 2x1 across colors/sizes
   const snapshotItems = async () => (await pool.query("select row_to_json(i) as row from online_order_items i where order_id=$1 order by product_id", [checkout.orderId])).rows;
   const orderItems = await snapshotItems(); assert.equal(orderItems.length, 2);

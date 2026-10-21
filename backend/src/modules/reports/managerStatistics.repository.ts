@@ -47,6 +47,7 @@ export async function findManagerStatisticsData(filters: ReportDateRange) {
         orderId: onlineOrdersTable.id,
         commercialDate: onlineCommercialDate,
         orderTotal: onlineOrdersTable.total,
+        deliveryFee: onlineOrdersTable.deliveryFee,
         orderStatus: onlineOrdersTable.status,
         productId: productsTable.id,
         productName: productsTable.name,

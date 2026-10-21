@@ -76,7 +76,9 @@ export async function deleteClientDeliveryAddress(clientId: number) {
   return deleted ?? null;
 }
 
+import { orderAmountColumns } from "./orderAmountColumns.js";
 const orderColumns = {
+  ...orderAmountColumns,
   id: onlineOrdersTable.id,
   clientId: onlineOrdersTable.clientId,
   clientNames: usersTable.names,
@@ -314,6 +316,11 @@ export async function createOnlineOrder(
     guestSessionHash?: string | null;
     guestDeviceHash?: string | null;
     checkoutKey: string;
+    productsSubtotal: string;
+    productsDiscountTotal: string;
+    deliveryFee: string;
+    deliveryPolicyRevisionId: number;
+    deliveryFeeReason: string;
     total: string;
     reservationExpiresAt: Date;
     deliveryType: "PICKUP" | "DELIVERY";

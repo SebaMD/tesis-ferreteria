@@ -28,7 +28,9 @@ export type LogisticsOrigin = "ONLINE" | "POS";
 export type LogisticsStatus = OnlineOrderStatus | SaleDeliveryStatus;
 export type LogisticsScope = "ALL" | "MINE";
 
+import { orderAmountColumns } from "../onlineOrders/orderAmountColumns.js";
 const onlineColumns = {
+  ...orderAmountColumns,
   id: onlineOrdersTable.id,
   status: onlineOrdersTable.status,
   total: onlineOrdersTable.total,
@@ -133,6 +135,11 @@ type LogisticsItem = {
 };
 
 export type LogisticsTask = {
+  productsSubtotal?: string | null;
+  productsDiscountTotal?: string | null;
+  deliveryFee?: string | null;
+  deliveryIsDemo?: boolean | null;
+  deliveryFeeReason?: string | null;
   id: number;
   origin: LogisticsOrigin;
   folio: string;

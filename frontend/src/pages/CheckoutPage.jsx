@@ -23,6 +23,7 @@ import {
   getClientDeliveryAddressRequest,
   getGuestPendingOrderRequest,
   getMyOnlineOrdersRequest,
+  quoteOnlineOrderRequest,
 } from "../services/onlineOrders.service.js";
 import {
   requestClientEmailVerification,
@@ -69,6 +70,8 @@ export default function CheckoutPage() {
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [deliveryType, setDeliveryType] = useState("PICKUP");
   const [saveDeliveryAddress, setSaveDeliveryAddress] = useState(false);
+  const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "" });
+  const [quoteRefresh, setQuoteRefresh] = useState(0);
   const [guestData, setGuestData] = useState({
     name: "",
     email: "",
@@ -188,7 +191,22 @@ export default function CheckoutPage() {
     };
   });
 
-  const total = rows.reduce((sum, row) => sum + row.subtotal, 0);
+  const quoteItemsKey = JSON.stringify(rows.map(row => ({ productId: Number(row.product.id), quantity: row.quantity })));
+  const quoteKey = JSON.stringify([quoteItemsKey, deliveryType, rows.map(row => [row.product.price, row.subtotal]), quoteRefresh]);
+  const quote = quoteState.key === quoteKey ? quoteState.data : null;
+  const quoteError = quoteState.key === quoteKey ? quoteState.error : "";
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      const selectedItems = JSON.parse(quoteItemsKey);
+      if (!selectedItems.length) return;
+      quoteOnlineOrderRequest({ items: selectedItems, deliveryType, deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null })
+        .then(data => { if (active) setQuoteState({ key: quoteKey, data, error: "" }); })
+        .catch(error => { if (active) setQuoteState({ key: quoteKey, data: null, error: getApiError(error, "No se pudo actualizar la cotización. Intenta nuevamente.") }); });
+    }, 180);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [quoteItemsKey, deliveryType, quoteKey]);
+  const total = quote?.total;
   const hasAvailabilityIssues = Boolean(catalogError) || rows.some((row) => !row.isValid);
   const normalizedGuestEmail = guestData.email.trim().toLowerCase();
   const guestDataIsValid = isClient || (
@@ -219,6 +237,7 @@ export default function CheckoutPage() {
     && !hasAvailabilityIssues
     && guestDataIsValid
     && emailVerifiedForCheckout
+    && Boolean(quote)
     && Boolean(deliveryDataIsValid);
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
@@ -262,6 +281,7 @@ export default function CheckoutPage() {
     try {
       const checkoutData = {
         checkoutKey,
+        quoteFingerprint: quote.quoteFingerprint,
         items: rows.map((row) => ({
           productId: Number(row.product.id),
           quantity: row.quantity,
@@ -301,6 +321,7 @@ export default function CheckoutPage() {
       redirectStarted = true;
     } catch (error) {
       toast.error(getApiError(error, "No se pudo iniciar el pago con Webpay"));
+      setQuoteRefresh(value => value + 1);
       await Promise.all([loadAvailability(false), loadPendingOrder(false)]);
     } finally {
       if (!redirectStarted) {
@@ -578,8 +599,21 @@ export default function CheckoutPage() {
             <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega</span><strong className="text-right text-ink-950">{deliveryType === "DELIVERY" ? "Despacho a domicilio" : "Retiro en tienda"}</strong></div>
             <div className="flex items-center justify-between border-t border-slate-200 pt-4">
               <span className="font-bold text-slate-600">Total estimado</span>
-              <strong className="font-mono text-2xl text-ink-950">{formatClp(total)}</strong>
+              <strong className="font-mono text-2xl text-ink-950">{quote ? formatClp(total) : "Por cotizar"}</strong>
             </div>
+            {quote && <div className="grid gap-2 text-sm" aria-live="polite">
+              <div className="flex justify-between gap-2"><span>Subtotal de productos</span><strong>{formatClp(quote.productsSubtotal)}</strong></div>
+              <div className="flex justify-between gap-2"><span>Descuentos</span><strong>−{formatClp(quote.productsDiscountTotal)}</strong></div>
+              <div className="flex justify-between gap-2"><span>Despacho</span><strong>{formatClp(quote.deliveryFee)}</strong></div>
+              {quote.deliveryFeeReason === "FREE_THRESHOLD" && <small>Despacho gratuito por monto de productos.</small>}
+              {quote.isDemo && <small className="text-slate-500">Tarifa DEMO ficticia. No corresponde a una tarifa oficial de FYF.</small>}
+            </div>}
+            {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
+              <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
+              <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Actualizar cotización</button>
+            </div>}
+            {!quote && !quoteError && <p role="status" className="text-sm text-slate-500">Actualizando cotización...</p>}
+            {deliveryType === "DELIVERY" && <small className="text-slate-500">La comuna se valida por su nombre. No existe verificación geográfica automática ni delimitación de zonas.</small>}
 
             <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
               <strong className="flex items-center gap-2 text-ink-950"><CreditCard size={17} /> Webpay Plus</strong>

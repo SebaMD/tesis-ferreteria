@@ -1,8 +1,8 @@
 import { ImageOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { createProductDetailNavigationState } from "../helpers/catalogNavigation.js";
-import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
-import { formatQuantityWithUnit } from "../helpers/units.js";
+import { getProductCartAvailability } from "../helpers/cartQuantity.js";
+import ProductEstimatedAvailability from "./ProductEstimatedAvailability.jsx";
 import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
 import FavoriteButton from "./FavoriteButton.jsx";
 import useCart from "../hooks/useCart.js";
@@ -24,10 +24,8 @@ export default function ProductCard({ product, detailOrigin = null }) {
 function ConcreteProductCard({ product, detailOrigin }) {
   const navigate = useNavigate();
   const primaryImage = getPrimaryImage(product);
-  const availableStock = getOnlineAvailableStock(product);
-  const hasStock = availableStock > 0;
   const { items } = useCart();
-  const inCart = Number(items.find((item) => Number(item.product.id) === Number(product.id))?.quantity || 0);
+  const { quantityInCart: inCart } = getProductCartAvailability(product, items);
   const detailPath = `/catalog/products/${product.id}`;
   const openDetail = (event) => {
     if (!detailOrigin || !isPlainPrimaryClick(event)) return;
@@ -63,9 +61,7 @@ function ConcreteProductCard({ product, detailOrigin }) {
           </Link>
           <ProductPromotionPrice product={product} showBadge={false} />
           {product.brand && <span className="truncate text-xs text-slate-500" title={product.brand}>{product.brand}</span>}
-          <span className={`line-clamp-2 text-xs font-extrabold ${hasStock ? "text-positive-600" : "text-critical-600"}`}>
-            {hasStock ? `Disponible · ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}
-          </span>
+          <ProductEstimatedAvailability product={product} compact />
         </div>
         <div className="grid gap-2">
           <ProductPurchaseControls product={product} compact />

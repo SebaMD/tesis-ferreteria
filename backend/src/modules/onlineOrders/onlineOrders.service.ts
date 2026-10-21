@@ -101,6 +101,53 @@ import {
   findActivePromotionsForProductsTx,
 } from "../promotions/promotions.repository.js";
 import { calculatePromotionPricing } from "../promotions/promotionPricing.js";
+import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
+import { calculateDelivery, DeliveryPolicyError, quoteFingerprint } from "../deliverySettings/deliveryPricing.js";
+
+async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckoutBody["items"]) {
+  const ids = items.map(item => item.productId);
+  await acquirePromotionPricingLock(tx);
+  const products = await lockProductsForAvailability(tx, ids);
+  const reserved = await findActiveReservedQuantities(tx, ids);
+  const promotions = await findActivePromotionsForProductsTx(tx, ids, new Date());
+  return items.map(item => {
+    const product = products.find(p => p.id === item.productId);
+    if (!product) throw new OnlineOrderError(`Producto ${item.productId} no encontrado`, 404);
+    if (!product.status) throw new OnlineOrderError(`El producto ${product.name} ya no está disponible`, 409);
+    assertProductAllowsOnlinePurchase(product);
+    const available = calculateAvailableStock(product.currentStock, reserved.get(product.id) || 0);
+    if (item.quantity > available) throw new OnlineOrderError(`El stock disponible de ${product.name} cambió. Solo quedan ${available} unidades.`, 409);
+    const price = Number(product.price);
+    if (!Number.isInteger(price) || price <= 0) throw new OnlineOrderError(`El precio de ${product.name} no es válido para un pago en pesos chilenos.`, 409);
+    const pricing = calculatePromotionPricing(price, item.quantity, promotions.get(product.id) ?? null);
+    return { productId: product.id, quantity: item.quantity,
+      unitPrice: pricing.baseUnitPrice.toFixed(2), subtotal: pricing.finalSubtotal.toFixed(2),
+      discountAmount: pricing.discountAmount.toFixed(2), promotionId: pricing.promotion?.id ?? null,
+      promotionTypeSnapshot: pricing.promotion?.type ?? null, promotionNameSnapshot: pricing.promotion?.name ?? null,
+      promotionValueSnapshot: pricing.promotion?.type === "PERCENTAGE_DISCOUNT" ? pricing.promotion.percentage : null };
+  });
+}
+
+async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "items" | "deliveryType">) {
+  const policy = await currentDeliveryPolicy(tx);
+  const orderItems = await priceCheckoutItems(tx, data.items);
+  const productsSubtotal = orderItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+  const productsDiscountTotal = orderItems.reduce((sum, i) => sum + Number(i.discountAmount), 0);
+  const productsNet = productsSubtotal - productsDiscountTotal;
+  const delivery = calculateDelivery(policy, data.deliveryType, productsNet);
+  if (![productsSubtotal, productsDiscountTotal, productsNet + delivery.fee].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 9999999999)) throw new DeliveryPolicyError("El monto del pedido supera el máximo permitido.", 400);
+  const fingerprint = quoteFingerprint({ revisionId: policy!.id, deliveryType: data.deliveryType, items: orderItems, fee: delivery.fee });
+  return { orderItems, policy: policy!, delivery, fingerprint, productsSubtotal, productsDiscountTotal, productsNet, total: productsNet + delivery.fee };
+}
+
+export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "items" | "deliveryType">) {
+  return db.transaction(async tx => {
+    const q = await priceCheckout(tx, data);
+    return { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),
+      productsNet: q.productsNet.toFixed(2), deliveryFee: q.delivery.fee.toFixed(2), deliveryFeeReason: q.delivery.reason,
+      total: q.total.toFixed(2), quoteFingerprint: q.fingerprint, policyVersion: q.policy.version, isDemo: q.policy.isDemo };
+  });
+}
 
 export class OnlineOrderError extends Error {
   constructor(
@@ -390,71 +437,11 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         }
       }
 
-      const productIds = data.items.map((item) => item.productId);
-      await acquirePromotionPricingLock(tx);
-      const products = await lockProductsForAvailability(tx, productIds);
-      const productById = new Map(products.map((product) => [product.id, product]));
-      const reservedByProduct = await findActiveReservedQuantities(tx, productIds);
-      const promotionsByProduct = await findActivePromotionsForProductsTx(
-        tx,
-        productIds,
-        new Date(),
-      );
-
-      const orderItems = data.items.map((item) => {
-        const product = productById.get(item.productId);
-        if (!product) throw new OnlineOrderError(`Producto ${item.productId} no encontrado`, 404);
-        if (!product.status) {
-          throw new OnlineOrderError(`El producto ${product.name} ya no esta disponible`, 409);
-        }
-        assertProductAllowsOnlinePurchase(product);
-
-        const availableStock = calculateAvailableStock(
-          product.currentStock,
-          reservedByProduct.get(product.id) || 0,
-        );
-        if (item.quantity > availableStock) {
-          throw new OnlineOrderError(
-            `El stock disponible de ${product.name} cambio. Solo quedan ${availableStock} unidades.`,
-            409,
-          );
-        }
-
-        const unitPrice = Number(product.price);
-        if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
-          throw new OnlineOrderError(
-            `El precio de ${product.name} no es valido para un pago en pesos chilenos.`,
-            409,
-          );
-        }
-
-        const pricing = calculatePromotionPricing(
-          unitPrice,
-          item.quantity,
-          promotionsByProduct.get(product.id) ?? null,
-        );
-        const unitPriceInCents = moneyInCents(pricing.baseUnitPrice);
-        const subtotalInCents = moneyInCents(pricing.finalSubtotal);
-        return {
-          productId: product.id,
-          quantity: item.quantity,
-          unitPrice: (unitPriceInCents / 100).toFixed(2),
-          subtotal: (subtotalInCents / 100).toFixed(2),
-          discountAmount: pricing.discountAmount.toFixed(2),
-          promotionId: pricing.promotion?.id ?? null,
-          promotionTypeSnapshot: pricing.promotion?.type ?? null,
-          promotionNameSnapshot: pricing.promotion?.name ?? null,
-          promotionValueSnapshot: pricing.promotion?.type === "PERCENTAGE_DISCOUNT"
-            ? pricing.promotion.percentage
-            : null,
-          subtotalInCents,
-        };
-      });
-
-      const totalInCents = orderItems.reduce(
-        (total, item) => total + item.subtotalInCents,
-        0,
-      );
+      const quote = await priceCheckout(tx, data);
+      if (!data.quoteFingerprint || data.quoteFingerprint !== quote.fingerprint) {
+        throw new DeliveryPolicyError("La cotización cambió o venció. Revisa el resumen actualizado y confirma nuevamente.");
+      }
+      const { orderItems } = quote;
       const order = await createOnlineOrder(tx, {
         clientId: owner.type === "CLIENT" ? owner.clientId : null,
         guestName: owner.type === "GUEST" ? owner.guestName : null,
@@ -463,7 +450,12 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         guestSessionHash: owner.type === "GUEST" ? owner.guestSessionHash : null,
         guestDeviceHash: owner.type === "GUEST" ? owner.guestDeviceHash : null,
         checkoutKey: data.checkoutKey,
-        total: (totalInCents / 100).toFixed(2),
+        total: quote.total.toFixed(2),
+        productsSubtotal: quote.productsSubtotal.toFixed(2),
+        productsDiscountTotal: quote.productsDiscountTotal.toFixed(2),
+        deliveryFee: quote.delivery.fee.toFixed(2),
+        deliveryPolicyRevisionId: quote.policy.id,
+        deliveryFeeReason: quote.delivery.reason,
         deliveryType: data.deliveryType,
         deliveryRecipientName: data.deliveryRecipientName,
         deliveryPhone: data.deliveryPhone,

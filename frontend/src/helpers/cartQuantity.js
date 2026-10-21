@@ -1,4 +1,13 @@
-// Validate a confirmed quantity, not the temporary text while an input is edited.
+import { getOnlineAvailableStock } from "./productAvailability.js";
+
+// UI estimate only. Keep the server's availability and the product object intact.
+export function getProductCartAvailability(product, items = []) {
+  const availableStock = getOnlineAvailableStock(product);
+  const quantityInCart = Number(items.find((item) => Number(item.product.id) === Number(product?.id))?.quantity || 0);
+  const remaining = getRemainingCartCapacity(availableStock, quantityInCart);
+  return { availableStock, quantityInCart, remaining, isCartLimitReached: availableStock > 0 && quantityInCart > 0 && remaining === 0 };
+}
+
 export function getRemainingCartCapacity(availableStock, quantityInCart = 0) {
   const stock = Number(availableStock);
   const current = Number(quantityInCart);
@@ -7,6 +16,7 @@ export function getRemainingCartCapacity(availableStock, quantityInCart = 0) {
     : 0;
 }
 
+// Validate a confirmed quantity, not the temporary text while an input is edited.
 export function validateCartQuantity(value, availableStock) {
   const text = typeof value === "string" ? value.trim() : String(value);
   const quantity = Number(text);

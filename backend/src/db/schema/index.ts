@@ -1,4 +1,5 @@
 export * from "./roles.js";
+export * from "./deliverySettings.js";
 export * from "./users.js";
 export * from "./categories.js";
 export * from "./products.js";

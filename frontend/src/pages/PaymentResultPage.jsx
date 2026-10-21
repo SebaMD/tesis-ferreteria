@@ -6,6 +6,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isDirectPurchaseOrder } from "../helpers/directPurchase.js";
@@ -223,6 +224,7 @@ export default function PaymentResultPage() {
                 )}
               />
 
+              <OrderAmounts order={order} />
               <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
                 <span className="font-bold text-slate-600">Total</span>
                 <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>

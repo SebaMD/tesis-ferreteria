@@ -16,6 +16,8 @@ import promotionsRoutes from "./promotions/promotions.routes.js";
 import productFamiliesRoutes from "./productFamilies/productFamilies.routes.js";
 
 const router = Router();
+import deliverySettingsRoutes from "./deliverySettings/deliverySettings.routes.js";
+router.use("/delivery-settings", deliverySettingsRoutes);
 
 router.get("/health", (_req, res) => {
   res.json({ status: "ok" });

@@ -27,6 +27,8 @@ export function getAdministrativeOrderSections(model) {
     ] },
     { title: "Resumen económico", fields: [
       ["Subtotal original", formatClp(model.baseSubtotal)], ["Descuentos", formatClp(model.totalDiscount)],
+      ["Despacho", model.deliveryFee == null ? "Sin cargo registrado (histórico)" : formatClp(model.deliveryFee)],
+      ...(model.deliveryIsDemo ? [["Tarifa", "DEMO ficticia, no oficial de FYF"]] : []),
       ["Total del pedido", formatClp(model.total)],
     ] },
     { title: "Información de pago Webpay", fields: [

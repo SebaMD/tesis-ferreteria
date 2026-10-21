@@ -1,5 +1,6 @@
 // PROMOTIONS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55445/postgres node tests/promotions.integration.mjs
 import assert from "node:assert/strict";
+import { initializeTestDelivery, acceptTestQuote } from "./helpers/deliveryQuote.mjs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -160,7 +161,9 @@ try {
   });
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const token = (role) => jwt.sign({ id: users[role].id }, process.env.SESSION_SECRET);
+  await initializeTestDelivery(users.ADMIN.id);
   const request = async (method, route, { role, body } = {}, expected = 200) => {
+    if (method === "POST" && route === "/online-orders/checkout" && expected === 201) body = await acceptTestQuote(base, body);
     const response = await fetch(base + route, {
       method,
       headers: {

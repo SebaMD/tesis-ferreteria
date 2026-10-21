@@ -294,6 +294,13 @@
   }
 }
 
+/* Keep quote failures readable on a pale warning surface in both themes. */
+.checkout-quote-alert {
+  border: 1px solid #dc2626;
+  background-color: #fef2f2;
+  color: #10151f;
+}
+
 /* El tema conserva el naranjo FYF y adapta las superficies, no las imágenes ni documentos. */
 .dark,
 .dark body,

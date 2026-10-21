@@ -33,6 +33,9 @@ const statistics = buildManagerStatistics({
 }, filters);
 
 assert.deepEqual(statistics.kpis, {
+  productsIncome: 47000,
+  deliveryIncome: 0,
+  totalCollected: 47000,
   netSales: 47000,
   originalSales: 60000,
   returnedAmount: 13000,

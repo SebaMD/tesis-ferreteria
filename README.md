@@ -272,6 +272,40 @@ Nginx acepta solicitudes de hasta 6 MiB para permitir imágenes de 5 MiB y el en
 
 ## Migraciones
 
+### Tarifa fija de despacho online
+
+La migración aditiva `0030_delivery_tariffs.sql` crea la configuración versionada
+de despacho y agrega el desglose histórico a los pedidos online. No cambia los
+totales existentes: sus campos nuevos quedan en `NULL`, identificados como
+«sin cargo de despacho registrado», sin asignarles una política DEMO.
+
+Después de aplicar la migración **en una base autorizada**, ADMIN y MANAGER pueden abrir
+**Pedidos y repartos → Configurar despacho**. El formulario propone retiro a $0,
+tarifa fija **DEMO ficticia de $3.000 CLP**, sin mínimo ni gratuidad por monto.
+Estos valores no son oficiales de FYF y solo se activan al revisar y confirmar
+el guardado. Sin política guardada, no se permiten nuevas compras online.
+
+La consulta y modificación administrativa están restringidas a ADMIN y MANAGER;
+los demás roles e invitados no tienen acceso a estos endpoints. Cada guardado
+crea una revisión inmutable con el usuario responsable y controla los cambios
+concurrentes. Los pedidos y sus reintentos conservan
+los importes originales aunque cambie la configuración. Los umbrales opcionales
+usan el monto de productos después de promociones, antes del despacho. Las
+ventas presenciales no incorporan este cargo.
+
+La cobertura conserva la validación textual de Santa Juana; no hay sectores,
+geocodificación ni cálculo por distancia. Las estadísticas separan productos,
+despacho y total cobrado neto de devoluciones presenciales.
+
+Prueba aislada, sin seed ni conexiones a 5432/5433 (requiere binarios PostgreSQL
+en `PG_TEST_BIN` o la instalación local PostgreSQL 18):
+
+```powershell
+cd backend
+npm run build
+node scripts/test-delivery-tariffs.mjs
+```
+
 ### Familias y variantes
 
 La migración aditiva `0027_charming_carnage.sql` amplía las 27 anteriores. No

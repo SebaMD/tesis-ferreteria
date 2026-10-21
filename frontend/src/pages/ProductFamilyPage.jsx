@@ -5,13 +5,14 @@ import { toast } from "sonner";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductGallery from "../components/ProductGallery.jsx";
 import ProductPurchaseControls from "../components/ProductPurchaseControls.jsx";
+import ProductEstimatedAvailability from "../components/ProductEstimatedAvailability.jsx";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
 import FavoriteButton from "../components/FavoriteButton.jsx";
 import { getCatalogFamilyRequest } from "../services/catalog.service.js";
 import { getApiError } from "../api/httpClient.js";
 import { resolveProductDetailReturn } from "../helpers/catalogNavigation.js";
 import { isVariantPurchasable, variantOptionState, variantAvailability, variantLabel, familyVariantDescription } from "../helpers/productVariants.js";
-import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
+import { getDisplayUnit } from "../helpers/units.js";
 
 export default function ProductFamilyPage() {
   const { id } = useParams();
@@ -77,7 +78,7 @@ export default function ProductFamilyPage() {
         <div className="min-h-10">{selected.status && <ProductPromotionPrice product={selected} size="detail" />}</div>
         <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
           {selected.status && <span><strong>Unidad de medida:</strong> {getDisplayUnit(1, selected.unitMeasure)}</span>}
-          <span className={purchasable ? "font-bold text-positive-600" : "font-bold text-critical-600"}>{purchasable ? `Stock disponible: ${formatQuantityWithUnit(selected.availableStock, selected.unitMeasure)}` : variantAvailability(selected)}</span>
+          {purchasable ? <ProductEstimatedAvailability product={selected} /> : <span className="font-bold text-critical-600">{variantAvailability(selected)}</span>}
         </div>
         <div className="mx-auto w-full max-w-md">{selected.status && <ProductPurchaseControls key={selected.id} product={selected} showBuyNow />}</div>
         <p className="m-0 text-xs leading-5 text-slate-500">Agregar al carrito no reserva stock. La disponibilidad se vuelve a validar al iniciar el pago.</p>

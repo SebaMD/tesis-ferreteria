@@ -6,9 +6,9 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ProductGallery from "../components/ProductGallery.jsx";
 import FavoriteButton from "../components/FavoriteButton.jsx";
-import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import ProductEstimatedAvailability from "../components/ProductEstimatedAvailability.jsx";
 import ProductPurchaseControls from "../components/ProductPurchaseControls.jsx";
-import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
+import { getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
 import { resolveProductDetailReturn } from "../helpers/catalogNavigation.js";
@@ -49,9 +49,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  const availableStock = getOnlineAvailableStock(product);
-  const hasStock = availableStock > 0;
-
   return (
     <main className="mx-auto grid w-full max-w-320 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <Link className="inline-flex w-fit items-center gap-2 text-sm font-bold text-ink-700 no-underline hover:text-rust-600" to={returnNavigation.to} state={returnNavigation.state} preventScrollReset>
@@ -70,9 +67,7 @@ export default function ProductDetailPage() {
           <p className="m-0 leading-7 text-slate-600">{product.description || "Este producto no tiene una descripción disponible."}</p>
           <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
             <span><strong>Unidad de medida:</strong> {getDisplayUnit(1, product.unitMeasure)}</span>
-            <span className={hasStock ? "font-bold text-positive-600" : "font-bold text-critical-600"}>
-              {hasStock ? `Stock disponible: ${formatQuantityWithUnit(availableStock, product.unitMeasure)}` : "SIN STOCK"}
-            </span>
+            <ProductEstimatedAvailability product={product} />
           </div>
           <div className="mx-auto w-full max-w-md">
             <ProductPurchaseControls key={product.id} product={product} showBuyNow />

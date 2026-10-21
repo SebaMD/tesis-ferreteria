@@ -56,6 +56,8 @@ export function renderPurchaseConfirmedMail(
     "",
     `Subtotal a precio normal: ${formatOrderMoney(model.baseSubtotal)}`,
     `Descuentos: -${formatOrderMoney(model.totalDiscount)}`,
+    `${model.deliveryFeeLabel}: ${model.deliveryFee == null ? "Sin cargo registrado" : formatOrderMoney(model.deliveryFee)}`,
+    ...(model.deliveryIsDemo ? ["Tarifa DEMO ficticia. No corresponde a una tarifa oficial de FYF."] : []),
     `Total pagado: ${formatOrderMoney(model.total)}`,
     `Modalidad: ${model.delivery.label}`,
     ...(recipient ? [`Destinatario: ${recipient}`] : []),
@@ -119,6 +121,7 @@ export function renderPurchaseConfirmedMail(
               ${address ? `<tr><td style="padding:5px 0;color:#4b5563;font-size:14px;vertical-align:top;">Dirección</td><td align="right" style="padding:5px 0;font-size:14px;">${escapeMailHtml(address)}</td></tr>` : ""}
               <tr><td style="padding:14px 0 5px;border-top:1px solid #e5e7eb;color:#4b5563;font-size:13px;">Subtotal a precio normal</td><td align="right" style="padding:14px 0 5px;border-top:1px solid #e5e7eb;font-size:13px;">${escapeMailHtml(formatOrderMoney(model.baseSubtotal))}</td></tr>
               <tr><td style="padding:5px 0;color:#4b5563;font-size:13px;">Descuentos</td><td align="right" style="padding:5px 0;color:#c2410c;font-size:13px;font-weight:700;">-${escapeMailHtml(formatOrderMoney(model.totalDiscount))}</td></tr>
+              <tr><td>Despacho${model.deliveryIsDemo ? " (DEMO ficticio, no oficial FYF)" : ""}</td><td align="right">${model.deliveryFee == null ? "Sin cargo registrado (histórico)" : escapeMailHtml(formatOrderMoney(model.deliveryFee))}</td></tr>
               <tr><td style="padding:14px 0 5px;border-top:2px solid #111827;font-size:16px;font-weight:700;">TOTAL PAGADO</td><td align="right" style="padding:14px 0 5px;border-top:2px solid #111827;font-size:20px;font-weight:800;">${escapeMailHtml(formatOrderMoney(model.total))}</td></tr>
             </table>
 

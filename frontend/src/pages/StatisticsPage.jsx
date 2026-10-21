@@ -141,7 +141,7 @@ function DistributionChart({ title, description, items = [], labelFor }) {
         <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-5 p-5 max-[560px]:grid-cols-1">
           <div className="relative mx-auto size-[142px] rounded-full" style={{ background: gradient }} role="img" aria-label={`${title}: distribución porcentual`}>
             <div className="absolute inset-[26px] grid place-items-center rounded-full bg-white text-center">
-              <span className="text-[11px] font-bold uppercase text-slate-500">Total neto</span>
+              <span className="text-[11px] font-bold uppercase text-slate-500">Total</span>
               <strong className="font-mono text-sm text-ink-950">{formatClp(usefulItems.reduce((sum, item) => sum + Number(item.amount), 0))}</strong>
             </div>
           </div>
@@ -320,7 +320,9 @@ export default function StatisticsPage() {
       <p className="m-0 text-xs font-semibold text-slate-500">Período consultado: {appliedFilters.from} al {appliedFilters.to}</p>
 
       <div className="grid grid-cols-4 gap-3.5 max-[1180px]:grid-cols-2 max-[620px]:grid-cols-1">
-        <MetricCard icon={CircleDollarSign} label="Monto neto vendido" value={formatClp(kpis.netSales)} detail="Presencial neto + online pagado" tone="positive" />
+        <MetricCard icon={CircleDollarSign} label="Monto neto vendido" value={formatClp(kpis.netSales)} detail="Productos netos, sin incluir despacho" tone="positive" />
+        <MetricCard icon={CircleDollarSign} label="Despachos cobrados" value={formatClp(kpis.deliveryIncome ?? 0)} detail="Solo pedidos online pagados" />
+        <MetricCard icon={CircleDollarSign} label="Total cobrado neto" value={formatClp(kpis.totalCollected ?? kpis.netSales)} detail="Productos netos + despacho" />
         <MetricCard icon={ReceiptText} label="Monto original" value={formatClp(kpis.originalSales)} detail="Antes de devoluciones presenciales" />
         <MetricCard icon={Percent} label="Monto devuelto" value={formatClp(kpis.returnedAmount)} detail={`${Number(kpis.returnPercentage || 0).toLocaleString("es-CL")}% del monto original`} tone="warning" />
         <MetricCard icon={ShoppingBag} label="Operaciones pagadas" value={kpis.transactions ?? 0} detail="Ventas presenciales y pedidos online" />
@@ -334,7 +336,7 @@ export default function StatisticsPage() {
 
       <div className="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
         <DistributionChart title="Distribución por canal" description="Participación sobre el monto neto" items={statistics?.channels} labelFor={(item) => item.label} />
-        <DistributionChart title="Distribución por método de pago" description="Métodos presentes en operaciones concretadas" items={statistics?.paymentMethods} labelFor={(item) => paymentMethodLabel(item.paymentMethod)} />
+        <DistributionChart title="Distribución por método de pago" description="Cobros netos, incluyendo despacho online" items={statistics?.paymentMethods} labelFor={(item) => paymentMethodLabel(item.paymentMethod)} />
       </div>
 
       <div className="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">

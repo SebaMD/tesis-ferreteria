@@ -20,13 +20,13 @@ export async function createProductRequest(data) {
   return resolveProductAssets(response.data.data);
 }
 
-export async function updateProductRequest(id, data) {
-  const response = await api.patch(`/products/${id}`, data);
+export async function updateProductRequest(id, data, expectedUpdatedAt) {
+  const response = await api.patch(`/products/${id}`, data, expectedUpdatedAt ? { headers: { "If-Match": JSON.stringify(expectedUpdatedAt) } } : undefined);
   return resolveProductAssets(response.data.data);
 }
 
-export async function deactivateProductRequest(id) {
-  const response = await api.delete(`/products/${id}`);
+export async function deactivateProductRequest(id, expectedUpdatedAt) {
+  const response = await api.delete(`/products/${id}`, expectedUpdatedAt ? { headers: { "If-Match": JSON.stringify(expectedUpdatedAt) } } : undefined);
   return resolveProductAssets(response.data.data);
 }
 

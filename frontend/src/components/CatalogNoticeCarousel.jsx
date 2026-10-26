@@ -22,7 +22,7 @@ function useReducedMotion() {
   return reduced;
 }
 
-export default function CatalogNoticeCarousel() {
+export default function CatalogNoticeCarousel({ paused = false }) {
   const { notices, presentation, deliveryAnnouncement } = useCustomerNotice();
   const slides = useMemo(() => buildCatalogSlides(presentation, notices, deliveryAnnouncement), [notices, presentation, deliveryAnnouncement]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -31,12 +31,12 @@ export default function CatalogNoticeCarousel() {
   const activeIndex = currentIndex < slides.length ? currentIndex : 0;
 
   useEffect(() => {
-    if (slides.length < 2 || reducedMotion) return undefined;
+    if (slides.length < 2 || reducedMotion || paused) return undefined;
     const timer = window.setTimeout(() => {
       setCurrentIndex(nextCatalogSlideIndex(activeIndex, slides.length));
     }, catalogSlideDurationMilliseconds(slides[activeIndex]));
     return () => window.clearTimeout(timer);
-  }, [activeIndex, reducedMotion, slides, timerVersion]);
+  }, [activeIndex, reducedMotion, slides, timerVersion, paused]);
 
   const selectSlide = (index) => {
     setCurrentIndex(index);
@@ -97,6 +97,7 @@ export default function CatalogNoticeCarousel() {
               className="group grid size-8 min-h-8 place-items-center border-0 bg-transparent p-0 hover:bg-transparent"
               key={slide.id}
               type="button"
+              disabled={paused}
               aria-label={`Mostrar diapositiva ${index + 1}: ${slide.title}`}
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => selectSlide(index)}

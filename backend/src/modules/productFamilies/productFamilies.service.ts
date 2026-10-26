@@ -11,7 +11,7 @@ const normalized = (value: string | null | undefined) => (value ?? "").trim().re
 export type FamilyBody = { name: string; description: string | null; categoryId: number; brand: string | null;
   attributes: Array<{ id?: number; name: string; options: Array<{ id?: number; label: string }> }> };
 
-export function validateFamilyBody(input: unknown): FamilyBody {
+export function validateFamilyBody(input: unknown, allowEmptyAttributes = false): FamilyBody {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new FamilyError("Debe enviar una familia válida", 400);
   const b = input as Record<string, unknown>;
   if (Object.keys(b).some((k) => !["name", "description", "categoryId", "brand", "attributes"].includes(k))) throw new FamilyError("Campo de familia no permitido", 400);
@@ -23,7 +23,7 @@ export function validateFamilyBody(input: unknown): FamilyBody {
     return result;
   };
   const categoryId = Number(b.categoryId);
-  if (!Number.isInteger(categoryId) || categoryId < 1 || !Array.isArray(b.attributes) || b.attributes.length < 1 || b.attributes.length > 8) throw new FamilyError("Seleccione categoría y entre 1 y 8 atributos", 400);
+  if (!Number.isInteger(categoryId) || categoryId < 1 || !Array.isArray(b.attributes) || b.attributes.length < (allowEmptyAttributes ? 0 : 1) || b.attributes.length > 8) throw new FamilyError("Seleccione categoría y entre 1 y 8 atributos", 400);
   const validId = (id: unknown) => id === undefined || (typeof id === "number" && Number.isInteger(id) && id > 0);
   const attributes = b.attributes.map((a: { id?: number; name: unknown; options: unknown }) => {
     if (!a || typeof a !== "object" || Array.isArray(a) || !validId(a.id) || Object.keys(a).some((key) => !["id", "name", "options"].includes(key))

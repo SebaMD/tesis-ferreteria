@@ -13,7 +13,7 @@ import {
 } from "../inventory/stockAvailability.repository.js";
 import { findProductImagesByProductIds } from "../productImages/productImages.repository.js";
 import { presentProductImage } from "../productImages/productImages.presenter.js";
-import { findProductById, findProducts, findProductsByFamilyId } from "../products/products.repository.js";
+import { findProductById, findProducts, findProductsByFamilyId, findProductsByIds } from "../products/products.repository.js";
 import type { CatalogQuery } from "./catalog.validation.js";
 import { getFamily, FamilyError } from "../productFamilies/productFamilies.service.js";
 import {
@@ -176,6 +176,7 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
     fromPrice: sql<string>`min(${effectivePrice})`.as("from_price"),
     maxPrice: sql<string>`max(${effectivePrice})`.as("max_price"),
     variantCount: sql<number>`count(*)::integer`.as("variant_count"),
+    matchingProductIds: sql<number[]>`array_agg(${productsTable.id} order by ${productsTable.id})`.as("matching_product_ids"),
     hasOffers: sql<boolean>`bool_or(${hasActivePromotion})`.as("has_offers"),
     onlineFromPrice: sql<string | null>`min(${effectivePrice}) filter (where ${onlineEligible})`.as("online_from_price"),
     onlineMaxPrice: sql<string | null>`max(${effectivePrice}) filter (where ${onlineEligible})`.as("online_max_price"),
@@ -213,6 +214,7 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
       fromPrice: pageGroups.fromPrice,
       maxPrice: pageGroups.maxPrice,
       variantCount: pageGroups.variantCount,
+      matchingProductIds: pageGroups.matchingProductIds,
       hasOffers: pageGroups.hasOffers,
       onlineFromPrice: pageGroups.onlineFromPrice,
       onlineMaxPrice: pageGroups.onlineMaxPrice,
@@ -242,8 +244,13 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
       : filters.sort === "name-desc" ? [desc(sql`lower(${pageGroups.name})`), asc(pageGroups.groupKey)]
       : [asc(sql`lower(${pageGroups.name})`), asc(pageGroups.groupKey)]));
 
-  const images = await findProductImagesByProductIds(rows.map((product) => product.id));
-  const promotionsByProduct = await findActivePromotionsForProducts(rows.map((product) => product.id));
+  // One batched load for all visible cards, restricted to the concrete filtered SKUs.
+  const visibleIds = rows.flatMap(p => p.matchingProductIds);
+  const [images, visibleProducts, reservedByProduct, promotionsByProduct] = await Promise.all([
+    findProductImagesByProductIds(rows.map(p => p.id)), findProductsByIds(visibleIds),
+    findActiveReservedQuantities(db, visibleIds), findActivePromotionsForProducts(visibleIds),
+  ]);
+  const concrete = new Map(visibleProducts.map(p => [p.id, toCatalogProduct(p, reservedByProduct.get(p.id) ?? 0, promotionsByProduct.get(p.id) ?? null)]));
   type CatalogImage = (typeof images)[number] & { imageUrl: string };
   const imagesByProduct = new Map<number, CatalogImage[]>();
   for (const image of images) {
@@ -267,8 +274,9 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
         onlineHasOffers: product.onlineHasOffers,
         attributeNames: product.attributeNames,
         imageCaption: product.name,
+        variants: product.matchingProductIds.map(id => concrete.get(id)!).filter(Boolean),
       };
-      const { groupName: _groupName, fromPrice: _fromPrice, maxPrice: _maxPrice, variantCount: _variantCount, hasOffers: _hasOffers,
+      const { matchingProductIds: _matchingIds, groupName: _groupName, fromPrice: _fromPrice, maxPrice: _maxPrice, variantCount: _variantCount, hasOffers: _hasOffers,
         onlineFromPrice: _onlineFrom, onlineMaxPrice: _onlineMax, onlineVariantCount: _onlineCount,
         allInStoreOnly: _allInStore, onlineHasOffers: _onlineOffers, attributeNames: _attributes, ...sku } = product;
       return attachPromotion({

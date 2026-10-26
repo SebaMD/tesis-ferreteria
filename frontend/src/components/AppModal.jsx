@@ -11,6 +11,7 @@ const sizeClasses = {
 
 export default function AppModal({
   open,
+  suspended = false,
   title,
   description,
   onClose,
@@ -32,7 +33,7 @@ export default function AppModal({
   }, [onClose]);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || suspended) return undefined;
 
     const previousOverflow = document.body.style.overflow;
     const previousActiveElement = document.activeElement;
@@ -48,9 +49,9 @@ export default function AppModal({
 
       if (event.key !== "Tab" || !dialogRef.current) return;
 
-      const focusableElements = dialogRef.current.querySelectorAll(
+      const focusableElements = [...dialogRef.current.querySelectorAll(
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+      )].filter(element => element.getClientRects().length > 0 && !element.closest("[inert]"));
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
 
@@ -74,13 +75,14 @@ export default function AppModal({
       window.removeEventListener("keydown", handleKeyDown);
       previousActiveElement?.focus?.();
     };
-  }, [open]);
+  }, [open, suspended]);
 
   if (!open) return null;
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-900 grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${overlayClassName}`}
+      className={`fixed inset-0 z-900 grid place-items-center overflow-clip bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${suspended ? "hidden!" : ""} ${overlayClassName}`}
+      hidden={suspended}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -88,8 +90,8 @@ export default function AppModal({
       <section
         className={`app-modal-panel flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        role={suspended ? undefined : "dialog"}
+        aria-modal={suspended ? undefined : true}
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
       >

@@ -1,4 +1,5 @@
-import { Router } from "express";
+import { Router, raw, type NextFunction, type Request, type Response } from "express";
+import { getBundleOperation, getProductBundle, getProductConversion, saveProductBundle } from "./productBundle.service.js";
 import { authenticateJwt, type AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
@@ -6,6 +7,43 @@ import { FamilyError, getFamilyForManagement, listFamilies, saveFamily, validate
 
 const router = Router();
 router.use(authenticateJwt, verifyRoles(["ADMIN"]));
+router.get("/conversion/:id", async (req, res) => {
+  try { const id = Number(req.params.id); if (!Number.isSafeInteger(id) || id < 1) throw new FamilyError("ID inválido", 400);
+    return handleSuccess(res, 200, "Producto original para conversión", await getProductConversion(id)); }
+  catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo revisar la conversión", e); }
+});
+router.get("/operations/:key", async (req: AuthenticatedRequest, res) => {
+  try { return handleSuccess(res, 200, "Resultado de la operación", await getBundleOperation(String(req.params.key), req.user!.id)); }
+  catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo consultar la operación", e); }
+});
+router.get("/:id/bundle", async (req, res) => {
+  try { const id = Number(req.params.id); if (!Number.isSafeInteger(id) || id < 1) throw new FamilyError("ID inválido", 400);
+    return handleSuccess(res, 200, "Familia y variantes", await getProductBundle(id)); }
+  catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo consultar la familia", e); }
+});
+// A dedicated bounded parser keeps image payloads out of the general JSON limit.
+const bundleBodyParser = raw({ type: "application/vnd.fyf.product-bundle+json", limit: "22mb" });
+function parseBundleBody(req: Request, res: Response, next: NextFunction) {
+  bundleBodyParser(req, res, (error) => {
+    if (!error) { next(); return; }
+    if (typeof error === "object" && error !== null && "type" in error && error.type === "entity.too.large") {
+      handleErrorClient(res, 413, "El conjunto de productos e imágenes no puede superar 22 MB");
+      return;
+    }
+    next(error);
+  });
+}
+router.post("/bundle", parseBundleBody, async (req: AuthenticatedRequest, res) => {
+  try {
+    let body = req.body;
+    if (Buffer.isBuffer(body)) { try { body = JSON.parse(body.toString("utf8")); } catch { throw new FamilyError("JSON inválido", 400); } }
+    return handleSuccess(res, 200, "Familia y variantes guardadas", await saveProductBundle(body, req.user!.id));
+  } catch (e) {
+    const known = e as { statusCode?: number; message?: string };
+    if (known.statusCode && known.statusCode >= 400 && known.statusCode < 500) return handleErrorClient(res, known.statusCode, known.message ?? "Revise los datos");
+    return handleErrorServer(res, 500, "No se pudo guardar el conjunto. Consulte el resultado antes de reintentar.", e);
+  }
+});
 router.post("/variants/:id/detach", async (req: AuthenticatedRequest, res) => {
   try {
     const id = Number(req.params.id);

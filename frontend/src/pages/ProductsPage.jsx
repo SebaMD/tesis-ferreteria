@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,13 +8,15 @@ import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
-import ProductVariantFields from "../components/ProductFamilyManager.jsx";
-import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import ProductBundleEditor from "../components/ProductBundleEditor.jsx";
+import GroupedInventoryTable from "../components/GroupedInventoryTable.jsx";
+import { groupInventoryProducts, inventoryExportRows, inventoryVariantLabel } from "../helpers/inventoryGroups.js";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
-import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
+import { compareByNewest, formatDate } from "../helpers/formatters.js";
+import { getMovementTone, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
 import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
@@ -35,7 +37,6 @@ import {
 } from "../services/products.service.js";
 import {
   badgeClass,
-  codeCellClass,
   dangerButtonClass,
   dateCellClass,
   emptyTableCellClass,
@@ -44,7 +45,6 @@ import {
   pageClass,
   pageHeaderClass,
   secondaryButtonClass,
-  tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
   tableScrollClass,
@@ -108,6 +108,7 @@ const emptyForm = {
   minimumStock: 0,
   inStoreOnly: false,
   status: true,
+  initialStock: 0,
 };
 
 function initialMovementForm(movementType = "ENTRY") {
@@ -130,6 +131,13 @@ export default function ProductsPage() {
   const [movementForm, setMovementForm] = useState(initialMovementForm);
   const [editingProductId, setEditingProductId] = useState(null);
   const [activeForm, setActiveForm] = useState(null);
+  const [bundleEditor, setBundleEditor] = useState(null);
+  const [variantsEnabled, setVariantsEnabled] = useState(false);
+  const [bundleDialogActive, setBundleDialogActive] = useState(false);
+  const [variantsSeen, setVariantsSeen] = useState(false);
+  const [bundleSaving, setBundleSaving] = useState(false);
+  const bundleReviewRef = useRef(null);
+  const simpleModeRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState(null);
@@ -142,6 +150,7 @@ export default function ProductsPage() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [outOfStockOnly, setOutOfStockOnly] = useState(false);
   const [showInactiveProducts, setShowInactiveProducts] = useState(false);
+  const [variantsOnly, setVariantsOnly] = useState(false);
   const [unitSearch, setUnitSearch] = useState("unidad");
   const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
   const [submittingMovement, setSubmittingMovement] = useState(false);
@@ -165,7 +174,6 @@ export default function ProductsPage() {
   const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
   const canViewLowStockFilter = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(user?.role);
   const canViewAdministrativeStock = user?.role !== "CASHIER";
-  const inventoryTableColumnCount = 8 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
   const viewParam = searchParams.get("view");
   const filterParam = searchParams.get("filter");
 
@@ -230,6 +238,7 @@ export default function ProductsPage() {
       const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
       const matchesLowStock = !lowStockOnly || isLowStockProduct(product);
       const matchesOutOfStock = !outOfStockOnly || isOutOfStockProduct(product);
+      if (variantsOnly && !product.familyId) return false;
       if (!matchesCategory) return false;
       if (!matchesLowStock) return false;
       if (!matchesOutOfStock) return false;
@@ -239,10 +248,12 @@ export default function ProductsPage() {
         String(product.id).includes(normalizedSearch) ||
         String(product.barcode || "").includes(normalizedSearch) ||
         product.name.toLocaleLowerCase("es").includes(normalizedSearch) ||
-        product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
+        product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch) ||
+        String(product.familyName || "").toLocaleLowerCase("es").includes(normalizedSearch) ||
+        inventoryVariantLabel(product).toLocaleLowerCase("es").includes(normalizedSearch)
       );
     }).sort(compareByNewest),
-    [categoryFilter, lowStockOnly, normalizedSearch, outOfStockOnly, visibleStatusProducts],
+    [categoryFilter, lowStockOnly, normalizedSearch, outOfStockOnly, visibleStatusProducts, variantsOnly],
   );
   const productById = useMemo(
     () => new Map(products.map((product) => [String(product.id), product])),
@@ -290,10 +301,11 @@ export default function ProductsPage() {
       ),
     [normalizedUnitSearch],
   );
-  const productsPagination = usePagination(filteredProducts, {
-    resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}|${visibleStatusProducts.length}`,
+  const groupedProducts = useMemo(() => groupInventoryProducts(filteredProducts, visibleStatusProducts), [filteredProducts, visibleStatusProducts]);
+  const productsPagination = usePagination(groupedProducts, {
+    resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}|${visibleStatusProducts.length}`,
   });
-  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || outOfStockOnly || showInactiveProducts);
+  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || outOfStockOnly || showInactiveProducts || variantsOnly);
   const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
   const filteredMovements = useMemo(
     () => sortedMovements.filter((movement) => {
@@ -457,6 +469,37 @@ export default function ProductsPage() {
   );
   const parsedProductPrice = Number(form.price);
   const parsedMinimumStock = Number(form.minimumStock);
+  const canAddVariants = Boolean(form.categoryId) && form.name.trim().length >= 2 && form.name.trim().length <= 150
+    && unitSearch.trim().length > 0 && unitSearch.trim().length <= 50 && form.price !== ""
+    && Number.isSafeInteger(parsedProductPrice) && parsedProductPrice >= 0 && parsedProductPrice <= 9999999999
+    && Number.isSafeInteger(parsedMinimumStock) && parsedMinimumStock >= 0 && productBarcodeIsValid && !productBarcodeHasDuplicate;
+  const openVariants = () => {
+    if (!canAddVariants && !variantsEnabled) return;
+    if (editingProductId && !variantsEnabled && (["name","brand","categoryId","status"].some(key => String(form[key] ?? "") !== String(editingProduct[key] ?? "")) || unitSearch !== editingProduct.unitMeasure)) {
+      toast.warning("La conversión conserva nombre, marca, categoría, unidad y estado del original. Guarda o descarta esos cambios antes de convertir. Tu borrador se conserva."); return;
+    }
+    if (!editingProductId) bundleReviewRef.current?.resume({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    else if (variantsSeen) bundleReviewRef.current?.resumeConversion({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    setVariantsSeen(true); setVariantsEnabled(true);
+  };
+  const selectVariantMode = () => {
+    bundleReviewRef.current?.resume({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    setVariantsSeen(true); setVariantsEnabled(true);
+  };
+  const useSimpleDraft = ({ fields, files }) => {
+    setForm(current => ({ ...current, ...fields })); setUnitSearch(fields.unitMeasure);
+    setCategorySearch(categories.find(category => category.id === Number(fields.categoryId))?.name || "");
+    setPendingProductImages(files); setVariantsEnabled(false);
+    requestAnimationFrame(() => simpleModeRef.current?.focus());
+  };
+  const finishNewBundle = () => {
+    setBundleSaving(false); setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
+    setLinkedRegistration(null); setActiveForm(null); setPendingProductImages([]); setForm(emptyForm);
+  };
+  const returnFromConversion = ({ fields, files }) => {
+    setForm(current => ({ ...current, price: fields.price, barcode: fields.barcode || "", minimumStock: fields.minimumStock, description: fields.description || "", inStoreOnly: fields.inStoreOnly }));
+    setPendingProductImages(files); setVariantsEnabled(false);
+  };
   const linkedProductIsSaved =
     linkedRegistration?.step === "product" &&
     linkedRegistration.product?.id === editingProductId;
@@ -475,6 +518,7 @@ export default function ProductsPage() {
   );
   const showProductContinueAction = linkedRegistration?.step === "product";
   const canSaveProductAndContinue =
+    !variantsEnabled &&
     showProductContinueAction &&
     Boolean(form.categoryId) &&
     form.name.trim().length >= 2 &&
@@ -641,6 +685,8 @@ export default function ProductsPage() {
 
   const handleCreateProduct = async (event, shouldContinue = false) => {
     event.preventDefault();
+    if (variantsEnabled) { bundleReviewRef.current?.review(); return; }
+    if (!editingProductId && variantsSeen) { bundleReviewRef.current?.saveSimple(); return; }
     const wasEditing = Boolean(editingProductId);
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
@@ -679,8 +725,10 @@ export default function ProductsPage() {
 
     try {
       setSubmittingProduct(true);
+      const commercialForm = { ...form };
+      delete commercialForm.initialStock;
       const productData = {
-        ...form,
+        ...commercialForm,
         barcode: normalizedProductBarcode || null,
         brand: String(form.brand || "").trim().replace(/\s+/g, " ") || null,
         categoryId: Number(form.categoryId),
@@ -984,7 +1032,9 @@ export default function ProductsPage() {
     setActiveForm("product");
   };
 
-  const startEditing = (product) => {
+  const startEditing = (product, individual = false) => {
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
+    if (product.familyId && !individual) { setActiveForm(null); setBundleEditor({ familyId: product.familyId }); return; }
     setEditingProductId(product.id);
     setActiveForm("product");
     setPendingProductImages([]);
@@ -1010,6 +1060,8 @@ export default function ProductsPage() {
   };
 
   const cancelEditing = () => {
+    if (bundleSaving) return;
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
     setEditingProductId(null);
     setPendingProductImages([]);
     setForm(emptyForm);
@@ -1033,10 +1085,10 @@ export default function ProductsPage() {
 
     try {
       if (productStatusTarget.status === false) {
-        await updateProductRequest(productStatusTarget.id, { status: true });
+        await updateProductRequest(productStatusTarget.id, { status: true }, productStatusTarget.updatedAt);
         toast.success("Producto activado exitosamente");
       } else {
-        await deactivateProductRequest(productStatusTarget.id);
+        await deactivateProductRequest(productStatusTarget.id, productStatusTarget.updatedAt);
         toast.success("Producto desactivado exitosamente");
       }
 
@@ -1065,6 +1117,7 @@ export default function ProductsPage() {
   };
 
   const openProductForm = () => {
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
     setLinkedRegistration(null);
     setActiveForm("product");
     setEditingProductId(null);
@@ -1245,18 +1298,10 @@ export default function ProductsPage() {
         { key: "unidad", header: "Unidad" },
         { key: "stockMinimo", header: "Stock mínimo" },
         { key: "estado", header: "Estado de stock" },
+        { key: "familia", header: "Familia" },
+        { key: "atributos", header: "Atributos de variante" },
       ],
-      rows: filteredProducts.map((product) => ({
-        id: product.id,
-        producto: product.name,
-        codigoBarra: product.barcode || "",
-        categoria: product.categoryName,
-        precio: Number(product.price || 0),
-        stockActual: Number(product.currentStock || 0),
-        unidad: product.unitMeasure,
-        stockMinimo: Number(product.minimumStock || 0),
-        estado: getStockStatus(product, user?.role).label,
-      })),
+      rows: inventoryExportRows(filteredProducts, user?.role),
     });
     toast.success("Inventario exportado exitosamente");
   };
@@ -1318,9 +1363,9 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-215 flex-none") : "w-full max-w-190 flex-none"}`}>
-          <label className="relative block min-w-0 flex-1 max-[720px]:min-w-60 max-[720px]:max-w-none">
+      <div className="inventory-toolbar flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
+        <div className="flex min-w-0 flex-none items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-wrap">
+          <label className="inventory-search relative block min-w-0 max-[720px]:w-full">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
               className="pl-9.75"
@@ -1342,7 +1387,7 @@ export default function ProductsPage() {
             </button>
           )}
           <AppSelect
-            className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
+            className="w-48 shrink-0 max-[720px]:w-full"
             value={categoryFilter}
             onChange={(value) => setCategoryFilter(String(value))}
             ariaLabel="Filtrar productos por categoría"
@@ -1350,7 +1395,7 @@ export default function ProductsPage() {
           />
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[980px]:ml-0 max-[980px]:w-full max-[980px]:shrink max-[980px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 [&>button]:mr-0! [&>button]:px-3 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
             {canManage && (
               <>
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
@@ -1551,17 +1596,18 @@ export default function ProductsPage() {
 
       <AppModal
         open={canManage && activeForm === "product"}
+        suspended={bundleDialogActive}
         title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId ? "Editar producto" : "Nuevo producto"}
         description="Completa la información comercial y de inventario."
-        onClose={linkedRegistration ? closeLinkedRegistration : cancelEditing}
-        size="large"
+        onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
+        size={variantsEnabled ? "xlarge" : "large"}
       >
         {linkedRegistration?.step === "product" && (
           <button
             className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
             type="button"
             onClick={goToLinkedCategory}
-            disabled={submittingProduct}
+            disabled={submittingProduct || bundleSaving}
             aria-label="Volver a categoría"
           >
             <ArrowLeft size={22} />
@@ -1582,7 +1628,13 @@ export default function ProductsPage() {
         <div
           className={linkedRegistration?.step === "product" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
+          {!editingProductId && <div className="mb-4 grid gap-2 sm:grid-cols-2" role="group" aria-label="Tipo de producto nuevo">
+            <button ref={simpleModeRef} type="button" className={variantsEnabled ? secondaryButtonClass : "product-positive-action"} aria-pressed={!variantsEnabled} disabled={bundleSaving} onClick={()=>{if(variantsEnabled)bundleReviewRef.current?.continueAsSimple();}}>Producto simple</button>
+            <button type="button" className={variantsEnabled ? "product-positive-action" : secondaryButtonClass} aria-pressed={variantsEnabled} disabled={bundleSaving} onClick={()=>{if(!variantsEnabled)selectVariantMode();}}>Producto con variantes</button>
+          </div>}
+          <div hidden={variantsEnabled} className={variantsEnabled ? "hidden" : ""}>
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
+            <fieldset disabled={bundleSaving || Boolean(editingProductId && variantsEnabled)} className="m-0 grid min-w-0 gap-3.75 border-0 p-0" aria-label="Datos comerciales del producto">
             <label className="relative">
               Buscar categoría
               <div className="relative">
@@ -1705,7 +1757,7 @@ export default function ProductsPage() {
                   type="number"
                   value={form.price}
                   onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
-                  required
+                  required={!variantsEnabled}
                 />
               </label>
               <label>
@@ -1718,7 +1770,8 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-ink-950">
+            {!editingProductId && variantsSeen && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" required value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Se registrará una única entrada al guardar el producto simple.</span></label>}
+            <label className="variant-online-control rounded border border-slate-200 bg-slate-50 px-3!">
               <input
                 className="mt-0.5 size-4 shrink-0"
                 type="checkbox"
@@ -1728,13 +1781,13 @@ export default function ProductsPage() {
               <span>
                 <strong className="block">Solo presencial</strong>
                 <small className="mt-0.5 block font-normal leading-5 text-slate-500">
-                  El producto se mostrará en el catálogo, pero no podrá comprarse en línea.
+                  Visible en catálogo, sin compra online.
                 </small>
               </span>
             </label>
-            <ProductVariantFields form={form} onChange={setForm} categories={categories} products={products} editingProduct={editingProduct} onEditProduct={startEditing} onDetached={(id) => setProducts((current) => current.map((p) => p.id === id ? { ...p, familyId: null, familyName: null, variantKey: null, variantOptionIds: [], variantValues: [] } : p))} disabled={submittingProduct || managingProductImages} />
+            </fieldset>
             <ProductImagesManager
-              disabled={submittingProduct || managingProductImages}
+              disabled={submittingProduct || managingProductImages || bundleSaving || Boolean(editingProductId && variantsEnabled)}
               images={editingProduct?.images || []}
               pendingFiles={pendingProductImages}
               onFilesSelected={handleProductImageFiles}
@@ -1743,19 +1796,27 @@ export default function ProductsPage() {
               onDelete={handleDeleteProductImage}
               onMove={handleMoveProductImage}
             />
-            <div className={formActionsClass}>
+            {variantsEnabled && <p className="m-0 text-xs text-slate-500">La configuración de variantes se conserva. Guardar registrará el conjunto completo, sin crear un producto general adicional.</p>}
+            {!editingProductId && variantsSeen && <p className="m-0 text-xs text-slate-500">Se guardará solo este artículo. Los atributos y otras variantes no se guardarán; su borrador se conserva si vuelves al modo con variantes.</p>}
+            <div className="product-footer-actions">
               {linkedRegistration?.step === "product" ? (
-                <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct}>
+                <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct || bundleSaving}>
                   Finalizar
                 </button>
               ) : (
-                <button className={secondaryButtonClass} type="button" onClick={cancelEditing} disabled={submittingProduct}>
+                <button className={secondaryButtonClass} type="button" onClick={cancelEditing} disabled={submittingProduct || bundleSaving}>
                   Cancelar
                 </button>
               )}
-              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+              <button type="button" className={`${secondaryButtonClass} mx-auto! min-h-11 max-w-full`}
+                aria-describedby={!canAddVariants && !variantsEnabled ? "variants-base-requirements" : undefined}
+                title={!canAddVariants && !variantsEnabled ? "Completa nombre, categoría, precio, unidad, stock mínimo y un código de barras válido si corresponde" : undefined}
+                disabled={Boolean(editingProduct?.familyId) || bundleSaving || (!canAddVariants && !variantsEnabled)} onClick={openVariants}>
+                {editingProductId ? "Convertir en producto con variantes" : "Agregar variantes"}
+              </button>
+              <div className="flex min-w-0 items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
                 {linkedRegistration?.step === "product" && (
-                  <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={goToLinkedCategory} disabled={submittingProduct}>
+                  <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={goToLinkedCategory} disabled={submittingProduct || bundleSaving}>
                     <ArrowLeft size={17} />
                     Volver
                   </button>
@@ -1766,12 +1827,19 @@ export default function ProductsPage() {
                     <ArrowRight size={17} />
                   </button>
                 )}
-                <button type="submit" disabled={submittingProduct || managingProductImages}>
-                  {submittingProduct ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : "Guardar producto"}
+                <button type="submit" className="product-positive-action" disabled={submittingProduct || managingProductImages || bundleSaving}>
+                  {submittingProduct || bundleSaving ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : variantsEnabled ? (editingProductId ? "Revisar conversión y variantes" : "Guardar producto") : editingProductId ? "Actualizar producto" : "Guardar producto"}
                 </button>
               </div>
             </div>
+            {!canAddVariants && !variantsEnabled && !editingProduct?.familyId && <p id="variants-base-requirements" className="m-0 text-xs text-slate-500">Para agregar variantes, completa nombre, categoría, unidad, precio y stock mínimo. Si ingresas un código de barras, debe ser válido y no estar repetido.</p>}
           </form>
+          </div>
+          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline modalOpen={variantsEnabled} simpleModeEnabled={variantsSeen} commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
+            reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
+          {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} modalOpen={variantsEnabled}
+            commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
+            categories={categories} onSaved={loadData} onBack={returnFromConversion} onClose={cancelEditing} onCreated={finishNewBundle} />}
         </div>
       </AppModal>
 
@@ -1949,6 +2017,8 @@ export default function ProductsPage() {
           )}
           {selectedMovementProduct && (
             <div className={`grid gap-1 border-l-4 px-3.25 py-2.75 ${estimatedLowStock ? "border-l-rust-500 bg-rust-50 text-[#92400e]" : "border-l-positive-600 bg-positive-50"}`}>
+              <strong className="break-words text-sm">#{selectedMovementProduct.id} · {selectedMovementProduct.name}</strong>
+              {inventoryVariantLabel(selectedMovementProduct) && <span className="break-words text-xs">{inventoryVariantLabel(selectedMovementProduct)}</span>}
               <span className="text-xs">Stock final estimado</span>
               <strong>
                 {estimatedStock} unidades · mínimo {selectedMovementProduct.minimumStock}
@@ -1989,39 +2059,33 @@ export default function ProductsPage() {
       <div className={tablePanelClass}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="m-0!"><TableRecordCount
-              visibleCount={productsPagination.paginatedItems.length}
-              totalCount={visibleStatusProducts.length}
-              filteredCount={filteredProducts.length}
-              hasFilters={hasListFilters}
-              mobileTotalCount={products.length}
-              mobilePage={productsPagination.page}
-              mobilePageSize={productsPagination.pageSize}
-            /></p>
+            <p className="m-0!" aria-live="polite">Mostrando {productsPagination.paginatedItems.length} de {groupedProducts.length} {groupedProducts.length===1?"grupo":"grupos"} · {filteredProducts.length} {filteredProducts.length===1?"artículo":"artículos"} {hasListFilters ? (filteredProducts.length===1?"filtrado":"filtrados") : (filteredProducts.length===1?"visible":"visibles")}</p>
           </div>
           <MobileTableTools
-            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly}
-            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }}
+            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly || variantsOnly}
+            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); setVariantsOnly(false); }}
             exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
-            showFilters={canViewInactiveProducts || canViewLowStockFilter}
+            showFilters
           >
+            <button type="button" onClick={() => { setVariantsOnly(v => !v); setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }} aria-pressed={variantsOnly}>{variantsOnly ? "Mostrar productos activos" : "Mostrar productos con variantes"}</button>
             {canViewInactiveProducts && (
-              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} aria-pressed={showInactiveProducts}>
+              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} disabled={variantsOnly || lowStockOnly || outOfStockOnly} aria-pressed={showInactiveProducts}>
                 {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
               </button>
             )}
             {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setShowInactiveProducts(false); setOutOfStockOnly(false); }} aria-pressed={lowStockOnly}>
+              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setShowInactiveProducts(false); setOutOfStockOnly(false); }} disabled={variantsOnly || showInactiveProducts || outOfStockOnly} aria-pressed={lowStockOnly}>
                 {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
               </button>
             )}
             {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setShowInactiveProducts(false); setLowStockOnly(false); }} aria-pressed={outOfStockOnly}>
+              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setShowInactiveProducts(false); setLowStockOnly(false); }} disabled={variantsOnly || showInactiveProducts || lowStockOnly} aria-pressed={outOfStockOnly}>
                 {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
               </button>
             )}
           </MobileTableTools>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
+            <button type="button" className={`mr-0 min-h-9 px-3 text-xs ${variantsOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:bg-slate-100"}`} aria-pressed={variantsOnly} onClick={() => { setVariantsOnly(v => !v); setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }}>{variantsOnly ? "Mostrar productos activos" : "Mostrar productos con variantes"}</button>
             {canViewInactiveProducts && (
               <button
                 className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
@@ -2031,8 +2095,7 @@ export default function ProductsPage() {
                   setLowStockOnly(false);
                   setOutOfStockOnly(false);
                 }}
-                disabled={lowStockOnly || outOfStockOnly}
-                aria-pressed={showInactiveProducts}
+                disabled={variantsOnly || lowStockOnly || outOfStockOnly} aria-pressed={showInactiveProducts}
               >
                 {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
               </button>
@@ -2045,8 +2108,7 @@ export default function ProductsPage() {
                   setLowStockOnly((current) => !current);
                   setOutOfStockOnly(false);
                 }}
-                disabled={showInactiveProducts || outOfStockOnly}
-                aria-pressed={lowStockOnly}
+                disabled={variantsOnly || showInactiveProducts || outOfStockOnly} aria-pressed={lowStockOnly}
               >
                 {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
               </button>
@@ -2059,8 +2121,7 @@ export default function ProductsPage() {
                   setOutOfStockOnly((current) => !current);
                   setLowStockOnly(false);
                 }}
-                disabled={showInactiveProducts || lowStockOnly}
-                aria-pressed={outOfStockOnly}
+                disabled={variantsOnly || showInactiveProducts || lowStockOnly} aria-pressed={outOfStockOnly}
               >
                 {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
               </button>
@@ -2078,128 +2139,11 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
-        <ResponsiveTableView
-          rows={productsPagination.paginatedItems}
-          getRowKey={(product) => product.id}
-          getRowLabel={(product) => product.name}
-          resetKey={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}`}
-          emptyMessage="No se encontraron productos con los filtros seleccionados."
-          renderSummary={(product) => {
-            const stockStatus = getStockStatus(product, user?.role);
-            return (
-              <div className="grid min-w-0 gap-2">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm text-ink-950">{product.name}</strong>
-                    {product.brand && <span className="block truncate text-xs text-slate-500">{product.brand}</span>}
-                  </div>
-                  <span className={badgeClass(product.status === false ? "neutral" : stockStatus.tone)}>
-                    {product.status === false ? "Desactivado" : stockStatus.label}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <strong className="font-mono text-ink-950">{formatClp(product.price)}</strong>
-                  <span className="font-semibold text-slate-600">Stock: {product.currentStock}</span>
-                </div>
-              </div>
-            );
-          }}
-          renderDetails={(product) => (
-            <>
-              <MobileDetailGrid>
-                <MobileDetailField label="ID">#{product.id}</MobileDetailField>
-                <MobileDetailField label="Código de barra">{product.barcode || "Sin código"}</MobileDetailField>
-                <MobileDetailField label="Categoría">{product.categoryName}</MobileDetailField>
-                <MobileDetailField label="Marca">{product.brand || "Sin marca"}</MobileDetailField>
-                <MobileDetailField label="Unidad">{getDisplayUnit(product.unitMeasure)}</MobileDetailField>
-                {canViewAdministrativeStock && <MobileDetailField label="Stock mínimo">{product.minimumStock}</MobileDetailField>}
-              </MobileDetailGrid>
-              {canManage && (
-                <MobileRowActions>
-                  <button className={secondaryButtonClass} type="button" onClick={() => startEditing(product)}><Pencil size={17} /> Editar</button>
-                  {product.status === false ? (
-                    <button type="button" onClick={() => openProductStatusModal(product)}><CheckCircle size={17} /> Activar</button>
-                  ) : (
-                    <button className={dangerButtonClass} type="button" onClick={() => openProductStatusModal(product)}><XCircle size={17} /> Desactivar</button>
-                  )}
-                </MobileRowActions>
-              )}
-            </>
-          )}
-          desktop={(
-        <div className={tableScrollClass}>
-          <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Producto</th>
-              <th>Código de barra</th>
-              <th>Categoria</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th>Unidad</th>
-              {canViewAdministrativeStock && <th>Minimo</th>}
-              <th>Estado stock</th>
-              {canManage && <th>Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {productsPagination.paginatedItems.map((product) => {
-              const stockStatus = getStockStatus(product, user?.role);
-
-              return (
-                <tr key={product.id}>
-                  <td className={codeCellClass}>#{product.id}</td>
-                  <td>{product.name}{product.brand && <small className="block text-xs text-slate-500">{product.brand}</small>}</td>
-                  <td className={codeCellClass}>{product.barcode || "Sin código"}</td>
-                  <td>{product.categoryName}</td>
-                  <td className={numericCellClass}>{formatClp(product.price)}</td>
-                  <td className={numericCellClass}>{product.currentStock}</td>
-                  <td>{product.unitMeasure}</td>
-                  {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
-                  <td>
-                    {product.status === false ? (
-                      <span className={badgeClass("neutral")}>Desactivado</span>
-                    ) : (
-                      <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
-                    )}
-                  </td>
-                  {canManage && (
-                    <td className="w-[1%] whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5">
-                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => startEditing(product)}>
-                          <Pencil size={17} />
-                          Editar
-                        </button>
-                        {product.status === false ? (
-                          <button className={`${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                            <CheckCircle size={17} />
-                            Activar
-                          </button>
-                        ) : (
-                          <button className={`${dangerButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                            <XCircle size={17} />
-                            Desactivar
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {filteredProducts.length === 0 && (
-              <tr>
-                <td className={emptyTableCellClass} colSpan={inventoryTableColumnCount}>
-                  No se encontraron productos con los filtros seleccionados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-          </table>
-        </div>
-          )}
-        />
+        <GroupedInventoryTable key={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}`}
+          groups={productsPagination.paginatedItems} role={user?.role} canManage={canManage} canViewMinimum={canViewAdministrativeStock}
+          search={normalizedSearch}
+          onEdit={startEditing} onStatus={openProductStatusModal}
+          />
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -2318,6 +2262,8 @@ export default function ProductsPage() {
           />
         </div>
       )}
+      {canManage && bundleEditor && <ProductBundleEditor key={bundleEditor.familyId || "new"} {...bundleEditor} categories={categories}
+        onClose={() => setBundleEditor(null)} onSaved={loadData} />}
     </section>
   );
 }

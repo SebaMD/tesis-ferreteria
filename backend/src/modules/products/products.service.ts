@@ -1,4 +1,4 @@
-import { db } from "../../db/index.js";
+import { db, type DbTransaction } from "../../db/index.js";
 import { eq, sql } from "drizzle-orm";
 import { productsTable } from "../../db/schema/index.js";
 import { assignVariant, FamilyError, getFamily, productHasHistory } from "../productFamilies/productFamilies.service.js";
@@ -96,7 +96,17 @@ export async function createProductService(data: ProductBody, actorId: number | 
   return findProductById(createdId, true);
 }
 
-export async function editProductService(id: number, data: EditProductBody, actorId: number | null = null) {
+export function parseProductRevision(value: string | undefined) {
+  if (value === undefined) return undefined;
+  let revision: unknown;
+  try { revision = JSON.parse(value); } catch { throw new ProductError("Revisión de producto inválida", 400); }
+  if (typeof revision !== "string" || !Number.isFinite(Date.parse(revision)) || new Date(revision).toISOString() !== revision) throw new ProductError("Revisión de producto inválida", 400);
+  return revision;
+}
+function assertProductRevision(current: Date | null, expected: string | undefined) {
+  if (expected !== undefined && current?.getTime() !== Date.parse(expected)) throw new ProductError("El producto cambió. Recarga su información antes de modificar el estado; no se aplicaron cambios.", 409);
+}
+export async function editProductService(id: number, data: EditProductBody, actorId: number | null = null, expectedUpdatedAt?: string) {
   const currentProduct = await findProductById(id, true);
   if (!currentProduct) throw new ProductError("Producto no encontrado", 404);
 
@@ -113,11 +123,21 @@ export async function editProductService(id: number, data: EditProductBody, acto
   }
 
   try {
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => editProductInTransaction(tx, id, data, actorId, expectedUpdatedAt));
+  } catch (error) {
+    if (error instanceof PromotionError || error instanceof FamilyError) throw new ProductError(error.message, error.statusCode);
+    throw error;
+  }
+  return findProductById(id, true);
+}
+
+export async function editProductInTransaction(tx: DbTransaction, id: number, data: EditProductBody, actorId: number | null, expectedUpdatedAt?: string) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
       const [locked] = await tx.select().from(productsTable).where(eq(productsTable.id, id)).for("update");
       if (!locked) throw new ProductError("Producto no encontrado", 404);
+      assertProductRevision(locked.updatedAt, expectedUpdatedAt);
       const { familyId, variantOptionIds, associationReason, ...base } = data;
+      const categoryId = data.categoryId ?? locked.categoryId;
       if (await productHasHistory(id, tx) && ((base.name !== undefined && base.name !== locked.name)
         || (base.brand !== undefined && base.brand !== locked.brand)
         || (base.unitMeasure !== undefined && base.unitMeasure !== locked.unitMeasure))) {
@@ -131,9 +151,9 @@ export async function editProductService(id: number, data: EditProductBody, acto
       }
       const prospective = {
         productId: id,
-        productName: data.name ?? currentProduct.name,
+        productName: data.name ?? locked.name,
         categoryId,
-        status: data.status ?? currentProduct.status,
+        status: data.status ?? locked.status,
       };
       await assertProductPromotionCompatibilityTx(tx, prospective);
       if (Object.keys(base).length && !await updateProductByIdTx(tx, id, base)) {
@@ -143,16 +163,14 @@ export async function editProductService(id: number, data: EditProductBody, acto
         const ids = variantOptionIds ?? (locked.variantKey ? locked.variantKey.split(",").map(Number) : []);
         await assignVariant(tx, id, finalFamilyId, ids, actorId, associationReason ?? "");
       }
-    });
-  } catch (error) {
-    if (error instanceof PromotionError || error instanceof FamilyError) {
-      throw new ProductError(error.message, error.statusCode);
-    }
-    throw error;
-  }
-  return findProductById(id, true);
 }
 
-export async function deleteProductService(id: number) {
-  return Boolean(await deleteProductById(id));
+export async function deleteProductService(id: number, expectedUpdatedAt?: string) {
+  return db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
+    const [current] = await tx.select().from(productsTable).where(eq(productsTable.id, id)).for("update");
+    if (!current) return false;
+    assertProductRevision(current.updatedAt, expectedUpdatedAt);
+    return Boolean(await deleteProductById(id, tx));
+  });
 }

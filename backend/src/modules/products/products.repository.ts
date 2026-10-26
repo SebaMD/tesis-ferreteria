@@ -56,6 +56,12 @@ export async function findProductsByFamilyId(familyId: number) {
     return attachProductImages(products);
 }
 
+export async function findProductsByIds(ids: number[]) {
+    if (!ids.length) return [];
+    return attachProductImages(await db.select(productColumns).from(productsTable)
+        .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id)).where(inArray(productsTable.id, ids)));
+}
+
 export async function findProductById(id: number, includeInactive = false) {
     const conditions = [eq(productsTable.id, id)];
     if (!includeInactive) conditions.push(eq(productsTable.status, true));
@@ -148,8 +154,8 @@ export async function updateProductByIdTx(tx: DbTransaction, id: number, data: P
     return product ?? null;
 }
 
-export async function deleteProductById(id: number) {
-    const [product] = await db
+export async function deleteProductById(id: number, executor: typeof db | DbTransaction = db) {
+    const [product] = await executor
         .update(productsTable)
         .set({
             status: false,

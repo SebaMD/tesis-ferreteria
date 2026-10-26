@@ -330,15 +330,49 @@ reemplaza productos: cada variante conserva su ID, stock, precio, imágenes y
 referencias comerciales. Los productos simples mantienen `family_id` nulo.
 Antes de usar este backend, aplicar la nueva migración en la base autorizada.
 
-ADMIN gestiona familias desde **Inventario → Nuevo producto / Editar producto**,
-en la sección junto a **Solo presencial**. **Crear nueva familia** reutiliza la
-categoría y marca del producto y permite definir atributos y opciones. Elegir
-una familia compatible y una opción por atributo; al editar se conserva la
-asociación actual. **Administrar familias y atributos** permite revisar sus
-miembros sin un panel independiente. El stock se ingresa
-mediante las operaciones de inventario habituales. Las combinaciones deben ser
-únicas. Los productos con historial conservan su identidad; su primera asociación
-requiere un motivo y una variante ya utilizada no puede cambiar de combinación.
+ADMIN utiliza **Inventario → Nuevo producto / Editar producto**. **Nuevo producto**
+abre por defecto el modo simple y permite elegir **Producto con variantes** en la
+misma ventana; el botón inferior **Agregar variantes** también cambia de modo
+conservando los datos ingresados. El editor muestra datos generales, atributos y
+variantes desplegables, además de una vista previa sin guardar.
+
+Una familia nueva exige al menos dos variantes configuradas. Con una sola se
+ofrece agregar otra o continuar explícitamente como simple. Al volver a simple se
+conservan los datos, stock inicial e imágenes de la primera variante; los atributos
+y demás filas no se guardan, pero su borrador permanece disponible en esa ventana.
+La transacción conjunta también admite ese artículo simple sin crear una familia,
+reutilizando idempotencia, auditoría, imágenes y ENTRY. No se crea un producto
+general vendible adicional ni se repite el stock inicial al reintentar.
+
+La regla de dos variantes no impide editar familias históricas con un solo miembro.
+La acción **Convertir en producto con variantes** transforma el mismo modal de
+edición. Conserva el ID, stock e historial del original y exige motivo y confirmación.
+Volver al producto no guarda ni elimina el borrador de conversión. Los cambios de
+identidad pendientes deben guardarse o descartarse explícitamente antes de convertir.
+
+En familias existentes, el editor reúne datos generales, atributos contraíbles y
+variantes inicialmente contraídas. Cada artículo tiene su propia descripción,
+unidad (bloqueada si tiene historial), precio, código, mínimo e imágenes. Ordenar,
+quitar o elegir la foto principal modifica el borrador; el guardado conjunto aplica
+esos cambios transaccionalmente, con revisión e idempotencia. Los archivos retirados
+se eliminan solo tras confirmar COMMIT y comprobar que ningún producto los referencia.
+La activación/desactivación sigue siendo una operación explícita con confirmación,
+permitida solo sin cambios pendientes. No hay un segundo editor individual.
+Los cambios ordinarios se guardan directamente; la conversión y la retirada de
+fotografías guardadas requieren confirmación explícita.
+
+Nombre y descripción generales son metadatos de la familia; no se propagan a los
+artículos. La unidad general se propone solo para nuevas variantes. Marca y categoría
+siguen bloqueadas mientras existan variantes/historial. Agregar una dimensión a una
+familia existente también permanece bloqueado: cambiaría `variant_key`, protegido
+por el trigger histórico. Permitirlo exige diseñar y autorizar una reclasificación
+auditada y compatible con asociaciones históricas; no se relajan esas reglas aquí.
+
+La edición conjunta conserva las restricciones históricas y el control de versión.
+Cada variante se activa o desactiva individualmente con confirmación, sin perder
+su asociación ni generar nuevas entradas. La interfaz antigua de gestión familiar
+ya no forma parte del flujo habitual; sus endpoints ADMIN de mantenimiento
+excepcional conservan validaciones, auditoría y protecciones contra borrado físico.
 
 Para asociar el catálogo demo ya existente, sin ejecutar seed ni reiniciar datos,
 después de autorizar y aplicar la migración, desde `backend` en PowerShell:
@@ -355,9 +389,10 @@ unidad y referencia documental antes de asociar. Crea 19 familias para 71 de los
 existencias, imágenes ni operaciones. La seed de una base nueva incluye estas
 asociaciones; una seed ya completada sigue sin reescribir datos.
 
-El catálogo agrupa antes de paginar. **Ver opciones** abre únicamente las
-combinaciones existentes mediante botones compactos por atributo. La tarjeta
-muestra el precio de variantes comprables online y usa **Desde** solo si difieren.
+El catálogo filtra productos concretos y agrupa antes de paginar. La tarjeta permite
+seleccionar una combinación existente y agregar únicamente esa variante. El detalle
+mantiene botones compactos por atributo. Precio, imagen y disponibilidad corresponden
+al producto seleccionado, descontando visualmente lo que ya está en su carrito.
 El carrito, el POS y Webpay utilizan siempre el ID del
 producto concreto. Las promociones 2x1 no se combinan entre variantes.
 

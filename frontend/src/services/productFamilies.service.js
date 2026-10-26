@@ -1,22 +1,21 @@
 import api from "../api/httpClient.js";
+import { resolveProductListAssets } from "../helpers/productAssets.js";
 
-export async function getProductFamiliesRequest() {
-  return (await api.get("/product-families")).data.data;
-}
-export async function saveProductFamilyRequest(body, id) {
-  const response = id ? await api.patch(`/product-families/${id}`, body) : await api.post("/product-families", body);
-  window.dispatchEvent(new Event("product-families-updated"));
-  return response.data.data;
+export async function getProductConversionRequest(id) {
+  const data = (await api.get(`/product-families/conversion/${id}`)).data.data;
+  return { ...data, product: resolveProductListAssets([data.product], api.defaults.baseURL)[0] };
 }
 
-export async function setProductFamilyArchivedRequest(family, archived) {
-  const response = await api.post(`/product-families/${family.id}/${archived ? "archive" : "reactivate"}`, { confirmed: true, expectedUpdatedAt: family.updatedAt });
-  window.dispatchEvent(new Event("product-families-updated"));
+export async function getProductBundleRequest(id) {
+  const data = (await api.get(`/product-families/${id}/bundle`)).data.data;
+  return { ...data, variants: resolveProductListAssets(data.variants, api.defaults.baseURL) };
+}
+export async function saveProductBundleRequest(body) {
+  const response = await api.post("/product-families/bundle", JSON.stringify(body), {
+    headers: { "Content-Type": "application/vnd.fyf.product-bundle+json" },
+  });
   return response.data.data;
 }
-
-export async function detachProductFamilyRequest(id, body) {
-  const response = await api.post(`/product-families/variants/${id}/detach`, body);
-  window.dispatchEvent(new Event("product-families-updated"));
-  return response.data.data;
+export async function getProductBundleOperationRequest(key) {
+  return (await api.get(`/product-families/operations/${key}`)).data.data;
 }

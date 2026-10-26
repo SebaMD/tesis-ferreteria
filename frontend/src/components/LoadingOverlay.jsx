@@ -20,6 +20,11 @@ function LoadingTruck() {
   );
 }
 
+export function LoadingIndicator() {
+  return <div className="app-loading-indicator"><div className="app-loading-road" aria-hidden="true"><LoadingTruck /></div>
+    <p className="app-loading-text">Cargando<span className="app-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></div>;
+}
+
 export default function LoadingOverlay({ active, contained = false, fullScreen = false }) {
   if (!active) return null;
 
@@ -37,19 +42,7 @@ export default function LoadingOverlay({ active, contained = false, fullScreen =
       aria-atomic="true"
       aria-label="Cargando"
     >
-      <div className="app-loading-indicator">
-        <div className="app-loading-road" aria-hidden="true">
-          <LoadingTruck />
-        </div>
-        <p className="app-loading-text">
-          Cargando
-          <span className="app-loading-dots" aria-hidden="true">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
-        </p>
-      </div>
+      <LoadingIndicator />
     </div>
   );
 }

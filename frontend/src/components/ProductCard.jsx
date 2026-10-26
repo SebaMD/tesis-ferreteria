@@ -1,3 +1,5 @@
+import ProductFamilyCard from "./ProductFamilyCard.jsx";
+import CatalogCardSurface from "./CatalogCardSurface.jsx";
 import { ImageOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { createProductDetailNavigationState } from "../helpers/catalogNavigation.js";
@@ -7,7 +9,6 @@ import ProductPurchaseControls from "./ProductPurchaseControls.jsx";
 import FavoriteButton from "./FavoriteButton.jsx";
 import useCart from "../hooks/useCart.js";
 import ProductPromotionPrice from "./ProductPromotionPrice.jsx";
-import ProductFamilyCard from "./ProductFamilyCard.jsx";
 
 function getPrimaryImage(product) {
   return product.images?.find((image) => image.isPrimary) || product.images?.[0] || null;
@@ -17,16 +18,11 @@ function isPlainPrimaryClick(event) {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-export default function ProductCard({ product, detailOrigin = null }) {
-  return product.kind === "family" ? <ProductFamilyCard product={product} detailOrigin={detailOrigin} /> : <ConcreteProductCard product={product} detailOrigin={detailOrigin} />;
-}
-
-function ConcreteProductCard({ product, detailOrigin }) {
+export function ConcreteProductCard({ product, detailOrigin, displayName = product.name, detailPath = `/catalog/products/${product.id}`, optionSelector = null }) {
   const navigate = useNavigate();
   const primaryImage = getPrimaryImage(product);
   const { items } = useCart();
   const { quantityInCart: inCart } = getProductCartAvailability(product, items);
-  const detailPath = `/catalog/products/${product.id}`;
   const openDetail = (event) => {
     if (!detailOrigin || !isPlainPrimaryClick(event)) return;
     event.preventDefault();
@@ -36,7 +32,7 @@ function ConcreteProductCard({ product, detailOrigin }) {
   };
 
   return (
-    <article className="group relative grid min-h-full min-w-0 grid-rows-[220px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_2px_12px_rgba(16,21,31,0.05)] transition hover:-translate-y-0.5 hover:border-rust-200 hover:shadow-[0_8px_24px_rgba(16,21,31,0.09)] max-[600px]:grid-rows-[140px_1fr] max-[380px]:grid-rows-[124px_1fr]">
+    <CatalogCardSurface>
       {product.inStoreOnly ? (
         <span className="absolute top-3 left-3 z-10 rounded-full border border-ink-950 bg-ink-950 px-2.5 py-1 text-[11px] font-black text-white shadow-[0_2px_8px_rgba(16,21,31,0.35)] max-[600px]:top-2 max-[600px]:left-2">Solo presencial</span>
       ) : product.promotion && (
@@ -57,19 +53,28 @@ function ConcreteProductCard({ product, detailOrigin }) {
         <div className="grid gap-2">
           <span className="truncate text-xs font-bold text-rust-600 max-[600px]:hidden">{product.categoryName}</span>
           <Link className="line-clamp-2 text-base font-bold text-ink-950 no-underline hover:text-rust-600 max-[600px]:text-sm" to={detailPath} onClick={openDetail}>
-            {product.name}
+            {displayName}
           </Link>
-          <ProductPromotionPrice product={product} showBadge={false} />
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <ProductPromotionPrice product={product} showBadge={false} />
+            {optionSelector}
+          </div>
           {product.brand && <span className="truncate text-xs text-slate-500" title={product.brand}>{product.brand}</span>}
           <ProductEstimatedAvailability product={product} compact />
         </div>
         <div className="grid gap-2">
-          <ProductPurchaseControls product={product} compact />
+          <ProductPurchaseControls key={product.id} product={product} compact />
           <Link className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" to={detailPath} onClick={openDetail}>
             Ver producto
           </Link>
         </div>
       </div>
-    </article>
+    </CatalogCardSurface>
   );
+}
+
+export default function ProductCard({ product, detailOrigin = null }) {
+  return product.kind === "family"
+    ? <ProductFamilyCard product={product} detailOrigin={detailOrigin} CardView={ConcreteProductCard} />
+    : <ConcreteProductCard product={product} detailOrigin={detailOrigin} />;
 }

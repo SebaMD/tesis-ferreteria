@@ -24,6 +24,10 @@ export default function AppSelect({
   className = "",
   id,
   name,
+  renderValue,
+  renderOption,
+  hideChevron = false,
+  transientOptionHighlight = false,
 }) {
   const generatedId = useId();
   const selectId = id || `app-select-${generatedId.replace(/:/g, "")}`;
@@ -34,6 +38,7 @@ export default function AppSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [keyboardNavigation, setKeyboardNavigation] = useState(false);
   const [position, setPosition] = useState(null);
   const hasSearch = searchable ?? options.length > 6;
 
@@ -97,7 +102,8 @@ export default function AppSelect({
 
   const boundedActiveIndex = Math.min(activeIndex, Math.max(0, filteredOptions.length - 1));
 
-  const openPopup = () => {
+  const openPopup = (keyboard = false) => {
+    setKeyboardNavigation(keyboard);
     setQuery("");
     const selectedIndex = normalizedOptions.findIndex((option) => String(option.value) === String(value));
     setActiveIndex(Math.max(0, selectedIndex));
@@ -130,9 +136,10 @@ export default function AppSelect({
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (!open) {
-        openPopup();
+        openPopup(true);
         return;
       }
+      setKeyboardNavigation(true);
       const direction = event.key === "ArrowDown" ? 1 : -1;
       let next = boundedActiveIndex;
       for (let attempts = 0; attempts < filteredOptions.length; attempts += 1) {
@@ -151,7 +158,7 @@ export default function AppSelect({
 
   const popup = open && position ? (
     <div
-      className="app-select-popup fixed z-1000 flex flex-col overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_16px_40px_rgba(10,14,21,0.2)]"
+      className={`app-select-popup fixed z-1000 flex flex-col overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_16px_40px_rgba(10,14,21,0.2)] ${transientOptionHighlight ? "inventory-variant-popup" : ""}`}
       ref={popupRef}
       style={{ left: position.left, width: position.width, top: position.top, bottom: position.bottom, maxHeight: position.maxHeight }}
       onKeyDown={handleKeyDown}
@@ -181,17 +188,18 @@ export default function AppSelect({
           const isActive = index === boundedActiveIndex;
           return (
             <div
-              className={`app-select-option flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 text-sm text-ink-900 ${isActive ? "bg-rust-50 text-rust-700" : "hover:bg-slate-100"} ${option.disabled ? "cursor-not-allowed opacity-45" : ""}`}
+              className={`app-select-option flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 text-sm text-ink-900 ${!transientOptionHighlight && isActive ? "bg-rust-50 text-rust-700" : transientOptionHighlight ? "" : "hover:bg-slate-100"} ${option.disabled ? "cursor-not-allowed opacity-45" : ""}`}
               id={`${selectId}-option-${index}`}
               key={`${String(option.value)}-${index}`}
               role="option"
+              data-keyboard-active={transientOptionHighlight && keyboardNavigation && isActive ? "true" : undefined}
               aria-selected={isSelected}
               aria-disabled={option.disabled || undefined}
-              onMouseEnter={() => setActiveIndex(index)}
+              onMouseEnter={() => { setKeyboardNavigation(false); setActiveIndex(index); }}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(option)}
             >
-              <span className="min-w-0 truncate">{option.label}</span>
+              <span className={`min-w-0 ${renderOption ? "flex-1" : "truncate"}`}>{renderOption ? renderOption(option) : option.label}</span>
               {isSelected && <Check className="shrink-0 text-rust-600" size={16} />}
             </div>
           );
@@ -218,8 +226,8 @@ export default function AppSelect({
         onClick={() => { if (open) close(false); else openPopup(); }}
         onKeyDown={handleKeyDown}
       >
-        <span className={`min-w-0 truncate ${selected ? "" : "text-slate-500"}`}>{selected?.label ?? placeholder}</span>
-        <ChevronDown className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} size={17} />
+        <span className={`min-w-0 flex-1 ${renderValue ? "" : "truncate"} ${selected ? "" : "text-slate-500"}`}>{renderValue ? renderValue(selected, open) : selected?.label ?? placeholder}</span>
+        {!hideChevron && <ChevronDown className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} size={17} />}
       </button>
       {typeof document !== "undefined" && createPortal(popup, document.body)}
     </div>

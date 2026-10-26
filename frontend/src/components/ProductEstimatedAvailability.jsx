@@ -10,7 +10,7 @@ export default function ProductEstimatedAvailability({ product, compact = false,
     ? product.inStoreOnly ? "Solo presencial" : "No disponible online"
     : isCartLimitReached && !inCart ? "Máximo disponible considerando tu carrito"
       : remaining > 0 || (inCart && isCartLimitReached)
-        ? `${inCart ? "Disponibles para agregar" : "Disponible estimado para agregar"}: ${formatQuantityWithUnit(remaining, product.unitMeasure)}` : "SIN STOCK";
+        ? `${inCart ? "Disponibles para agregar" : "Disponible para agregar"}: ${formatQuantityWithUnit(remaining, product.unitMeasure)}` : "SIN STOCK";
 
   return <span role="status" aria-live="polite" aria-atomic="true"
     className={`${compact ? "text-xs" : "text-sm"} break-words font-bold ${onlineEligible && remaining > 0 ? "text-positive-600" : "text-critical-600"}`}>

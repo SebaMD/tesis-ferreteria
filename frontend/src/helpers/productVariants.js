@@ -29,19 +29,6 @@ export function variantOptionState(variants, current, attributeId, optionId) {
   return { variant: candidate, available: isVariantPurchasable(candidate), reason: variantAvailability(candidate), adjusted: candidate.id !== exact?.id };
 }
 
-export function familyCardSummary(product) {
-  const count = Number(product.onlineVariantCount || 0);
-  const attribute = product.attributeNames?.length === 1 ? product.attributeNames[0].toLocaleLowerCase("es") : "";
-  const labels = { color: ["color", "colores"], medida: ["medida", "medidas"], ancho: ["ancho", "anchos"], grano: ["grano", "granos"], presentación: ["presentación", "presentaciones"], dimensiones: ["dimensión", "dimensiones"] };
-  const noun = labels[attribute]?.[count === 1 ? 0 : 1] || (count === 1 ? "opción" : "opciones");
-  return {
-    count,
-    from: count > 0 && Number(product.onlineFromPrice) !== Number(product.onlineMaxPrice),
-    price: count > 0 ? product.onlineFromPrice : null,
-    availability: count > 0 ? `${count} ${noun} ${count === 1 ? "disponible" : "disponibles"}` : product.allInStoreOnly ? "Solo presencial" : "Sin opciones online disponibles",
-  };
-}
-
 export function familyVariantDescription(description) {
   const disclaimer = "DEMOSTRACIÓN: precio, existencias y disponibilidad ficticios; no representan datos comerciales reales de Comercializadora FYF SpA.";
   const demo = description?.startsWith(disclaimer) || description?.startsWith("Familia del catálogo de referencia de demostración.");

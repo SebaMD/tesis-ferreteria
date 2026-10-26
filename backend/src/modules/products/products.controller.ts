@@ -9,6 +9,7 @@ import {
   getProductByIdService,
   getProductsService,
   ProductError,
+  parseProductRevision,
 } from "./products.service.js";
 import { validateBarcode, validateCreateProductBody, validateEditProductBody } from "./products.validation.js";
 
@@ -119,7 +120,7 @@ export async function editProduct(req: Request, res: Response) {
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
     const validation = validateEditProductBody(req.body);
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
-    return handleSuccess(res, 200, "Producto actualizado exitosamente", await editProductService(id, validation.value, (req as Request & { user?: { id: number } }).user?.id ?? null));
+    return handleSuccess(res, 200, "Producto actualizado exitosamente", await editProductService(id, validation.value, (req as Request & { user?: { id: number } }).user?.id ?? null, parseProductRevision(req.get("If-Match"))));
   } catch (error) {
     if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     const message = msg(error);
@@ -140,9 +141,10 @@ export async function deleteProduct(req: Request, res: Response) {
   try {
     const id = parseId(req.params.id);
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    if (!(await deleteProductService(id))) return handleErrorClient(res, 404, "Producto no encontrado");
+    if (!(await deleteProductService(id, parseProductRevision(req.get("If-Match"))))) return handleErrorClient(res, 404, "Producto no encontrado");
     return handleSuccess(res, 200, "Producto desactivado exitosamente");
   } catch (error) {
+    if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     return handleErrorServer(res, 500, "Error al desactivar producto", msg(error));
   }
 }

@@ -45,7 +45,7 @@ test("cards, simple detail, selected variant and purchase controls share the car
   assert.match(view, /useCart\(\)/);
   assert.match(view, /getProductCartAvailability\(product, items\)/);
   assert.match(view, /Máximo disponible considerando tu carrito/);
-  assert.match(view, /Disponible estimado para agregar/);
+  assert.match(view, /Disponible para agregar/);
   assert.match(view, /product.status !== false && !product.inStoreOnly/);
   assert.match(view, /aria-live="polite"/);
   for (const file of ["components/ProductCard.jsx", "pages/ProductDetailPage.jsx", "pages/ProductFamilyPage.jsx"]) {

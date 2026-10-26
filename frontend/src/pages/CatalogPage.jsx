@@ -3,7 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
-import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import CatalogLoadingScope from "../components/CatalogLoadingScope.jsx";
+import { createCatalogLoader } from "../helpers/catalogLoading.js";
 import ProductCard from "../components/ProductCard.jsx";
 import AppModal from "../components/AppModal.jsx";
 import CatalogFilters from "../components/CatalogFilters.jsx";
@@ -35,7 +36,6 @@ export default function CatalogPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const requestSequence = useRef(0);
   const catalogStartRef = useRef(null);
   const previousSearchRef = useRef(search);
   const searchWasActiveRef = useRef(Boolean(search.trim()));
@@ -71,40 +71,33 @@ export default function CatalogPage() {
     ].filter(Boolean).join(",") || undefined,
   }), [debouncedSearch, filters.availability, filters.brand, filters.buy2Pay1, filters.categoryId, filters.percentageDiscount, order, page, pageSize, priceRange.max, priceRange.min, priceRange.valid]);
 
-  const loadCatalog = useCallback(async ({ showLoading = false, notifyError = false } = {}) => {
-    const sequence = requestSequence.current + 1;
-    requestSequence.current = sequence;
-    if (showLoading) setLoading(true);
-    try {
-      const data = await getCatalogProductsRequest(catalogQuery);
-      if (requestSequence.current === sequence) {
-        setProducts(data.items || []);
-        setPagination({
-          page: data.page,
-          pageSize: data.pageSize,
-          totalItems: data.totalItems,
-          totalPages: data.totalPages,
-        });
-        setFacets(data.facets || { categories: [], brands: [] });
-        if (data.page !== page) setPage(data.page);
-        setLoadError("");
-      }
-    } catch (error) {
-      const message = getApiError(error, "No se pudo cargar el catálogo");
-      if (requestSequence.current === sequence) {
-        setLoadError(message);
-        if (notifyError) toast.error(message);
-      }
-    } finally {
-      if (showLoading && requestSequence.current === sequence) {
-        setLoading(false);
-        if (pendingNavigationScrollRef.current && (catalogQuery.search || "") === search.trim()) {
-          pendingNavigationScrollRef.current = false;
-          window.requestAnimationFrame(scrollToCatalogStart);
-        }
-      }
+  const [initialized, setInitialized] = useState(false);
+  const loader = useMemo(() => createCatalogLoader({
+    request: signal => getCatalogProductsRequest(catalogQuery, { signal }),
+    start: () => setLoading(true),
+    success: data => {
+      setProducts(data.items || []);
+      setPagination({ page: data.page, pageSize: data.pageSize, totalItems: data.totalItems, totalPages: data.totalPages });
+      setFacets(data.facets || { categories: [], brands: [] });
+      if (data.page !== page) setPage(data.page);
+      setLoadError("");
+    },
+    failure: (error, { timedOut, notifyError }) => {
+      const message = timedOut ? "La carga del catálogo tardó demasiado. Puedes reintentar." : getApiError(error, "No se pudo cargar el catálogo");
+      setLoadError(message);
+      if (notifyError) toast.error(message);
+    },
+    finish: () => {
+      setLoading(false); setInitialized(true);
+    },
+  }), [catalogQuery, page]);
+  const loadCatalog = useCallback(({ showLoading = false, notifyError = false } = {}) => loader.load({ blocking: showLoading, notifyError }), [loader]);
+  useEffect(() => {
+    if (!loading && pendingNavigationScrollRef.current && (catalogQuery.search || "") === search.trim()) {
+      pendingNavigationScrollRef.current = false;
+      window.requestAnimationFrame(scrollToCatalogStart);
     }
-  }, [catalogQuery, page, scrollToCatalogStart, search]);
+  }, [loading, catalogQuery.search, search, scrollToCatalogStart]);
 
   useEffect(() => {
     const searchChanged = previousSearchRef.current !== search;
@@ -154,7 +147,6 @@ export default function CatalogPage() {
   }, [location.hash, location.key, location.pathname, location.search, location.state, navigate, scrollToCatalogStart]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalog({ showLoading: true, notifyError: true });
     const refreshCatalog = () => loadCatalog();
     const refreshTimer = window.setInterval(refreshCatalog, 30_000);
@@ -162,8 +154,9 @@ export default function CatalogPage() {
     return () => {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshCatalog);
+      loader.dispose();
     };
-  }, [loadCatalog]);
+  }, [loadCatalog, loader]);
 
   const categories = facets.categories;
   const brands = facets.brands;
@@ -199,9 +192,9 @@ export default function CatalogPage() {
   };
 
   return (
-    <main className="mx-auto grid w-full max-w-360 gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
-      <LoadingOverlay active={loading} />
-      <CatalogNoticeCarousel />
+    <CatalogLoadingScope active={loading && !initialized} fullPage>
+    <main className="mx-auto grid min-h-[calc(100dvh-80px)] w-full max-w-360 content-start gap-6 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
+      <CatalogNoticeCarousel paused={loading && !initialized} />
 
       {loadError && (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
@@ -212,6 +205,7 @@ export default function CatalogPage() {
         </section>
       )}
 
+      <CatalogLoadingScope active={loading && initialized} label="Actualizando resultados del catálogo">
       <section className="grid min-w-0 gap-4" ref={catalogStartRef}>
         <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
           <div>
@@ -273,8 +267,10 @@ export default function CatalogPage() {
           </div>
         </div>
       </section>
+      </CatalogLoadingScope>
       <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small" footer={<button type="button" onClick={() => setFiltersOpen(false)}>Ver {pagination.totalItems} resultados</button>}><CatalogFilters {...filterProps} /></AppModal>
       <BackToTop />
     </main>
+    </CatalogLoadingScope>
   );
 }

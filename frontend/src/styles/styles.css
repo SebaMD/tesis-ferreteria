@@ -790,6 +790,76 @@
   transform: none;
 }
 
+.catalog-loading-visible-center .app-loading-indicator {
+  transform: none;
+}
+
+.dark .catalog-loading-mask {
+  background-color: rgb(15 23 42 / 60%);
+}
+
+.inventory-variant-select .app-select-trigger {
+  border-width: 0 !important;
+  border-color: transparent !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  font-size: inherit;
+}
+
+@media (min-width: 721px) {
+  .inventory-toolbar button {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+.variant-online-control {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.variant-online-control input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.inventory-search { width: clamp(290px, 24vw, 380px); flex: 0 1 auto; }
+.product-footer-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; align-items: stretch; margin-top: 12px; }
+.product-footer-actions > button, .product-footer-actions > div, .product-footer-actions > div > button { width: 100%; margin: 0 !important; min-height: 44px; }
+.variant-editor-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.variant-section-toggle { background: transparent !important; color: inherit !important; border: 0; padding: 0; min-height: 44px; }
+.variant-image-button { display: inline-flex; position: relative; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 44px; border: 1px solid var(--color-slate-300); border-radius: 4px; padding: 8px 12px; cursor: pointer; }
+.variant-image-button:focus-within { outline: 2px solid var(--color-rust-500); outline-offset: 2px; }
+.inventory-variant-popup .app-select-option { background: transparent; color: var(--color-ink-900); }
+.inventory-variant-popup .app-select-option[aria-selected="true"] { background: var(--color-slate-100); }
+.inventory-variant-popup .app-select-option[data-keyboard-active="true"] { outline: 2px solid var(--color-rust-500); outline-offset: -2px; }
+.inventory-variant-popup .app-select-option:not([aria-disabled="true"]):hover { background: var(--color-rust-50); color: var(--color-rust-600); }
+.dark .inventory-variant-popup .app-select-option { background: transparent; color: #edf1f5; }
+.dark .inventory-variant-popup .app-select-option[aria-selected="true"] { background: #283340; }
+.dark .inventory-variant-popup .app-select-option:not([aria-disabled="true"]):hover { background: #49301b; color: #fdba74; }
+.inventory-variant-select .app-select-trigger:not(:hover):not(:focus-visible),
+.inventory-variant-select .app-select-trigger[aria-expanded="true"] { color: var(--color-ink-950) !important; background: transparent !important; }
+.inventory-variant-select .app-select-trigger:hover:not([aria-expanded="true"]) { color: var(--color-ink-950) !important; background: transparent !important; }
+.inventory-variant-select .app-select-trigger:focus-visible { outline: 2px solid var(--color-rust-500); outline-offset: 2px; }
+.dark .inventory-variant-select .app-select-trigger:not(:hover):not(:focus-visible),
+.dark .inventory-variant-select .app-select-trigger:hover,
+.dark .inventory-variant-select .app-select-trigger[aria-expanded="true"] { color: #f1f5f9 !important; }
+.dark .product-positive-action { background: var(--color-rust-500); border-color: var(--color-rust-500); color: #10151f; }
+.dark .product-positive-action:not(:disabled):hover { background: var(--color-rust-600); border-color: var(--color-rust-600); color: #ffffff; }
+.product-positive-action:focus-visible { outline: 2px solid var(--color-rust-500); outline-offset: 3px; }
+.product-positive-action:disabled { opacity: .5; cursor: not-allowed; }
+.inventory-toolbar ~ div button:disabled { cursor: not-allowed; opacity: .5; }
+@media(max-width:720px) {
+  .inventory-search { width: 100%; }
+  .product-footer-actions { grid-template-columns: 1fr; gap: 10px; }
+  .variant-editor-actions > button { flex: 1 1 100%; margin: 0 !important; }
+}
+
 .app-loading-road {
   position: relative;
   width: 184px;

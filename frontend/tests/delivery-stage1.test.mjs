@@ -1,24 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { receiveCheckoutQuote, checkoutQuoteFailure } from "../src/helpers/checkoutQuote.js";
+import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure } from "../src/helpers/checkoutQuote.js";
 import { commercialAmountLines, formatCommercialAmount } from "../src/helpers/commercialAmounts.js";
 import { getAdministrativeOrderSections } from "../src/helpers/administrativeOrder.js";
 import { buildCatalogSlides } from "../src/helpers/customerNoticeCarousel.js";
 const read = file => readFile(new URL(`../src/${file}`, import.meta.url), "utf8");
 
 test("cotización actualizada requiere aceptación explícita, incluso tras error; nunca reenvía compra", async () => {
-  let state = receiveCheckoutQuote({}, "cart:pickup", { quoteFingerprint: "first" });
+  let state = receiveCheckoutQuote({}, "cart:pickup", { quoteFingerprint: "first", commercialSignature: "A" });
   assert.equal(state.needsAcceptance, false);
-  state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "first" });
+  state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "technical-revision", commercialSignature: "A" });
   assert.equal(state.needsAcceptance, false);
-  state = receiveCheckoutQuote({ ...state, data: null }, "changed", { quoteFingerprint: "second" });
+  state = receiveCheckoutQuote({ ...state, data: null }, "changed", { quoteFingerprint: "second", commercialSignature: "B" });
   assert.equal(state.needsAcceptance, true);
-  state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "second" });
+  state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "second", commercialSignature: "B" });
   assert.equal(state.needsAcceptance, true);
-  state = receiveCheckoutQuote({ ...state, needsAcceptance: false }, "refresh", { quoteFingerprint: "second" });
+  assert.equal(acceptCheckoutQuote(state, "obsolete", "B"), state);
+  assert.equal(acceptCheckoutQuote(state, "refresh", "A"), state);
+  state = acceptCheckoutQuote(state, "refresh", "B");
   assert.equal(state.needsAcceptance, false);
-  assert.equal(receiveCheckoutQuote({ ...state, needsAcceptance: true }, "same-after-conflict", { quoteFingerprint: "second" }).needsAcceptance, true);
+  assert.equal(receiveCheckoutQuote({ ...state, needsAcceptance: true }, "same-after-conflict", { quoteFingerprint: "third", commercialSignature: "B" }).needsAcceptance, false);
+  assert.equal(receiveCheckoutQuote(state, "return-to-A", { quoteFingerprint: "fourth", commercialSignature: "A" }).needsAcceptance, false);
+  assert.equal(receiveCheckoutQuote(state, "change-C", { commercialSignature: "C" }).needsAcceptance, true);
+  assert.equal(receiveCheckoutQuote({}, "missing-contract", {}).needsAcceptance, true);
   const checkout = await read("pages/CheckoutPage.jsx");
   assert.match(checkout, /&& !quoteState.needsAcceptance/);
   assert.match(checkout, /Aceptar resumen actualizado/);
@@ -35,7 +40,7 @@ test("errores contextuales diferencian conexión, suspensión y productos", () =
 });
 test("carrusel combina aviso derivado sin duplicar ni alterar avisos manuales", () => {
   const manual = [{ id: 5, title: "Aviso manual", message: "Intacto", displaySeconds: 5 }];
-  const dynamic = { title: "¡Despacho gratis en compras desde $50.000!", message: "Neto después de descuentos. DEMO", isDemo: true };
+  const dynamic = { title: "Despacho sujeto a cotización", message: "FYF confirma el valor antes del cobro. Por ahora puedes elegir retiro.", isDemo: false };
   assert.deepEqual(buildCatalogSlides(null, manual, dynamic).map(slide => slide.id), ["institutional", "delivery-policy", "notice-5"]);
   assert.equal(buildCatalogSlides(null, manual, { ...dynamic, title: "El despacho no está disponible por ahora" })[1].title, "El despacho no está disponible por ahora");
   assert.deepEqual(buildCatalogSlides(null, manual, null).map(slide => slide.id), ["institutional", "notice-5"]);

@@ -35,6 +35,8 @@ import StatisticsPage from "./pages/StatisticsPage.jsx";
 import PromotionsPage from "./pages/PromotionsPage.jsx";
 import ClientReactivationPage from "./pages/ClientReactivationPage.jsx";
 import ReturnsInformationPage from "./pages/ReturnsInformationPage.jsx";
+import DeliveryConditionsPage from "./pages/DeliveryConditionsPage.jsx";
+import DeliveryQuotesPage from "./pages/DeliveryQuotesPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -98,6 +100,9 @@ export default function App() {
       <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
       <Route path="/changes-and-returns" element={<StorePage><ReturnsInformationPage /></StorePage>} />
+      <Route path="/delivery-conditions" element={<StorePage><DeliveryConditionsPage /></StorePage>} />
+      <Route path="/delivery-quotes/:id?" element={<StorePage><DeliveryQuotesPage /></StorePage>} />
+      <Route path="/delivery-requests/:id?" element={<ProtectedPage allowedRoles={ROUTE_PERMISSIONS.onlineOrdersManagement}><DeliveryQuotesPage /></ProtectedPage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
       <Route path="/catalog/families/:id" element={<StorePage><ProductFamilyPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />

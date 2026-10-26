@@ -322,6 +322,8 @@ export async function createOnlineOrder(
     deliveryFee: string;
     deliveryPolicyRevisionId: number;
     deliveryFeeReason: string;
+    deliveryQuoteRequestId?: number;
+    deliveryQuoteAcceptanceId?: number;
     total: string;
     reservationExpiresAt: Date;
     deliveryType: "PICKUP" | "DELIVERY";

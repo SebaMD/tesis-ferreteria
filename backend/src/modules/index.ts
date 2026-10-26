@@ -14,10 +14,13 @@ import emailVerificationRoutes from "./emailVerification/emailVerification.route
 import customerNoticeRoutes from "./customerNotice/customerNotice.routes.js";
 import promotionsRoutes from "./promotions/promotions.routes.js";
 import productFamiliesRoutes from "./productFamilies/productFamilies.routes.js";
+import deliveryQuotesRoutes, { guestDeliveryQuotesRouter } from "./deliveryQuotes/deliveryQuotes.routes.js";
 
 const router = Router();
 import deliverySettingsRoutes from "./deliverySettings/deliverySettings.routes.js";
 router.use("/delivery-settings", deliverySettingsRoutes);
+router.use("/delivery-quotes", deliveryQuotesRoutes);
+router.use("/online-orders/guest/delivery-quotes", guestDeliveryQuotesRouter);
 
 router.get("/health", (_req, res) => {
   res.json({ status: "ok" });

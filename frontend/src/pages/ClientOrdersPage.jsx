@@ -193,6 +193,7 @@ export default function ClientOrdersPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
+      <Link to="/delivery-quotes" className="font-bold text-rust-600">Mis solicitudes de despacho</Link>
       <LoadingOverlay active={loading} />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>

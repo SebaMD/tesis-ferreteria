@@ -49,6 +49,7 @@ export async function saveDeliverySettings(actorId: number, body: unknown) {
     const [current] = await tx.select().from(settings).where(eq(settings.id, 1)).for("update");
     if (current.currentRevisionId !== expectedRevisionId) throw new DeliveryPolicyError("Otro usuario autorizado cambió la configuración. Cierra y vuelve a abrir el formulario para revisar la versión vigente.");
     const [previous] = current.currentRevisionId ? await tx.select().from(revisions).where(eq(revisions.id, current.currentRevisionId)) : [];
+    if(previous?.pricingMode==="MANUAL_QUOTE")throw new DeliveryPolicyError("La política vigente es manual. Utiliza la configuración de solicitudes de despacho; no se restauró la tarifa antigua.");
     const [revision] = await tx.insert(revisions).values({ ...values, version: (previous?.version ?? 0) + 1, createdBy: actorId }).returning();
     await tx.update(settings).set({ currentRevisionId: revision.id }).where(eq(settings.id, 1));
     return revision;

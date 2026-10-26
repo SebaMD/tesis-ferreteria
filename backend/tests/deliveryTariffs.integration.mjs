@@ -15,8 +15,10 @@ const folder = await mkdtemp(path.join(tmpdir(), "fyf-delivery-migrations-"));
 let server, applicationDb;
 const hash = value => createHash("sha256").update(value).digest("hex");
 try {
+  const dataDirectory = (await pool.query("show data_directory")).rows[0].data_directory.replaceAll("\\", "/");
+  assert.match(dataDirectory, /\/fyf-delivery-test-[^/]+\/data$/);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 31);
+  assert.equal(journal.entries.length, 33);
   assert.ok(journal.entries[30].when > journal.entries[29].when);
   await mkdir(path.join(folder, "meta"));
   await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 30) }));
@@ -41,8 +43,8 @@ try {
   await pool.query("create database fyf_delivery_clean");
   const cleanUrl = new URL(url); cleanUrl.pathname = "/fyf_delivery_clean";
   const clean = new pg.Pool({ connectionString: cleanUrl.href });
-  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "31"); } finally { await clean.end(); }
-  console.log("PASS 31 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
+  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "33"); } finally { await clean.end(); }
+  console.log("PASS 33 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
 
   Object.assign(process.env, { DATABASE_URL: url.href, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const sdk = (await import("transbank-sdk")).default;
@@ -60,10 +62,11 @@ try {
   const call = async (method, route, body, role, expected = 200, extraHeaders = {}) => {
     const response = await fetch(base + route, { method, headers: { "Content-Type": "application/json", ...(role ? { Authorization: `Bearer ${jwt.sign({ id: users[role] }, process.env.SESSION_SECRET)}` } : {}), ...extraHeaders }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const text = await response.text(); assert.equal(response.status, expected, `${method} ${route}: ${text}`);
-    return { data: JSON.parse(text).data, headers: response.headers };
+    const result = JSON.parse(text);
+    return { data: result.data, code: result.code, headers: response.headers };
   };
   const items = [{ productId: products[0].id, quantity: 1 }];
-  const quote = async (deliveryType = "DELIVERY", selected = items) => (await call("POST", "/online-orders/quote", { items: selected, deliveryType, deliveryCommune: deliveryType === "DELIVERY" ? "Santa Juana" : null })).data;
+  const quote = async (deliveryType = "PICKUP", selected = items) => (await call("POST", "/online-orders/quote", { items: selected, deliveryType, deliveryCommune: deliveryType === "DELIVERY" ? "Santa Juana" : null })).data;
   const announcement = async () => (await call("GET", "/customer-notice")).data.deliveryAnnouncement;
   const policyBody = { expectedRevisionId: null, pickupEnabled: true, deliveryEnabled: true, flatFee: 3000, minimumProductsTotal: null, freeShippingFrom: null, isDemo: true };
   await call("POST", "/online-orders/quote", { items, deliveryType: "PICKUP" }, null, 503);
@@ -83,15 +86,15 @@ try {
     assert.equal(current.id, policy.id); assert.equal(current.createdBy, users.MANAGER);
     assert.equal(current.responsible, "MANAGER Prueba");
   }
-  assert.equal((await quote()).total, "13500.00");
+  assert.equal((await quote()).total, "10000.00");
   assert.deepEqual((await pool.query("select * from delivery_policy_revisions where id=$1", [firstRevision.id])).rows[0], firstRevision);
   await call("PUT", "/delivery-settings", { ...policyBody, expectedRevisionId: policy.id, flatFee: -1 }, "MANAGER", 400);
   await call("PUT", "/delivery-settings", { ...policyBody, expectedRevisionId: policy.id, createdBy: users.ADMIN }, "MANAGER", 400);
   await save({ flatFee: 3000 });
   const pickup = await quote("PICKUP"); assert.equal(pickup.deliveryFee, "0.00"); assert.equal(pickup.total, "10000.00");
-  const initialQuote = await quote(); assert.equal(initialQuote.total, "13000.00"); assert.equal(initialQuote.isDemo, true);
+  const initialQuote = await quote(); assert.equal(initialQuote.total, "10000.00"); assert.equal(initialQuote.isDemo, true);
   assert.equal((await pool.query("select count(*) from online_orders")).rows[0].count, "1"); assert.equal(transactions.size, 0);
-  await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Otra comuna" }, null, 400);
+  await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Otra comuna" }, null, 409);
   for (const extra of [{ total: 1 }, { deliveryFee: 0 }, { items: [{ ...items[0], unitPrice: 1 }] }]) await call("POST", "/online-orders/quote", { items, deliveryType: "PICKUP", ...extra }, null, 400);
   const delivery = { deliveryType: "DELIVERY", deliveryRecipientName: "Comprador Demo", deliveryPhone: "+56911111111", deliveryAddress: "Dirección de prueba", deliveryCommune: "Santa Juana", saveDeliveryAddress: false };
   const checkout = { ...delivery, checkoutKey: "delivery-checkout-000001", items, quoteFingerprint: initialQuote.quoteFingerprint };
@@ -127,22 +130,54 @@ try {
   await call("POST", "/online-orders/quote", { items, deliveryType: "PICKUP" }, null, 409);
   await save({ freeShippingFrom: 10000 }); assert.equal(policy.pickupEnabled, true); assert.equal(policy.minimumProductsTotal, null);
   assert.deepEqual((await pool.query("select * from delivery_policy_revisions where id=$1", [oldPolicy.id])).rows[0], oldPolicy);
-  const freeQuote = await quote(); assert.equal(freeQuote.deliveryFee, "0.00"); assert.equal(freeQuote.deliveryBenefit.qualified, true);
-  assert.deepEqual(freeQuote.commercialAmounts.lines.map(line => line.key), ["productsSubtotal", "deliveryBaseFee", "productsDiscount", "deliveryDiscount", "total"]);
-  assert.match((await announcement()).title, /10\.000/);
-  await save({ freeShippingFrom: 20000 }); assert.match((await announcement()).title, /20\.000/);
-  const publicNotice = await announcement(); assert.deepEqual(Object.keys(publicNotice).sort(), ["isDemo", "kind", "message", "title"]);
-  await save({ flatFee: 0, freeShippingFrom: 10000 }); assert.equal(await announcement(), null); assert.equal((await quote()).deliveryFeeReason, "FLAT");
-  await save({ freeShippingFrom: null }); assert.equal(await announcement(), null); assert.equal((await quote()).deliveryFee, "3000.00");
+  const freeQuote = await quote();
+  assert.equal(freeQuote.deliveryFee, "0.00"); assert.equal(freeQuote.deliveryFeeReason, "PICKUP");
+  assert.deepEqual(freeQuote.deliveryBenefit, { active: false, threshold: null, remaining: null, qualified: false });
+  const assertManualDelivery = async () => {
+    const before = (await pool.query("select (select count(*) from online_orders) orders, (select count(*) from online_payments) payments, (select sum(current_stock) from products) stock")).rows[0];
+    const attempts = transactions.size;
+    const rejected = await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Concepción" }, null, 409);
+    assert.equal(rejected.code, "DELIVERY_MANUAL_QUOTE_REQUIRED");
+    const blocked = await call("POST", "/online-orders/checkout", { ...checkout, checkoutKey: randomBytes(16).toString("hex") }, "CLIENT", 409);
+    assert.equal(blocked.code, "DELIVERY_MANUAL_QUOTE_REQUIRED");
+    assert.equal(transactions.size, attempts);
+    assert.deepEqual((await pool.query("select (select count(*) from online_orders) orders, (select count(*) from online_payments) payments, (select sum(current_stock) from products) stock")).rows[0], before);
+    const notice = await announcement();
+    assert.equal(notice.kind, "MANUAL_QUOTE"); assert.doesNotMatch(notice.title, /gratis|3\.000/);
+    assert.deepEqual(Object.keys(notice).sort(), ["isDemo", "kind", "message", "title"]);
+    const info = (await call("GET", "/customer-notice")).data.deliveryInformation;
+    assert.equal(info.conditionalFreeThresholdReference, 500000); assert.equal(info.conditionalBenefitEnabled, false);
+    assert.equal(info.noChargeRadiusKmReference, 5); assert.equal(info.minimumOutboundKmPriceReference, 1000);
+    assert.equal(info.coverage, "Región del Biobío"); assert.equal(info.onlineQuoteRequestsEnabled, false);
+  };
+  for (const values of [{ freeShippingFrom: 500000 }, { freeShippingFrom: 1, flatFee: 0 }, { freeShippingFrom: null }]) {
+    await save(values); await assertManualDelivery();
+  }
+  assert.equal((await quote()).deliveryFeeReason, "PICKUP");
   await call("POST", "/promotions", { name: "Descuento aislado", type: "PERCENTAGE_DISCOUNT", percentage: 20, isActive: true, startsAt: new Date(Date.now()-3600000).toISOString(), endsAt: null, productIds: [products[0].id], categoryIds: [] }, "ADMIN", 201);
-  await save({ freeShippingFrom: 9000 }); const discounted = await quote(); assert.equal(discounted.productsNet, "8000.00"); assert.equal(discounted.deliveryFee, "3000.00");
-  assert.equal(discounted.deliveryBenefit.remaining, 1000); assert.equal(discounted.deliveryBenefit.qualified, false);
+  await save({ freeShippingFrom: 9000 }); const discounted = await quote(); assert.equal(discounted.productsNet, "8000.00"); assert.equal(discounted.deliveryFee, "0.00");
+  assert.equal(discounted.deliveryBenefit.remaining, null); assert.equal(discounted.deliveryBenefit.qualified, false);
+  await assertManualDelivery();
   await save({});
   const quoted = await quote();
   await pool.query("update products set price=11000 where id=$1", [products[0].id]);
-  await call("POST", "/online-orders/checkout", { ...checkout, quoteFingerprint: quoted.quoteFingerprint }, "CLIENT", 409);
+  const stale = await call("POST", "/online-orders/checkout", { checkoutKey: "stale-pickup-quote-000001", items, deliveryType: "PICKUP", quoteFingerprint: quoted.quoteFingerprint }, "CLIENT", 409);
+  assert.equal(stale.code, "QUOTE_CHANGED");
+  assert.equal(transactions.size, 0); assert.equal((await pool.query("select count(*) from online_orders")).rows[0].count, "1");
   await pool.query("update products set price=10000 where id=$1", [products[0].id]);
-  const payment = (await call("POST", "/online-orders/checkout", { ...checkout, quoteFingerprint: (await quote()).quoteFingerprint }, "CLIENT", 201)).data;
+  // Historical fixtures represent previously closed economics, not new approved freight.
+  // Only retries may use these persisted amounts; DELIVERY checkout stays blocked.
+  const historicalOrder = async (reason, revisionId) => {
+    const fee = reason === "FLAT" ? 3000 : 0;
+    const row = (await pool.query("insert into online_orders(client_id,checkout_key,status,total,delivery_type,delivery_recipient_name,delivery_phone,delivery_address,delivery_commune,reservation_expires_at,products_subtotal,products_discount_total,delivery_fee,delivery_policy_revision_id,delivery_fee_reason) values($1,$2,'CANCELLED',$3,'DELIVERY','Comprador histórico','123456789','Dirección histórica','Santa Juana',now(),10000,2000,$4,$5,$6) returning id",
+      [users.CLIENT, randomBytes(16).toString("hex"), 8000 + fee, fee, revisionId, reason])).rows[0];
+    const promotionId = (await pool.query("select id from promotions where name='Descuento aislado'")).rows[0].id;
+    await pool.query("insert into online_order_items(order_id,product_id,quantity,unit_price,subtotal,discount_amount,promotion_id,promotion_type_snapshot,promotion_name_snapshot,promotion_value_snapshot) values($1,$2,1,10000,8000,2000,$3,'PERCENTAGE_DISCOUNT','Descuento aislado',20)",
+      [row.id, products[0].id, promotionId]);
+    return row.id;
+  };
+  const historicalId = await historicalOrder("FLAT", firstRevision.id);
+  const payment = (await call("POST", `/online-orders/${historicalId}/retry-payment`, {}, "CLIENT")).data;
   assert.equal(payment.total, 11000); assert.equal(transactions.get(payment.token).amount, 11000);
   const snapshot = async () => (await pool.query("select total,products_subtotal,products_discount_total,delivery_fee,delivery_policy_revision_id,delivery_fee_reason from online_orders where id=$1", [payment.orderId])).rows[0];
   const frozen = await snapshot(); assert.equal(frozen.delivery_fee, "3000.00");
@@ -186,28 +221,30 @@ try {
   const legacyRead = (await call("GET", `/online-orders/${legacy.id}`, null, "CLIENT")).data;
   assert.equal(buildOrderCommercialModel(legacyRead).deliveryFee, null);
   assert.equal(legacyRead.commercialAmounts.legacy, true); assert.equal(legacyRead.commercialAmounts.lines[1].amount, null);
-  console.log("PASS thresholds after discounts, price changes, historical fee across cancelled/failed/expired retries, duplicate callback and stock idempotency, receipts/email/admin amounts");
+  console.log("PASS manual delivery blocked without orders/reserves/payments, pickup discounts and stale quotes, historical fee across cancelled/failed/expired retries, duplicate callback and stock idempotency, receipts/email/admin amounts");
 
   const session = randomBytes(32).toString("base64url");
   const challenge = (await pool.query("insert into email_verification_challenges(email,purpose,guest_session_hash,pin_hash,expires_at,last_sent_at,verified_at) values ('guest@example.test','GUEST_CHECKOUT',$1,$2,now()+interval '1 hour',now(),now()) returning id", [hash(session), hash("pin")])).rows[0].id;
-  const guest = (await call("POST", "/online-orders/guest/checkout", { ...delivery, checkoutKey: "delivery-guest-000001", items, quoteFingerprint: (await quote()).quoteFingerprint,
+  const guest = (await call("POST", "/online-orders/guest/checkout", { deliveryType: "PICKUP", checkoutKey: "delivery-guest-000001", items, quoteFingerprint: (await quote()).quoteFingerprint,
     guestName: "Comprador Invitado", guestEmail: "guest@example.test", guestEmailConfirmation: "guest@example.test", guestPhone: "+56911111111", emailVerificationChallengeId: challenge }, null, 201, { "X-Guest-Session": session }));
   const cookie = guest.headers.get("set-cookie").split(";")[0];
   await callback(guest.data.token, true); await save({ flatFee: 1000 });
   await call("POST", `/online-orders/guest/device-orders/${guest.data.orderId}/retry-payment`, {}, null, 404);
   const guestRetry = (await call("POST", `/online-orders/guest/device-orders/${guest.data.orderId}/retry-payment`, {}, null, 200, { Cookie: cookie })).data;
-  assert.equal(guestRetry.total, 17000);
+  assert.equal(guestRetry.total, 8000);
   await callback(guestRetry.token); await callback(guestRetry.token);
-  const now = new Date(), from = new Date(now); from.setHours(0,0,0,0); const to = new Date(from); to.setDate(to.getDate()+1);
+  // Fixtures are recent; include them regardless of the host's timezone versus the isolated UTC database.
+  const now = Date.now(), from = new Date(now - 86400000), to = new Date(now + 86400000);
   const { getManagerStatisticsService } = await import("../dist/modules/reports/managerStatistics.service.js");
   const stats = await getManagerStatisticsService({ from, toExclusive: to, fromLabel: "today", toLabel: "today" });
-  assert.equal(stats.kpis.productsIncome, 16000); assert.equal(stats.kpis.deliveryIncome, 12000); assert.equal(stats.kpis.totalCollected, 28000);
+  assert.equal(stats.kpis.productsIncome, 16000); assert.equal(stats.kpis.deliveryIncome, 3000); assert.equal(stats.kpis.totalCollected, 19000);
   assert.equal(stats.kpis.unitsSold, 2); assert.equal(stats.topProducts[0].revenue, 16000);
   // 2x1 still applies per concrete product, never to delivery.
   await call("POST", "/promotions", { name: "2x1 aislado", type: "BUY_2_PAY_1", percentage: null, isActive: true, startsAt: new Date(Date.now()-3600000).toISOString(), endsAt: null, productIds: [products[1].id], categoryIds: [] }, "ADMIN", 201);
-  const two = await quote("DELIVERY", [{ productId: products[1].id, quantity: 3 }]); assert.equal(two.productsNet, "10000.00"); assert.equal(two.total, "11000.00");
-  await save({ freeShippingFrom: 11000 }); const underTwo = await quote("DELIVERY", [{ productId: products[1].id, quantity: 3 }]); assert.equal(underTwo.deliveryBenefit.remaining, 1000);
-  await save({ freeShippingFrom: 10000 }); assert.equal((await quote("DELIVERY", [{ productId: products[1].id, quantity: 3 }])).deliveryBenefit.qualified, true);
+  const two = await quote("PICKUP", [{ productId: products[1].id, quantity: 3 }]); assert.equal(two.productsNet, "10000.00"); assert.equal(two.total, "10000.00");
+  await save({ freeShippingFrom: 11000 }); const underTwo = await quote("PICKUP", [{ productId: products[1].id, quantity: 3 }]); assert.equal(underTwo.deliveryBenefit.remaining, null);
+  await save({ freeShippingFrom: 10000 }); assert.equal((await quote("PICKUP", [{ productId: products[1].id, quantity: 3 }])).deliveryBenefit.qualified, false);
+  await assertManualDelivery();
   await save({});
   const pick = await quote("PICKUP");
   const pickupPayment = (await call("POST", "/online-orders/checkout", { checkoutKey: "delivery-pickup-000001", items, deliveryType: "PICKUP", quoteFingerprint: pick.quoteFingerprint }, "CLIENT", 201)).data;
@@ -223,8 +260,9 @@ try {
   }
   assert.equal(transactions.size, beforeRejected);
   await save({ flatFee: 3000, freeShippingFrom: 8000 });
-  const freeAccepted = await quote();
-  const freePayment = (await call("POST", "/online-orders/checkout", { ...checkout, checkoutKey: "delivery-free-000001", quoteFingerprint: freeAccepted.quoteFingerprint }, "CLIENT", 201)).data;
+  const freeId = await historicalOrder("FREE_THRESHOLD", policy.id);
+  const freeAccepted = (await call("GET", `/online-orders/${freeId}`, null, "CLIENT")).data;
+  const freePayment = (await call("POST", `/online-orders/${freeId}/retry-payment`, {}, "CLIENT")).data;
   assert.equal(freePayment.total, 8000); assert.equal(transactions.get(freePayment.token).amount, 8000);
   await callback(freePayment.token);
   await save({ flatFee: 9999, freeShippingFrom: null });
@@ -240,7 +278,7 @@ try {
   }
   assert.equal((await renderOrderReceiptPdf(freeModel)).subarray(0,5).toString(), "%PDF-");
   assert.deepEqual((await pool.query("select * from online_orders where id=$1", [legacy.id])).rows[0], upgraded);
-  console.log("PASS dynamic policy notices, public DTO, explicit legacy transition, hidden-rule manipulation rejected, free delivery snapshots and exact quote/order/mail/PDF/payment equality");
+  console.log("PASS manual/suspended policy notices, public informational DTO, explicit legacy transition, hidden-rule manipulation rejected, historical free-delivery snapshots and exact order/mail/PDF/payment equality");
   console.log("PASS guest verified checkout/device protection/historical retry, products + delivery statistics separated, 2x1 remains per SKU");
   if (process.env.DELIVERY_VISUAL_TEST === "1") {
     const bcrypt = (await import("bcrypt")).default;

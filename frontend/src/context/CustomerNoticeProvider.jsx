@@ -6,6 +6,7 @@ export default function CustomerNoticeProvider({ children }) {
   const [notices, setNotices] = useState([]);
   const [presentation, setPresentation] = useState(null);
   const [deliveryAnnouncement, setDeliveryAnnouncement] = useState(null);
+  const [deliveryInformation, setDeliveryInformation] = useState(null);
   const generation = useRef(0);
   const invalidateRequests = useCallback(() => { generation.current++; }, []);
 
@@ -17,10 +18,11 @@ export default function CustomerNoticeProvider({ children }) {
       setPresentation(current.presentation);
       setNotices(current.notices);
       setDeliveryAnnouncement(current.deliveryAnnouncement);
+      setDeliveryInformation(current.deliveryInformation);
       return current;
     } catch {
       // Keep manual notices on transient failure, but do not advertise a stale benefit.
-      if (request === generation.current) setDeliveryAnnouncement(null);
+      if (request === generation.current) { setDeliveryAnnouncement(null); setDeliveryInformation(null); }
       return { presentation: null, notices: [] };
     }
   }, []);
@@ -36,8 +38,8 @@ export default function CustomerNoticeProvider({ children }) {
   }, [refreshNotices, invalidateRequests]);
 
   const value = useMemo(
-    () => ({ presentation, notices, deliveryAnnouncement, refreshNotices }),
-    [notices, presentation, deliveryAnnouncement, refreshNotices],
+    () => ({ presentation, notices, deliveryAnnouncement, deliveryInformation, refreshNotices }),
+    [notices, presentation, deliveryAnnouncement, deliveryInformation, refreshNotices],
   );
 
   return <CustomerNoticeContext.Provider value={value}>{children}</CustomerNoticeContext.Provider>;

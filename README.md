@@ -272,7 +272,7 @@ Nginx acepta solicitudes de hasta 6 MiB para permitir imágenes de 5 MiB y el en
 
 ## Migraciones
 
-### Tarifa fija de despacho online
+### Despacho online: Nivel A y tarifas históricas
 
 La migración aditiva `0030_delivery_tariffs.sql` crea la configuración versionada
 de despacho y agrega el desglose histórico a los pedidos online. No cambia los
@@ -280,26 +280,39 @@ totales existentes: sus campos nuevos quedan en `NULL`, identificados como
 «sin cargo de despacho registrado», sin asignarles una política DEMO.
 
 Después de aplicar la migración **en una base autorizada**, ADMIN y MANAGER pueden abrir
-**Pedidos y repartos → Configurar despacho**. El formulario propone retiro a $0,
-tarifa fija **DEMO ficticia de $3.000 CLP**, sin mínimo ni gratuidad por monto.
-Estos valores no son oficiales de FYF y solo se activan al revisar y confirmar
-el guardado. Sin política guardada, no se permiten nuevas compras online.
+**Pedidos y repartos → Configurar despacho**. El retiro en tienda sigue disponible
+sin costo de despacho. Los nuevos despachos requieren una cotización manual
+aprobada: el Nivel A todavía no implementa su solicitud, aprobación ni aceptación.
+Por eso el backend bloquea nuevas cotizaciones y pedidos DELIVERY antes de crear
+reservas o iniciar Webpay. El comprador puede elegir retiro explícitamente.
+Sin política guardada, tampoco se permiten nuevas compras online.
 
 La consulta y modificación administrativa están restringidas a ADMIN y MANAGER;
 los demás roles e invitados no tienen acceso a estos endpoints. Cada guardado
 crea una revisión inmutable con el usuario responsable y controla los cambios
 concurrentes. Los pedidos y sus reintentos conservan
-los importes originales aunque cambie la configuración. El umbral opcional de gratuidad
-usa el monto neto de productos después de descuentos, antes del despacho. Las
-ventas presenciales no incorporan este cargo.
+los importes originales aunque cambie la configuración. Los campos de tarifa fija
+y umbral automático de las revisiones anteriores se conservan como información
+heredada, no como un flete aprobado para compras nuevas. La antigua tarifa DEMO
+de $3.000 no se cobra automáticamente. Las ventas presenciales no cambian.
 
 Las nuevas revisiones mantienen siempre retiro disponible sin cargo y no exigen
 compra mínima. Si una política antigua tiene otras reglas, el formulario informa
 la transición antes de confirmar una nueva revisión; nunca se reescribe el historial.
-El catálogo deriva automáticamente un aviso de gratuidad o suspensión desde la
-política vigente, sin crear avisos manuales ni promociones. Se actualiza al recuperar
-el foco y cada 30 segundos mientras la página está visible. La gratuidad solo se
-anuncia si existe una tarifa base mayor que cero.
+El catálogo deriva un aviso de cotización manual o suspensión desde la política
+vigente, sin crear avisos manuales ni promociones. Se actualiza al recuperar el
+foco y cada 30 segundos mientras la página está visible. Nunca promete gratuidad
+automática. El formulario identifica las opciones heredadas y no permite activar
+un cobro fijo como sustituto de la cotización pendiente.
+
+FYF informó cobertura en la Región del Biobío, un recorrido sin cobro hasta 5 km
+previa confirmación y una referencia mínima de $1.000 por kilómetro de ida para
+distancias mayores. Son referencias informativas: no hay fórmula confirmada para
+aplicarlas a toda la distancia o solo al excedente. El valor también depende del
+vehículo, carga y viajes. La referencia de $500.000 para solicitar gratuidad exige
+coordinación, entrega no urgente y aprobación de FYF; no aplica un descuento ni
+registra un flete de $0 automáticamente. Su configuración comercial requiere el
+Nivel B, aún pendiente; no se reutiliza el umbral automático antiguo.
 
 Checkout, historial, PDF, correo y ficha administrativa comparten el desglose:
 subtotal original + despacho previo al beneficio − descuentos de productos
@@ -310,8 +323,17 @@ Un cambio de cotización exige revisar y aceptar el nuevo resumen y volver a pul
 el pago; no se reenvía una compra automáticamente. Los errores de conexión ofrecen
 «Reintentar cálculo» y la suspensión permite elegir retiro explícitamente.
 
-La cobertura conserva la validación textual de Santa Juana; no hay sectores,
-geocodificación ni cálculo por distancia. Las estadísticas separan productos,
+El checkout informa la cobertura regional, sin geocodificación ni cálculo de
+distancias. El bloqueo DELIVERY impide confundir una dirección ingresada con un
+destino o flete aprobado; ampliar el flujo persistido queda para el Nivel B.
+En checkout se muestra «Despacho: Por cotizar», sin un total final cobrable. La
+nota breve enlaza a `/delivery-conditions`, también disponible desde el pie de
+página. Esta página reúne las referencias informadas por FYF y explica que la
+gratuidad no es automática. El enlace de Google Maps permanece pendiente hasta
+confirmar la dirección oficial completa y verificar que el resultado corresponde
+al local (`FYF_CONTACT.confirmed.address` continúa en `false`). No se usan
+coordenadas ni una dirección de referencia no confirmada.
+Las estadísticas separan productos,
 despacho y total cobrado neto de devoluciones presenciales.
 
 Prueba aislada, sin seed ni conexiones a 5432/5433 (requiere binarios PostgreSQL
@@ -322,6 +344,12 @@ cd backend
 npm run build
 node scripts/test-delivery-tariffs.mjs
 ```
+
+Esta prueba crea un clúster desechable en 55446 y verifica el bloqueo vigente,
+retiro, permisos y revisiones. Las tarifas FLAT/FREE_THRESHOLD se prueban mediante
+pedidos históricos sintéticos en esa base aislada, nunca habilitando el antiguo
+checkout automático. Comprueba reintentos, importes, documentos y stock. No
+requiere una migración de cotización manual ni utiliza bases habituales.
 
 ### Familias y variantes
 
@@ -413,6 +441,195 @@ Las migraciones deben ejecutarse antes de iniciar una versión del backend que d
 
 Este comando aplica los archivos existentes de `backend/drizzle`; no genera nuevas migraciones ni ejecuta seed. No sustituirlo por `db:push` en una base productiva.
 
+## Cotizaciones manuales de despacho — Etapas 3A y 3B
+
+La migración aditiva `0031_manual_delivery_quotes` crea solicitudes, artículos,
+revisiones de flete, eventos y tokens de invitados. Agrega configuración manual a
+las revisiones de política y referencias opcionales en pedidos. **No activa una
+política, modifica pedidos anteriores ni recalcula importes.** El backend compilado
+con este esquema requiere la migración antes de iniciarse; no apuntarlo a una base
+sin actualizar. `0032_delivery_quote_checkout` amplía estados/eventos y el guard de
+aceptación para la Etapa 3B, sin tablas duplicadas ni backfill. Su aplicación a una
+base habitual requiere autorización separada; ambas se probaron solo en clústeres temporales.
+
+El checkout de despacho registra una solicitud, nunca un pedido ni un cobro inmediato.
+La interfaz permite seguimiento, evaluación, aprobación y aceptación del resumen
+antes del pago único productos + flete. Retiro conserva el flujo habitual.
+Una solicitud o aprobación no reserva stock ni crea movimientos o pedidos. Los precios
+y promociones se consultan con el calculador existente: son una estimación, no un
+importe pagadero ni una garantía de existencias.
+
+Estados: `REQUESTED`, `ASSIGNED`, `PROPOSED`, `APPROVED`, `REJECTED`, `CANCELLED`,
+`EXPIRED`, `ORDER_CREATED` y `CLOSED_UNPAID`. Propuestas y aprobaciones son revisiones independientes e inmutables;
+corregir revoca la vigencia de la aprobación sin borrar su historial. Las decisiones
+generan eventos append-only. Cada comando exige `expectedVersion` y `commandKey`
+(clave aleatoria estable de 20–80 caracteres para sus reintentos). Crear exige
+`requestKey`; repetir la misma clave con datos diferentes devuelve conflicto.
+
+### API autenticada
+
+Rutas bajo `/api/delivery-quotes`, con JWT y comprobación de rol en servicio y ruta:
+
+| Operación | Ruta | Permiso |
+| --- | --- | --- |
+| Configuración manual | `GET /settings`, `PUT /settings` | ADMIN, MANAGER |
+| Encargados habilitados | `GET /assignees` | ADMIN, MANAGER |
+| Crear solicitud | `POST /` | CLIENT con correo verificado |
+| Listar / consultar | `GET /`, `GET /:id` | ADMIN/MANAGER; CLIENT propio; WAREHOUSE asignado |
+| Asignar | `POST /:id/assign` | ADMIN, MANAGER |
+| Proponer flete | `POST /:id/proposals` | ADMIN/MANAGER o WAREHOUSE asignado |
+| Aprobar | `POST /:id/approve` | ADMIN, MANAGER, decisión explícita separada |
+| Corregir / rechazar | `POST /:id/request-changes`, `POST /:id/reject` | ADMIN, MANAGER |
+| Cancelar | `POST /:id/cancel` | ADMIN/MANAGER o CLIENT propietario |
+| Revocar acceso invitado | `POST /:id/revoke-guest-access` | ADMIN, MANAGER |
+| Resumen final actualizado | `GET /:id/summary` | Propietario o ADMIN/MANAGER |
+| Aceptar y crear pedido/pago | `POST /:id/checkout` | CLIENT propietario |
+| Pedido asociado | `GET /:id/order` | Propietario o ADMIN/MANAGER |
+| Continuar/reintentar pedido | `POST /:id/payment` | CLIENT propietario |
+| Cerrar pedido impago terminal | `POST /:id/close-unpaid` | Propietario o ADMIN/MANAGER |
+
+CASHIER no recibe permisos. WAREHOUSE recibe destino, contacto del receptor y carga
+solo cuando está asignado, sin datos de cuenta ni estimación comercial de productos.
+CLIENT/Invitado no reciben notas internas ni propuestas pendientes. El listado usa
+cursor `beforeId` y devuelve como máximo 100 solicitudes por página.
+
+`POST /` recibe `requestKey`, `items: [{productId, quantity}]`, `recipientName`,
+`phone`, `address`, `commune`, `reference` opcional y `nonUrgent`. No recibe importes.
+La comuna admite destinos fuera de Santa Juana y se informa `coverageVerified:false`:
+FYF debe confirmar manualmente la cobertura del Biobío, sin geocodificación ni GPS.
+Cambiar productos, cantidades o destino requiere una solicitud nueva.
+
+Una propuesta recibe `commandKey`, `expectedVersion`, `amount` entero CLP, `reason`,
+`vehicle`, `distanceKm`, `trips`, `routeConfirmed`, `coordinated`, `notes` (motivo
+interno obligatorio) y `customerNote` opcional. Motivos:
+
+- `PAID_FREIGHT`: monto positivo aprobado manualmente, sin fórmula automática.
+- `FREE_RADIUS`: monto cero y recorrido de hasta 5 km confirmado manualmente.
+- `FREE_CONDITIONAL`: monto cero, beneficio habilitado, neto de productos después
+  de descuentos igual o superior al umbral, coordinación y entrega no urgente.
+- `FREE_EXCEPTION`: excepción comercial gratuita expresamente aprobada y motivada.
+
+Aprobar exige además `proposalRevisionId` y `reason`; nunca aprueba una revisión
+obsoleta o de otra solicitud. No hay aprobación implícita por quien propone.
+
+### Activación y configuración explícitas
+
+`PUT /settings` exige `expectedRevisionId`, `deliveryEnabled` y
+`conditionalFreeEnabled`. Permite `conditionalFreeFrom` (valor inicial propuesto
+500000 CLP), `approvalValidityHours` (24, rango 1–168) y `evaluationValidityHours`
+(72 desde creación, rango 1–720). Estos plazos son provisionales para el sistema,
+no condiciones comerciales confirmadas por FYF. El umbral nuevo es independiente
+del antiguo `freeShippingFrom` automático. Cada guardado crea una revisión con
+responsable; no modifica la revisión DEMO. Tras activar modo manual, el endpoint
+heredado de tarifas no puede reemplazarlo silenciosamente.
+
+La migración no efectúa esta activación. ADMIN/MANAGER la confirman desde
+Configurar despacho en Pedidos y repartos. Deshabilitar despacho
+bloquea solicitudes y propuestas/aprobaciones nuevas, pero no toca pedidos pagados
+ni callbacks o conciliaciones existentes. Los vencimientos se registran al consultar,
+listar o actuar; no hay tarea programada en esta etapa.
+
+### Invitados
+
+Rutas bajo `/api/online-orders/guest/delivery-quotes`:
+
+- `POST /verification/request` y `/verification/verify`: PIN para creación.
+- `POST /`: cuerpo anterior más `guestName`, `guestEmail`, `challengeId` verificado.
+- `POST /access/request` y `/access/verify`: PIN independiente para recuperar acceso.
+- `POST /:id/recover-access`: `challengeId` específico verificado.
+- `GET /:id` y `POST /:id/cancel`: token de esa solicitud.
+- `GET /:id/summary`, `GET /:id/order`, `POST /:id/checkout`, `POST /:id/payment`
+  y `POST /:id/close-unpaid`: las mismas reglas comerciales, con token propietario.
+
+Creación y PIN usan `X-Guest-Session`; consulta/cancelación usan
+`X-Delivery-Quote-Token`. El token se devuelve solo al crearlo/recuperarlo, se guarda
+como hash y no se coloca en URLs ni logs. El frontend guarda el acceso en
+`sessionStorage`, separado de los tokens de pedidos; cerrada la pestaña, se recupera
+con PIN específico e ID. El pedido final utiliza las cookies y tokens de seguimiento
+ya existentes. Vigencia de token: 168 horas por defecto,
+ajustable con `DELIVERY_QUOTE_TOKEN_HOURS` (1–720); máximo 10 tokens no revocados por
+solicitud. Conocer ID o correo no concede acceso. La verificación se consume dentro
+de la transacción de creación; un rollback no la consume.
+
+Límites: PIN con controles existentes; solicitudes limitadas en PostgreSQL por
+propietario (10/hora y 5 activas), acceso invitado 90 intentos/minuto por IP en cada
+proceso. En despliegues multiproceso será necesario un límite compartido/proxy.
+No enviar tokens en enlaces compartidos ni usar estas rutas desde un origen CORS
+no autorizado.
+
+### Aceptación, reservas y recuperación 3B
+
+El resumen vincula solicitud/versión, destino, revisión aprobada, artículos,
+cantidades, precios, promociones y desglose mediante firma comercial y
+`quoteFingerprint`. `POST /:id/checkout` recibe ambos, `expectedVersion`,
+`commandKey` y `accepted:true`; no acepta precios ni flete del navegador.
+`QUOTE_CHANGED` bloquea el pago, devuelve un conflicto y exige revisar/aceptar otra vez;
+la interfaz no reenvía automáticamente la compra.
+
+Aceptación, pedido, artículos, reserva temporal e intento de pago se registran en una
+transacción. Se reutiliza la creación de pedidos existente y la clave determinista
+`delivery-quote-ID`, junto con la restricción UNIQUE por solicitud. Webpay se inicia
+después del COMMIT. Un error de inicio conserva el pedido impago y libera la reserva;
+se recupera ese pedido, nunca se crea otro. Los reintentos mantienen el importe histórico
+y verifican autorización vigente y habilitación del despacho antes de crear un intento.
+Continuar una sesión ya iniciada o conciliar su callback no invalida un pago por un
+vencimiento posterior. Se conservan los controles existentes de callbacks duplicados,
+reservas vencidas y pagos ambiguos.
+
+Una solicitud aprobada usa el plazo desde aprobación, no el vencimiento de evaluación
+pendiente. Generado el pedido, la solicitud no vuelve a aprobarse ni modifica importes.
+Si el pedido impago ya no puede reintentarse, `close-unpaid` requiere motivo y versión:
+solo cierra pedidos terminales sin intentos abiertos/ambiguos. Conserva el pedido y su
+importe y bloquea futuros intentos; una nueva evaluación requiere solicitud nueva.
+No se cierra silenciosamente una transacción pendiente de conciliación.
+
+El pedido manual copia directamente el destino inmutable aprobado, incluyendo comunas
+fuera de Santa Juana. El checkout genérico sigue sin aceptar despachos sin cotización;
+no se relajan sus validaciones antiguas ni se modifican direcciones históricas.
+
+### Validación y revisión manual aislada
+
+Desde `backend`: `npm run build` y `node scripts/test-delivery-quotes.mjs`. El lanzador
+crea y elimina exclusivamente su clúster PostgreSQL temporal en puerto 55448, valida
+su directorio antes de operar y aplica migraciones solo allí. Comprueba instalación
+limpia, actualización desde 31 migraciones y repetición; SMTP y Webpay son dobles de
+prueba sin conexiones reales. Incluye fallos deliberados de auditoría y envío para
+verificar rollback. No usa seed ni las bases 5432/5433.
+
+Para una revisión visual **solo sobre datos desechables**, desde `backend`:
+
+```powershell
+npm run build
+$env:DELIVERY_QUOTES_VISUAL = '1'
+try { node scripts/test-delivery-quotes.mjs } finally { Remove-Item Env:DELIVERY_QUOTES_VISUAL -ErrorAction SilentlyContinue }
+```
+
+Esperar `QA_READY`. El backend temporal escucha en `127.0.0.1:5193`; el correo
+simulado se consulta en `/__qa/mail` y Webpay es un doble local, sin contacto externo.
+Las rutas `/__qa/*` pertenecen exclusivamente al lanzador de pruebas, no a la aplicación.
+En otra terminal, desde `frontend`:
+
+```powershell
+$env:VITE_API_URL = 'http://127.0.0.1:5193/api'
+node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5192 --strictPort
+```
+
+Abrir `http://127.0.0.1:5192`. Usuarios **ficticios y temporales**:
+`client21@example.test`, `admin@example.test`, `manager@example.test`,
+`warehouse@example.test`; contraseña de prueba `QaOnly-Quotes-3B!`.
+No corresponden a usuarios ni credenciales habituales. Algunas solicitudes ya están
+preparadas por las pruebas; se pueden crear otras desde un carrito y revisar su ID.
+CLIENT/Invitado acceden desde Mis compras → Solicitudes de despacho; los trabajadores,
+desde Pedidos y repartos → Solicitudes de despacho. Primero asignar, luego proponer,
+aprobar expresamente, volver como comprador y consultar/aceptar el total.
+
+Al terminar, `Invoke-RestMethod -Method Post http://127.0.0.1:5193/__qa/stop` cierra
+el backend y elimina exclusivamente su clúster temporal. Detener Vite con Ctrl+C.
+No ejecutar estos lanzadores ni migraciones contra 5432/5433. No trasladar cuentas,
+dobles, rutas QA o contraseñas de pruebas a producción. CORS y límites compartidos
+de acceso deben revisarse antes del despliegue. Las notificaciones de nuevas
+solicitudes/aprobaciones no están implementadas: su seguimiento es manual.
+
 ## Ejecución directa y seguridad en producción
 
 Para desplegar el backend mediante PM2, ejecutar `npm ci`, `npm run build` y las migraciones desde `backend`, y luego administrar `dist/server.js` con PM2 usando ese directorio como `cwd`. Configurar `backend/.env` y `UPLOADS_ROOT` persistente antes de iniciar. El repositorio no incluye un archivo de configuración PM2.
@@ -422,6 +639,12 @@ En producción, usar `NODE_ENV=production`, HTTPS, SMTP real y Webpay configurad
 Se recomienda servir frontend y backend mediante un mismo origen HTTPS. Distintos puertos del mismo host pueden funcionar con la URL absoluta y cookies; dominios distintos están sujetos a las restricciones `SameSite` del navegador y no se garantizan con solo cambiar `VITE_API_URL`. El frontend compilado necesita un servidor estático con fallback de SPA y un proxy configurado según el despliegue.
 
 Los ejemplos contienen únicamente placeholders, no credenciales utilizables en producción. No versionar `.env`, secretos ni evidencias. Las imágenes Docker excluyen `.env` y sus variantes, además de uploads locales. No ejecutar seed en producción. Restringir la exposición de PostgreSQL y del puerto backend mediante red/firewall; Compose publica esos puertos para uso local y no configura TLS ni una política CORS restrictiva.
+
+El backend refleja actualmente el origen CORS y permite credenciales. Antes de
+producción debe definirse una lista explícita de orígenes autorizados del despliegue;
+confiar en cualquier origen es un riesgo de exposición entre sitios. CORS no
+sustituye JWT, permisos ni controles de acceso. Esta limpieza documenta el riesgo,
+pero no modifica la configuración sin conocer esos orígenes.
 
 ## Consideraciones del proyecto
 

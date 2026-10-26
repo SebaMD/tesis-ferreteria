@@ -10,6 +10,7 @@ function noticeConfiguration(data) {
     presentation: resolveImage(data?.presentation),
     notices: Array.isArray(data?.notices) ? data.notices.map(resolveImage) : [],
     deliveryAnnouncement: data?.deliveryAnnouncement ?? null,
+    deliveryInformation: data?.deliveryInformation ?? null,
   };
 }
 

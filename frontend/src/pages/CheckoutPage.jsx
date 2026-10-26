@@ -1,4 +1,4 @@
-import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
+import { ArrowLeft, CreditCard, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -6,8 +6,10 @@ import { getApiError, isApiConnectionError } from "../api/httpClient.js";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import OrderAmounts from "../components/orders/OrderAmounts.jsx";
-import { receiveCheckoutQuote, checkoutQuoteFailure } from "../helpers/checkoutQuote.js";
-import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
+import DeliveryConditions from "../components/DeliveryConditions.jsx";
+import DeliveryQuoteRequestForm from "../components/DeliveryQuoteRequestForm.jsx";
+import { quotePinRequest, quotePinVerify } from "../services/deliveryQuotes.service.js";
+import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure } from "../helpers/checkoutQuote.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { readCheckoutIntent, resolveCheckoutItems } from "../helpers/checkoutIntent.js";
 import { formatClp } from "../helpers/formatters.js";
@@ -22,7 +24,6 @@ import {
   continueGuestOnlineOrderPaymentRequest,
   createGuestOnlineOrderCheckoutRequest,
   createOnlineOrderCheckoutRequest,
-  getClientDeliveryAddressRequest,
   getGuestPendingOrderRequest,
   getMyOnlineOrdersRequest,
   quoteOnlineOrderRequest,
@@ -65,13 +66,11 @@ export default function CheckoutPage() {
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingOrderLoading, setPendingOrderLoading] = useState(true);
-  const [savedAddressLoading, setSavedAddressLoading] = useState(isClient);
   const [catalogError, setCatalogError] = useState("");
   const [pendingOrder, setPendingOrder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [deliveryType, setDeliveryType] = useState("PICKUP");
-  const [saveDeliveryAddress, setSaveDeliveryAddress] = useState(false);
   const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "" });
   const [quoteRefresh, setQuoteRefresh] = useState(0);
   const [guestData, setGuestData] = useState({
@@ -84,14 +83,7 @@ export default function CheckoutPage() {
     Boolean(user?.emailVerifiedAt || user?.emailVerified),
   );
   const [guestEmailVerification, setGuestEmailVerification] = useState(null);
-  const [deliveryData, setDeliveryData] = useState(() => ({
-    recipientName: `${user?.names || ""} ${user?.surnames || ""}`.trim(),
-    phone: user?.phone || "",
-    address: "",
-    reference: "",
-  }));
   const submittingRef = useRef(false);
-  const deliveryTouchedRef = useRef(false);
   const checkoutProductIds = useMemo(
     () => checkoutItems.map((item) => item.product.id),
     [checkoutItems],
@@ -128,32 +120,10 @@ export default function CheckoutPage() {
     }
   }, [isClient]);
 
-  const loadSavedDeliveryAddress = useCallback(async () => {
-    if (!isClient) {
-      setSavedAddressLoading(false);
-      return;
-    }
-    try {
-      const savedAddress = await getClientDeliveryAddressRequest();
-      if (!savedAddress || deliveryTouchedRef.current) return;
-      setDeliveryData({
-        recipientName: savedAddress.recipientName || "",
-        phone: savedAddress.phone || "",
-        address: savedAddress.address || "",
-        reference: savedAddress.reference || "",
-      });
-    } catch (error) {
-      toast.error(getApiError(error, "No se pudo cargar tu dirección guardada"));
-    } finally {
-      setSavedAddressLoading(false);
-    }
-  }, [isClient]);
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAvailability(true);
     loadPendingOrder(true);
-    loadSavedDeliveryAddress();
     const refreshCheckout = () => {
       loadAvailability(false);
       loadPendingOrder(false);
@@ -166,7 +136,7 @@ export default function CheckoutPage() {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshCheckout);
     };
-  }, [loadAvailability, loadPendingOrder, loadSavedDeliveryAddress]);
+  }, [loadAvailability, loadPendingOrder]);
 
   const liveProductById = useMemo(
     () => new Map(catalogProducts.map((product) => [Number(product.id), product])),
@@ -203,7 +173,7 @@ export default function CheckoutPage() {
     const timer = window.setTimeout(() => {
       const selectedItems = JSON.parse(quoteItemsKey);
       if (!selectedItems.length) return;
-      quoteOnlineOrderRequest({ items: selectedItems, deliveryType, deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null })
+      quoteOnlineOrderRequest({ items: selectedItems, deliveryType: "PICKUP" })
         .then(data => { if (active) setQuoteState(previous => receiveCheckoutQuote(previous, quoteKey, data)); })
         .catch(error => { if (active) setQuoteState(previous => ({ ...previous, key: quoteKey, data: null, ...checkoutQuoteFailure(error, { connection: isApiConnectionError(error), message: getApiError(error, "No se pudo calcular el pedido. Revisa los productos y cantidades.") }) })); });
     }, 180);
@@ -223,16 +193,12 @@ export default function CheckoutPage() {
     ? clientEmailVerified
     : Boolean(
       guestEmailVerification?.verified
-      && guestEmailVerification.email === normalizedGuestEmail,
+      && guestEmailVerification.email === normalizedGuestEmail
+      && guestEmailVerification.purpose === deliveryType,
     );
-  const deliveryDataIsValid = deliveryType === "PICKUP" || (
-    deliveryData.recipientName.trim()
-    && /^[+0-9()\s-]{7,20}$/.test(deliveryData.phone.trim())
-    && deliveryData.address.trim()
-  );
   const canStartPayment = !loading
+    && deliveryType === "PICKUP"
     && !pendingOrderLoading
-    && !savedAddressLoading
     && !submitting
     && !pendingOrder
     && rows.length > 0
@@ -240,16 +206,10 @@ export default function CheckoutPage() {
     && guestDataIsValid
     && emailVerifiedForCheckout
     && Boolean(quote)
-    && !quoteState.needsAcceptance
-    && Boolean(deliveryDataIsValid);
+    && !quoteState.needsAcceptance;
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
     : null;
-
-  const updateDeliveryData = (field, value) => {
-    deliveryTouchedRef.current = true;
-    setDeliveryData((current) => ({ ...current, [field]: value }));
-  };
 
   const handleContinuePayment = async () => {
     if (!pendingOrder?.canContinuePayment || continuingPayment) return;
@@ -271,8 +231,8 @@ export default function CheckoutPage() {
   };
 
   const handlePayment = async () => {
-    if (deliveryType === "DELIVERY" && !deliveryDataIsValid) {
-      toast.error("Completa correctamente los datos obligatorios del despacho");
+    if (deliveryType === "DELIVERY") {
+      toast.error("El despacho requiere una cotización manual aprobada. Por ahora puedes comprar con retiro en tienda.");
       return;
     }
     if (!canStartPayment || submittingRef.current) return;
@@ -290,14 +250,7 @@ export default function CheckoutPage() {
           quantity: row.quantity,
         })),
         deliveryType,
-        deliveryRecipientName: deliveryType === "DELIVERY" ? deliveryData.recipientName : null,
-        deliveryPhone: deliveryType === "DELIVERY" ? deliveryData.phone : null,
-        deliveryAddress: deliveryType === "DELIVERY" ? deliveryData.address : null,
-        deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null,
-        deliveryReference: deliveryType === "DELIVERY" ? deliveryData.reference : null,
-        deliveryLatitude: null,
-        deliveryLongitude: null,
-        saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveDeliveryAddress,
+        saveDeliveryAddress: false,
       };
       const payment = isClient
         ? await createOnlineOrderCheckoutRequest(checkoutData)
@@ -339,7 +292,7 @@ export default function CheckoutPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-300 gap-5 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
-      <LoadingOverlay active={loading || savedAddressLoading} />
+      <LoadingOverlay active={loading} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -502,7 +455,7 @@ export default function CheckoutPage() {
                     />
                   </label>
                   <p className="col-span-2 m-0 text-xs leading-5 text-slate-500 max-[620px]:col-span-1">
-                    Usaremos este correo para enviarte el comprobante y las actualizaciones de tu pedido.
+                    {deliveryType === "DELIVERY" ? "Usaremos este correo para verificar tu acceso a la solicitud. Consulta su estado manualmente." : "Usaremos este correo para enviarte el comprobante y las actualizaciones de tu pedido."}
                   </p>
                 </div>
               )}
@@ -510,7 +463,6 @@ export default function CheckoutPage() {
                 <EmailVerificationPanel
                   key={`client-${user.correo}`}
                   email={user.correo}
-                  description="Debes verificar tu correo antes de continuar con esta compra. Tu selección de productos se conserva."
                   requestCode={requestClientEmailVerification}
                   verifyCode={verifyClientEmail}
                   onVerified={(session) => {
@@ -524,18 +476,19 @@ export default function CheckoutPage() {
               {!isClient && !pendingOrder && (
                 guestEmailFieldsAreValid ? (
                   <EmailVerificationPanel
-                    key={`guest-${normalizedGuestEmail}`}
+                    key={`guest-${normalizedGuestEmail}-${deliveryType}`}
                     email={normalizedGuestEmail}
-                    requestCode={() => requestGuestEmailVerification(normalizedGuestEmail)}
-                    verifyCode={verifyGuestEmail}
-                    verified={emailVerifiedForCheckout}
+                    requestCode={() => deliveryType === "DELIVERY" ? quotePinRequest(normalizedGuestEmail) : requestGuestEmailVerification(normalizedGuestEmail)}
+                    verifyCode={deliveryType === "DELIVERY" ? quotePinVerify : verifyGuestEmail}
+                    verified={emailVerifiedForCheckout && guestEmailVerification?.purpose === deliveryType}
                     onVerified={(result) => setGuestEmailVerification({
                       challengeId: result.challengeId,
                       email: result.email,
                       verified: true,
+                      purpose: deliveryType,
                     })}
                     title="Verifica el correo de esta compra"
-                    description="Debes confirmar el correo antes de iniciar Webpay."
+                    description={deliveryType === "DELIVERY" ? "Confirma el correo para registrar tu solicitud, sin iniciar un pago." : "Debes confirmar el correo antes de iniciar Webpay."}
                   />
                 ) : (
                   <p className="m-0 rounded-[5px] bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
@@ -554,47 +507,18 @@ export default function CheckoutPage() {
               <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
                 <label className={`flex cursor-pointer items-start gap-3 rounded-[5px] border p-4 ${deliveryType === "PICKUP" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
                   <input className="mt-1 size-4" type="radio" name="deliveryType" value="PICKUP" checked={deliveryType === "PICKUP"} onChange={() => setDeliveryType("PICKUP")} />
-                  <span className="grid gap-1"><strong className="flex items-center gap-2 text-sm text-ink-950"><Store size={17} /> Retiro en tienda</strong><span className="text-xs leading-5 text-slate-500">Retira el pedido en la ferretería cuando aparezca como listo.</span></span>
+                  <span className="grid gap-1"><strong className="flex items-center gap-2 text-sm text-ink-950"><Store size={17} /> Retiro en tienda</strong><span className="text-xs leading-5 text-slate-500">Sin costo.</span></span>
                 </label>
                 <label className={`flex cursor-pointer items-start gap-3 rounded-[5px] border p-4 ${deliveryType === "DELIVERY" ? "border-rust-500 bg-rust-50" : "border-slate-200 bg-white"}`}>
                   <input className="mt-1 size-4" type="radio" name="deliveryType" value="DELIVERY" checked={deliveryType === "DELIVERY"} onChange={() => setDeliveryType("DELIVERY")} />
-                  <span className="grid gap-1"><strong className="flex items-center gap-2 text-sm text-ink-950"><Truck size={17} /> Despacho a domicilio</strong><span className="text-xs leading-5 text-slate-500">Ingresa los datos de la persona y dirección que recibirá el pedido.</span></span>
+                  <span className="grid gap-1"><strong className="flex items-center gap-2 text-sm text-ink-950"><Truck size={17} /> Despacho a domicilio</strong><span className="text-xs leading-5 text-slate-500">Sujeto a ubicación y características del pedido.</span></span>
                 </label>
               </div>
 
               {deliveryType === "DELIVERY" && (
-                <div className="grid grid-cols-2 gap-3 max-[620px]:grid-cols-1">
-                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">Nombre del destinatario
-                    <input maxLength="240" required value={deliveryData.recipientName} onChange={(event) => updateDeliveryData("recipientName", event.target.value)} placeholder="Nombre y apellido" />
-                  </label>
-                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">Teléfono de contacto
-                    <input maxLength="20" required value={deliveryData.phone} onChange={(event) => updateDeliveryData("phone", event.target.value)} placeholder="Ej: +56 9 1234 5678" />
-                  </label>
-                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">Dirección
-                    <div className="relative"><MapPin className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={16} /><input className="w-full pl-9" maxLength="300" required value={deliveryData.address} onChange={(event) => updateDeliveryData("address", event.target.value)} placeholder="Calle, número, casa o departamento" /></div>
-                  </label>
-                  <label className="grid gap-1.5 text-xs font-bold text-slate-600">Comuna
-                    <input readOnly value={DELIVERY_COMMUNE} aria-readonly="true" />
-                  </label>
-                  <label className="col-span-2 grid gap-1.5 text-xs font-bold text-slate-600 max-[620px]:col-span-1">Referencia / indicaciones <span className="font-normal text-slate-400">(opcional)</span>
-                    <textarea className="min-h-20 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2 text-ink-950 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500" maxLength="500" value={deliveryData.reference} onChange={(event) => updateDeliveryData("reference", event.target.value)} placeholder="Ej: portón azul, llamar al llegar" />
-                  </label>
-                  {isClient && (
-                    <label className="col-span-2 flex cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-ink-950 max-[620px]:col-span-1">
-                      <input
-                        className="mt-0.5 size-4 shrink-0"
-                        type="checkbox"
-                        checked={saveDeliveryAddress}
-                        onChange={(event) => setSaveDeliveryAddress(event.target.checked)}
-                      />
-                      <span>
-                        Guardar esta dirección para próximas compras
-                        <small className="mt-0.5 block font-normal leading-5 text-slate-500">
-                          Solo se actualizará tu dirección guardada si mantienes esta opción seleccionada.
-                        </small>
-                      </span>
-                    </label>
-                  )}
+                <div className="grid gap-3">
+                  <DeliveryConditions />
+                  <DeliveryQuoteRequestForm items={JSON.parse(quoteItemsKey)} isClient={isClient} user={user} guestData={guestData} verification={guestEmailVerification} verified={!hasAvailabilityIssues && guestDataIsValid && (isClient ? clientEmailVerified : emailVerifiedForCheckout && guestEmailVerification?.purpose === "DELIVERY")} />
                 </div>
               )}
             </section>
@@ -603,23 +527,26 @@ export default function CheckoutPage() {
           <aside className="sticky top-22 grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm max-[900px]:static">
             <h2 className="m-0 text-lg font-bold text-ink-950">Resumen</h2>
             <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega</span><strong className="text-right text-ink-950">{deliveryType === "DELIVERY" ? "Despacho a domicilio" : "Retiro en tienda"}</strong></div>
-            {quote && <div aria-live="polite"><OrderAmounts order={quote} /></div>}
-            {quote?.deliveryBenefit?.active && deliveryType === "DELIVERY" && <p role="status" className="m-0 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm font-semibold text-ink-950">{quote.deliveryBenefit.qualified ? "¡Tu compra tiene despacho gratis!" : `Te faltan ${formatClp(quote.deliveryBenefit.remaining)} en productos para obtener despacho gratis`}</p>}
-            {quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los importes y acepta el resumen actualizado antes de volver a iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => ({ ...previous, needsAcceptance: false }))}>Aceptar resumen actualizado</button></div>}
-            {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
+            {quote && deliveryType === "PICKUP" && <div aria-live="polite"><OrderAmounts order={quote} /></div>}
+            {deliveryType === "DELIVERY" && <div className="grid gap-3 text-sm" aria-live="polite">
+              <div className="flex flex-wrap justify-between gap-2"><span>Subtotal neto de productos</span><strong>{formatClp(rows.reduce((sum, row) => sum + row.subtotal, 0))}</strong></div>
+              <div className="flex justify-between gap-2 font-semibold"><span>Despacho</span><span>Por cotizar</span></div>
+              <p className="m-0 text-xs leading-5 text-slate-500">Este monto corresponde solo a productos. FYF debe aprobar el flete antes de que revises el total final y puedas pagar.</p>
+              <button type="button" onClick={() => setDeliveryType("PICKUP")}>Seleccionar retiro en tienda</button>
+            </div>}
+            {deliveryType === "PICKUP" && quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los productos, condiciones e importes y acepta el resumen actualizado antes de iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature))}>Aceptar resumen actualizado</button></div>}
+            {quoteError && !(deliveryType === "DELIVERY" && quoteState.errorKind === "MANUAL_DELIVERY") && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
               <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
               {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
-              {quoteState.errorKind === "DELIVERY_UNAVAILABLE" && <button className="min-h-11 w-full justify-center" type="button" onClick={() => setDeliveryType("PICKUP")}>Seleccionar retiro en tienda</button>}
               {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to="/cart">Revisar productos y cantidades en el carrito</Link>}
             </div>}
-            {!quote && !quoteError && <p role="status" className="text-sm text-slate-500">Actualizando cotización...</p>}
-            {deliveryType === "DELIVERY" && <small className="text-slate-500">La comuna se valida por su nombre. No existe verificación geográfica automática ni delimitación de zonas.</small>}
+            {deliveryType === "PICKUP" && !quote && !quoteError && <p role="status" className="text-sm text-slate-500">Actualizando cotización...</p>}
 
-            <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+            {deliveryType === "PICKUP" && <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
               <strong className="flex items-center gap-2 text-ink-950"><CreditCard size={17} /> Webpay Plus</strong>
-              <span>Será el único medio de pago. Serás redirigido al sitio seguro de Webpay.</span>
+              <span>Para esta compra con retiro, serás redirigido al sitio seguro de Webpay.</span>
               <span className="flex items-start gap-2"><ShieldCheck className="mt-0.5 shrink-0 text-positive-600" size={15} /> Los precios, el total y el stock se validarán nuevamente en el servidor.</span>
-            </div>
+            </div>}
 
             {hasAvailabilityIssues && !loading && (
               <p className="m-0 rounded-[5px] bg-critical-50 px-3 py-3 text-xs leading-5 text-critical-600">
@@ -627,10 +554,10 @@ export default function CheckoutPage() {
               </p>
             )}
 
-            <button type="button" onClick={handlePayment} disabled={!canStartPayment}>
+            {deliveryType === "PICKUP" && <button type="button" onClick={handlePayment} disabled={!canStartPayment}>
               <CreditCard size={18} />
               {submitting ? "Iniciando Webpay..." : "Pagar con Webpay Plus"}
-            </button>
+            </button>}
             <Link className="text-center text-sm font-bold text-rust-600" to="/cart">Modificar carrito</Link>
           </aside>
         </div>

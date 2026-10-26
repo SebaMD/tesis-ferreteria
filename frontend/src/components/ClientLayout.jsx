@@ -9,6 +9,7 @@ export default function ClientLayout({ children }) {
       <footer className="mt-12 border-t border-slate-200 bg-white px-6 py-7 text-center text-xs text-slate-500">
         <span>FERRETERIA FYF · Tienda online</span>
         <Link className="mt-3 block font-semibold text-rust-600 underline" to="/changes-and-returns">Cambios y devoluciones</Link>
+        <Link className="mt-3 block font-semibold text-rust-600 underline" to="/delivery-conditions">Condiciones de despacho</Link>
       </footer>
     </div>
   );

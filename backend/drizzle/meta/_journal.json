@@ -218,6 +218,20 @@
       "when": 1792532707174,
       "tag": "0030_delivery_tariffs",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792981141139,
+      "tag": "0031_manual_delivery_quotes",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793025179484,
+      "tag": "0032_delivery_quote_checkout",
+      "breakpoints": true
     }
   ]
 }

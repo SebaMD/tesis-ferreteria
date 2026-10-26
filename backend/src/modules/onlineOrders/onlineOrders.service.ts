@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { commercialQuoteSignature } from "../deliverySettings/deliveryPricing.js";
+import { assertManualDeliveryPaymentAuthorization } from "../deliveryQuotes/manualDeliveryAuthorization.js";
 import { db, type DbTransaction } from "../../db/index.js";
 import { logServerError } from "../../utils/helpers.js";
 import {
@@ -105,7 +107,7 @@ import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.serv
 import { calculateDelivery, deliveryBenefit, DeliveryPolicyError, quoteFingerprint } from "../deliverySettings/deliveryPricing.js";
 import { buildCommercialAmounts } from "./commercialAmounts.js";
 
-async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckoutBody["items"]) {
+export async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckoutBody["items"]) {
   const ids = items.map(item => item.productId);
   await acquirePromotionPricingLock(tx);
   const products = await lockProductsForAvailability(tx, ids);
@@ -147,8 +149,12 @@ export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "it
     const amounts = { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),
       productsNet: q.productsNet.toFixed(2), deliveryFee: q.delivery.fee.toFixed(2), deliveryFeeReason: q.delivery.reason,
       total: q.total.toFixed(2), quoteFingerprint: q.fingerprint, policyVersion: q.policy.version, isDemo: q.policy.isDemo };
-    return { ...amounts, commercialAmounts: buildCommercialAmounts({ ...amounts, deliveryType: data.deliveryType, deliveryBaseFee: q.policy.flatFee }),
-      deliveryBenefit: deliveryBenefit(q.policy, data.deliveryType, q.productsNet) };
+    const commercialAmounts = buildCommercialAmounts({ ...amounts, deliveryType: data.deliveryType, deliveryBaseFee: q.policy.flatFee });
+    const benefit = deliveryBenefit(q.policy, data.deliveryType, q.productsNet);
+    const commercialSignature = commercialQuoteSignature({ revisionId: q.policy.id, deliveryType: data.deliveryType, items: q.orderItems, fee: q.delivery.fee },
+      { commercialAmounts, benefit, isDemo: q.policy.isDemo });
+    return { ...amounts, commercialSignature, commercialAmounts,
+      deliveryBenefit: benefit };
   });
 }
 
@@ -180,7 +186,7 @@ type PreparedPayment = {
   guestAccessToken?: string;
 };
 
-type CheckoutOwner =
+export type CheckoutOwner =
   | { type: "CLIENT"; clientId: number }
   | {
     type: "GUEST";
@@ -189,7 +195,7 @@ type CheckoutOwner =
     guestName: string;
     guestEmail: string;
     guestPhone: string;
-    emailVerificationChallengeId: number;
+    emailVerificationChallengeId?: number;
   };
 
 const WEBPAY_LAUNCH_REUSE_MILLISECONDS = 4 * 60_000;
@@ -251,6 +257,8 @@ async function preparePaymentAttempt(
     guestAccessToken?: string;
   },
 ) {
+  try { await assertManualDeliveryPaymentAuthorization(tx, data.orderId); }
+  catch(error) { if(error instanceof DeliveryPolicyError)throw new OnlineOrderError(error.message,error.statusCode); throw error; }
   const payment = await createOnlinePayment(tx, {
     orderId: data.orderId,
     buyOrder: createBuyOrder(data.orderId),
@@ -316,7 +324,15 @@ async function issueGuestAccessInTransaction(tx: DbTransaction, orderId: number)
   return access.token;
 }
 
-async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckoutBody) {
+export type ManualCheckoutContext = {
+  authorize: (tx: DbTransaction) => Promise<void>;
+  resolve: (tx: DbTransaction) => Promise<Omit<Awaited<ReturnType<typeof priceCheckout>>, "delivery"> & {
+    delivery: {fee:number;reason:string}; deliveryQuoteRequestId:number; deliveryQuoteAcceptanceId:number;
+  }>;
+  complete: (tx: DbTransaction, orderId:number) => Promise<void>;
+};
+
+export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckoutBody, manual?: ManualCheckoutContext) {
   await reconcileDueOnlinePaymentsService(owner.type === "CLIENT"
     ? { clientId: owner.clientId }
     : { guestSessionHash: owner.guestSessionHash });
@@ -336,6 +352,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
 
   try {
     await db.transaction(async (tx) => {
+      if(manual) await manual.authorize(tx);
       if (owner.type === "CLIENT") {
         const client = await findActiveClientForUpdate(tx, owner.clientId);
         assertActiveClient(client);
@@ -426,7 +443,8 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
           403,
         );
       }
-      if (owner.type === "GUEST") {
+      if (owner.type === "GUEST" && !manual) {
+        if(!owner.emailVerificationChallengeId) throw new OnlineOrderError("Verifica el correo antes de comprar",403);
         const consumedChallenge = await consumeVerifiedGuestChallenge(tx, {
           challengeId: owner.emailVerificationChallengeId,
           guestSessionHash: owner.guestSessionHash,
@@ -440,7 +458,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         }
       }
 
-      const quote = await priceCheckout(tx, data);
+      const quote = manual ? await manual.resolve(tx) : await priceCheckout(tx, data);
       if (!data.quoteFingerprint || data.quoteFingerprint !== quote.fingerprint) {
         throw new DeliveryPolicyError("La cotización cambió o venció. Revisa el resumen actualizado y confirma nuevamente.", 409, "QUOTE_CHANGED");
       }
@@ -459,6 +477,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         deliveryFee: quote.delivery.fee.toFixed(2),
         deliveryPolicyRevisionId: quote.policy.id,
         deliveryFeeReason: quote.delivery.reason,
+        ...("deliveryQuoteRequestId" in quote ? {deliveryQuoteRequestId:quote.deliveryQuoteRequestId,deliveryQuoteAcceptanceId:quote.deliveryQuoteAcceptanceId} : {}),
         deliveryType: data.deliveryType,
         deliveryRecipientName: data.deliveryRecipientName,
         deliveryPhone: data.deliveryPhone,
@@ -511,6 +530,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         total: order.total,
         guestAccessToken,
       });
+      if(manual) await manual.complete(tx, order.id);
     });
   } catch (error) {
     if (databaseErrorCode(error) === "23505") {
@@ -738,12 +758,23 @@ export async function getGuestPendingOrderService(guestSessionId: string) {
 
 export async function continueGuestOnlineOrderPaymentService(guestSessionId: string) {
   const guestSessionHash = guestSessionHashOrError(guestSessionId);
+  return continueGuestPaymentForSession(guestSessionHash);
+}
+
+export async function continueGuestPaymentByTokenService(accessToken:string) {
+  const orderId=await guestOrderIdFromAccessToken(accessToken);
+  const order=await db.transaction(tx=>findOrderForGuestUpdate(tx,orderId));
+  if(!order?.guestSessionHash)throw new OnlineOrderError("Pedido no encontrado",404);
+  return {...await continueGuestPaymentForSession(order.guestSessionHash,orderId),guestAccessToken:accessToken};
+}
+
+async function continueGuestPaymentForSession(guestSessionHash:string,expectedOrderId?:number) {
   await reconcileDueOnlinePaymentsService({ guestSessionHash });
 
   return db.transaction(async (tx) => {
     await expirePendingOrdersForGuestSession(tx, guestSessionHash);
     const pending = await findPendingOrderForGuestSession(tx, guestSessionHash);
-    if (!pending) throw new OnlineOrderError("No existe un pago pendiente para esta sesion", 404);
+    if (!pending || (expectedOrderId!==undefined && pending.id!==expectedOrderId)) throw new OnlineOrderError("No existe un pago pendiente para esta sesion", 404);
 
     const order = await findOrderForGuestUpdate(tx, pending.id);
     if (!order || order.guestSessionHash !== guestSessionHash) {

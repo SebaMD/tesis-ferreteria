@@ -78,8 +78,8 @@ export default function EmailVerificationPanel({
     setError("");
     try {
       const result = await verifyCode({ challengeId: challenge.challengeId, pin });
+      await onVerified?.(result, challenge);
       toast.success("Correo verificado correctamente");
-      onVerified?.(result, challenge);
     } catch (verifyError) {
       const message = getApiError(verifyError, "No se pudo verificar el codigo");
       setError(message);

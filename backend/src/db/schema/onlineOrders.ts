@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -12,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.js";
 import { deliveryPolicyRevisionsTable } from "./deliverySettings.js";
+import { deliveryQuoteRequestsTable, deliveryQuoteEventsTable } from "./deliveryQuotes.js";
 
 export const onlineOrdersTable = pgTable(
   "online_orders",
@@ -33,6 +35,8 @@ export const onlineOrdersTable = pgTable(
     deliveryFee: numeric("delivery_fee", { precision: 12, scale: 2 }),
     deliveryPolicyRevisionId: integer("delivery_policy_revision_id").references(() => deliveryPolicyRevisionsTable.id, { onDelete: "restrict" }),
     deliveryFeeReason: varchar("delivery_fee_reason", { length: 30 }),
+    deliveryQuoteRequestId: integer("delivery_quote_request_id").references(()=>deliveryQuoteRequestsTable.id,{onDelete:"restrict"}),
+    deliveryQuoteAcceptanceId: integer("delivery_quote_acceptance_id"),
     deliveryType: varchar("delivery_type", { length: 20 }).notNull().default("PICKUP"),
     deliveryRecipientName: varchar("delivery_recipient_name", { length: 240 }),
     deliveryPhone: varchar("delivery_phone", { length: 20 }),
@@ -63,13 +67,16 @@ export const onlineOrdersTable = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("online_orders_delivery_quote_unique").on(table.deliveryQuoteRequestId),
+    foreignKey({name:"online_order_quote_acceptance_fk",columns:[table.deliveryQuoteAcceptanceId,table.deliveryQuoteRequestId],foreignColumns:[deliveryQuoteEventsTable.id,deliveryQuoteEventsTable.requestId]}),
+    check("online_order_manual_quote_check",sql`(${table.deliveryQuoteRequestId} is null and ${table.deliveryQuoteAcceptanceId} is null and (${table.deliveryFeeReason} is null or ${table.deliveryFeeReason} in ('PICKUP','FLAT','FREE_THRESHOLD'))) or (${table.deliveryQuoteRequestId} is not null and ${table.deliveryQuoteAcceptanceId} is not null and ${table.deliveryType}='DELIVERY' and ${table.deliveryFeeReason} in ('MANUAL_APPROVED','MANUAL_FREE_RADIUS','MANUAL_FREE_CONDITIONAL','MANUAL_FREE_EXCEPTION'))`),
     check("online_orders_delivery_breakdown_check", sql`(
       ${table.productsSubtotal} is null and ${table.productsDiscountTotal} is null and ${table.deliveryFee} is null and ${table.deliveryPolicyRevisionId} is null and ${table.deliveryFeeReason} is null
     ) or (
       ${table.productsSubtotal} is not null and ${table.productsDiscountTotal} is not null and ${table.deliveryFee} is not null and ${table.deliveryPolicyRevisionId} is not null and ${table.deliveryFeeReason} is not null
       and ${table.productsSubtotal} >= ${table.productsDiscountTotal} and ${table.productsDiscountTotal} >= 0 and ${table.deliveryFee} >= 0
       and ${table.total} = ${table.productsSubtotal} - ${table.productsDiscountTotal} + ${table.deliveryFee}
-      and ${table.deliveryFeeReason} in ('PICKUP', 'FLAT', 'FREE_THRESHOLD')
+      and ${table.deliveryFeeReason} in ('PICKUP', 'FLAT', 'FREE_THRESHOLD', 'MANUAL_APPROVED', 'MANUAL_FREE_RADIUS', 'MANUAL_FREE_CONDITIONAL', 'MANUAL_FREE_EXCEPTION')
       and (${table.deliveryType} <> 'PICKUP' or (${table.deliveryFee} = 0 and ${table.deliveryFeeReason} = 'PICKUP'))
     )`),
     index("online_orders_client_id_idx").on(table.clientId),

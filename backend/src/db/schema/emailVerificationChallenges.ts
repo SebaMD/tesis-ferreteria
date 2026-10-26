@@ -6,6 +6,8 @@ export const EMAIL_VERIFICATION_PURPOSES = [
   "CLIENT_REGISTRATION",
   "CLIENT_EMAIL_CHANGE",
   "GUEST_CHECKOUT",
+  "GUEST_DELIVERY_REQUEST",
+  "GUEST_DELIVERY_ACCESS",
   "INTERNAL_USER_REGISTRATION",
   "CLIENT_REACTIVATION",
 ] as const;
@@ -41,7 +43,7 @@ export const emailVerificationChallengesTable = pgTable(
       .where(sql`${table.guestSessionHash} is not null and ${table.consumedAt} is null`),
     check(
       "email_verification_purpose_check",
-      sql`${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'GUEST_CHECKOUT', 'INTERNAL_USER_REGISTRATION', 'CLIENT_REACTIVATION')`,
+      sql`${table.purpose} in ('CLIENT_REGISTRATION', 'CLIENT_EMAIL_CHANGE', 'GUEST_CHECKOUT', 'GUEST_DELIVERY_REQUEST', 'GUEST_DELIVERY_ACCESS', 'INTERNAL_USER_REGISTRATION', 'CLIENT_REACTIVATION')`,
     ),
     check(
       "email_verification_owner_check",
@@ -50,7 +52,7 @@ export const emailVerificationChallengesTable = pgTable(
         and ${table.userId} is not null
         and ${table.guestSessionHash} is null
       ) or (
-        ${table.purpose} = 'GUEST_CHECKOUT'
+        ${table.purpose} in ('GUEST_CHECKOUT','GUEST_DELIVERY_REQUEST','GUEST_DELIVERY_ACCESS')
         and ${table.userId} is null
         and ${table.guestSessionHash} is not null
         and length(${table.guestSessionHash}) = 64

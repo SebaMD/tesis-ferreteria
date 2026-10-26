@@ -500,7 +500,7 @@ export default function OnlineOrdersManagementPage() {
             />
           </div>
         </div>
-        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3">
+        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:justify-center">
           {(search || status !== "ALL") && (
             <button
               className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"

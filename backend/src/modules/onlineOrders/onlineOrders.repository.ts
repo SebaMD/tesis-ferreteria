@@ -77,6 +77,7 @@ export async function deleteClientDeliveryAddress(clientId: number) {
 }
 
 import { orderAmountColumns } from "./orderAmountColumns.js";
+import { buildCommercialAmounts } from "./commercialAmounts.js";
 const orderColumns = {
   ...orderAmountColumns,
   id: onlineOrdersTable.id,
@@ -814,7 +815,7 @@ export async function updateOrderStatus(
   return order ?? null;
 }
 
-async function attachOrderData<T extends { id: number }>(orders: T[]) {
+async function attachOrderData<T extends { id: number; total: string }>(orders: T[]) {
   if (orders.length === 0) return [];
   const orderIds = orders.map((order) => order.id);
 
@@ -888,6 +889,7 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
     return {
       ...order,
       items: itemsByOrder.get(order.id) ?? [],
+      commercialAmounts: buildCommercialAmounts({ ...order, items: itemsByOrder.get(order.id) ?? [] }),
       payment: payment ? clientPayment : null,
       canContinuePayment: orderStatus === "PENDING_PAYMENT"
         && payment?.status === "CREATED"

@@ -205,10 +205,6 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
             <span className="block text-xs font-bold text-slate-500">Fecha de compra</span>
             <span className="mt-1 block text-sm text-ink-950">{formatDate(order.paidAt || order.createdAt, { dateStyle: "long", timeStyle: "short" })}</span>
           </div>
-          <div className="text-right">
-            <span className="block text-xs font-bold text-slate-500">Total</span>
-            <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
-          </div>
         </footer>
       </div>
     </AppModal>

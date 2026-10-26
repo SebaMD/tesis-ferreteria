@@ -1,14 +1,9 @@
-import { formatClp } from "../../helpers/formatters.js";
+import { commercialAmountLines, formatCommercialAmount } from "../../helpers/commercialAmounts.js";
 
 export default function OrderAmounts({ order }) {
-  const legacy = order.deliveryFee == null;
-  const subtotal = order.productsSubtotal ?? order.baseSubtotal ?? (order.items || []).reduce((s, i) => s + Number(i.unitPrice) * i.quantity, 0);
-  const discount = order.productsDiscountTotal ?? order.totalDiscount ?? (order.items || []).reduce((s, i) => s + Number(i.discountAmount || 0), 0);
   return <div className="grid gap-1.5 text-sm" aria-label="Desglose histórico del pedido">
-    <div className="flex flex-wrap justify-between gap-2"><span>Subtotal de productos</span><strong>{formatClp(subtotal)}</strong></div>
-    <div className="flex flex-wrap justify-between gap-2"><span>Descuentos de productos</span><strong>−{formatClp(discount)}</strong></div>
-    <div className="flex flex-wrap justify-between gap-2"><span>Despacho</span><strong>{legacy ? "Sin cargo registrado (histórico)" : formatClp(order.deliveryFee)}</strong></div>
-    {order.deliveryFeeReason === "FREE_THRESHOLD" && <small>Despacho gratuito por monto de productos.</small>}
+    {commercialAmountLines(order).map(line => <div key={line.key} className={`flex flex-wrap justify-between gap-x-3 gap-y-1 ${line.key === "total" ? "mt-2 border-t border-slate-200 pt-3 font-bold" : ""}`}><span className="min-w-0 flex-1">{line.label}</span><strong className="shrink-0 font-mono">{formatCommercialAmount(line)}</strong></div>)}
+    {order.commercialAmounts?.note && <small className="text-slate-500">{order.commercialAmounts.note}</small>}
     {(order.deliveryIsDemo || order.isDemo) && <small className="text-slate-500">Tarifa DEMO ficticia. No corresponde a una tarifa oficial de FYF.</small>}
   </div>;
 }

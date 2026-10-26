@@ -1,5 +1,6 @@
 import { formatClp, formatDate } from "./formatters.js";
 import { getOnlineOrderStatus } from "./onlineOrders.js";
+import { commercialAmountLines, formatCommercialAmount } from "./commercialAmounts.js";
 
 export function canViewAdministrativeOrder(role) {
   return role === "ADMIN" || role === "MANAGER";
@@ -26,10 +27,9 @@ export function getAdministrativeOrderSections(model) {
       ] : []),
     ] },
     { title: "Resumen económico", fields: [
-      ["Subtotal original", formatClp(model.baseSubtotal)], ["Descuentos", formatClp(model.totalDiscount)],
-      ["Despacho", model.deliveryFee == null ? "Sin cargo registrado (histórico)" : formatClp(model.deliveryFee)],
+      ...commercialAmountLines(model).map(line => [line.label, formatCommercialAmount(line)]),
+      ...(model.commercialAmounts?.note ? [["Información histórica", model.commercialAmounts.note]] : []),
       ...(model.deliveryIsDemo ? [["Tarifa", "DEMO ficticia, no oficial de FYF"]] : []),
-      ["Total del pedido", formatClp(model.total)],
     ] },
     { title: "Información de pago Webpay", fields: [
       ["Confirmación de pago", model.paymentConfirmed ? "Pago confirmado" : "No confirmado para registro de venta"],

@@ -24,9 +24,11 @@ export function validateDeliverySettings(body: unknown) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new DeliveryPolicyError("Configuración inválida", 400);
   const input = body as Record<string, unknown>;
   const allowed = ["expectedRevisionId", "pickupEnabled", "deliveryEnabled", "flatFee", "minimumProductsTotal", "freeShippingFrom", "isDemo"];
-  if (Object.keys(input).some(k => !allowed.includes(k)) || allowed.some(k => !(k in input))) throw new DeliveryPolicyError("La configuración contiene campos faltantes o no permitidos", 400);
+  const required = allowed.filter(k => !["pickupEnabled", "minimumProductsTotal"].includes(k));
+  if (Object.keys(input).some(k => !allowed.includes(k)) || required.some(k => !(k in input))) throw new DeliveryPolicyError("La configuración contiene campos faltantes o no permitidos", 400);
+  if (("pickupEnabled" in input && input.pickupEnabled !== true) || ("minimumProductsTotal" in input && input.minimumProductsTotal !== null)) throw new DeliveryPolicyError("Las nuevas revisiones mantienen retiro habilitado y no admiten compra mínima para despacho", 400);
   if (input.expectedRevisionId !== null && (!Number.isSafeInteger(input.expectedRevisionId) || Number(input.expectedRevisionId) < 1)) throw new DeliveryPolicyError("Versión inválida", 400);
-  for (const k of ["pickupEnabled", "deliveryEnabled", "isDemo"]) if (typeof input[k] !== "boolean") throw new DeliveryPolicyError("Las opciones deben ser verdaderas o falsas", 400);
+  for (const k of ["deliveryEnabled", "isDemo"]) if (typeof input[k] !== "boolean") throw new DeliveryPolicyError("Las opciones deben ser verdaderas o falsas", 400);
   const amount = (key: string, nullable = false) => {
     const value = input[key];
     if (nullable && value === null) return null;
@@ -34,9 +36,9 @@ export function validateDeliverySettings(body: unknown) {
     return value.toFixed(2);
   };
   return { expectedRevisionId: input.expectedRevisionId as number | null,
-    pickupEnabled: input.pickupEnabled as boolean, deliveryEnabled: input.deliveryEnabled as boolean,
+    pickupEnabled: true, deliveryEnabled: input.deliveryEnabled as boolean,
     isDemo: input.isDemo as boolean, flatFee: amount("flatFee")!,
-    minimumProductsTotal: amount("minimumProductsTotal", true), freeShippingFrom: amount("freeShippingFrom", true) };
+    minimumProductsTotal: null, freeShippingFrom: amount("freeShippingFrom", true) };
 }
 
 export async function saveDeliverySettings(actorId: number, body: unknown) {

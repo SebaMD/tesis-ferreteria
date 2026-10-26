@@ -29,6 +29,7 @@ export type LogisticsStatus = OnlineOrderStatus | SaleDeliveryStatus;
 export type LogisticsScope = "ALL" | "MINE";
 
 import { orderAmountColumns } from "../onlineOrders/orderAmountColumns.js";
+import { buildCommercialAmounts, type CommercialAmounts } from "../onlineOrders/commercialAmounts.js";
 const onlineColumns = {
   ...orderAmountColumns,
   id: onlineOrdersTable.id,
@@ -135,6 +136,7 @@ type LogisticsItem = {
 };
 
 export type LogisticsTask = {
+  commercialAmounts?: CommercialAmounts;
   productsSubtotal?: string | null;
   productsDiscountTotal?: string | null;
   deliveryFee?: string | null;
@@ -362,6 +364,7 @@ export async function findLogisticsTasks(filters: {
     return {
       ...publicRow,
       origin: "ONLINE",
+      commercialAmounts: buildCommercialAmounts({ ...row, items }),
       folio: `P-${String(row.id).padStart(6, "0")}`,
       status: row.status as LogisticsStatus,
       deliveryType: row.deliveryType as "PICKUP" | "DELIVERY",

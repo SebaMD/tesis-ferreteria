@@ -23,8 +23,8 @@ function useReducedMotion() {
 }
 
 export default function CatalogNoticeCarousel() {
-  const { notices, presentation } = useCustomerNotice();
-  const slides = useMemo(() => buildCatalogSlides(presentation, notices), [notices, presentation]);
+  const { notices, presentation, deliveryAnnouncement } = useCustomerNotice();
+  const slides = useMemo(() => buildCatalogSlides(presentation, notices, deliveryAnnouncement), [notices, presentation, deliveryAnnouncement]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timerVersion, setTimerVersion] = useState(0);
   const reducedMotion = useReducedMotion();

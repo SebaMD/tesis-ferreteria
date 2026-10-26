@@ -1,3 +1,5 @@
+import { buildCommercialAmounts, type CommercialAmounts } from "./commercialAmounts.js";
+
 export const RECEIPT_ELIGIBLE_ORDER_STATUSES = new Set([
   "PAID",
   "PREPARING",
@@ -71,6 +73,7 @@ type CommercialOrderItemSource = {
 };
 
 export type CommercialOrderSource = {
+  deliveryBaseFee?: string | null;
   productsSubtotal?: string | null;
   productsDiscountTotal?: string | null;
   deliveryFee?: string | null;
@@ -95,6 +98,7 @@ export type CommercialOrderSource = {
 };
 
 export type OrderCommercialModel = {
+  commercialAmounts: CommercialAmounts;
   productsNet: string;
   deliveryFee: string | null;
   deliveryFeeLabel: string;
@@ -171,6 +175,7 @@ export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCo
   const totalDiscount = items.reduce((total, item) => total + Number(item.discountAmount), 0);
 
   return {
+    commercialAmounts: buildCommercialAmounts(order),
     orderId: order.id,
     folio: `P-${String(order.id).padStart(6, "0")}`,
     status: order.status,

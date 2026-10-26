@@ -62,7 +62,7 @@ export async function quoteOnlineOrderController(req: Request, res: Response) {
     res.setHeader("Cache-Control", "no-store");
     return handleSuccess(res, 200, "Cotización calculada", await quoteOnlineOrderService(validation.value));
   } catch (e) {
-    if (e instanceof DeliveryPolicyError) return res.status(e.statusCode).json({ status: "error", message: e.message });
+    if (e instanceof DeliveryPolicyError) return res.status(e.statusCode).json({ status: "error", message: e.message, code: e.code });
     if (e instanceof OnlineOrderError) return handleErrorClient(res, e.statusCode, e.message);
     return handleErrorServer(res, 500, "No se pudo cotizar. Intenta nuevamente.", e);
   }
@@ -92,7 +92,7 @@ export async function createCheckoutController(req: AuthenticatedRequest, res: R
     const payment = await createCheckoutService(requireClient(req), validation.value);
     return handleSuccess(res, 201, "Pedido reservado y pago Webpay iniciado", payment);
   } catch (error) {
-    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message });
+    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message, code: error.code });
     if (error instanceof OnlineOrderError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
@@ -122,7 +122,7 @@ export async function createGuestCheckoutController(req: Request, res: Response)
     );
     return handleSuccess(res, 201, "Pedido invitado reservado y pago Webpay iniciado", payment);
   } catch (error) {
-    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message });
+    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message, code: error.code });
     if (error instanceof OnlineOrderError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }

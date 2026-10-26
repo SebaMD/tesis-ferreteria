@@ -225,10 +225,6 @@ export default function PaymentResultPage() {
               />
 
               <OrderAmounts order={order} />
-              <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
-                <span className="font-bold text-slate-600">Total</span>
-                <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
-              </div>
             </section>
           )}
 

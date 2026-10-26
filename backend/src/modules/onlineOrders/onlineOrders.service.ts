@@ -102,7 +102,8 @@ import {
 } from "../promotions/promotions.repository.js";
 import { calculatePromotionPricing } from "../promotions/promotionPricing.js";
 import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
-import { calculateDelivery, DeliveryPolicyError, quoteFingerprint } from "../deliverySettings/deliveryPricing.js";
+import { calculateDelivery, deliveryBenefit, DeliveryPolicyError, quoteFingerprint } from "../deliverySettings/deliveryPricing.js";
+import { buildCommercialAmounts } from "./commercialAmounts.js";
 
 async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckoutBody["items"]) {
   const ids = items.map(item => item.productId);
@@ -143,9 +144,11 @@ async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "
 export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "items" | "deliveryType">) {
   return db.transaction(async tx => {
     const q = await priceCheckout(tx, data);
-    return { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),
+    const amounts = { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),
       productsNet: q.productsNet.toFixed(2), deliveryFee: q.delivery.fee.toFixed(2), deliveryFeeReason: q.delivery.reason,
       total: q.total.toFixed(2), quoteFingerprint: q.fingerprint, policyVersion: q.policy.version, isDemo: q.policy.isDemo };
+    return { ...amounts, commercialAmounts: buildCommercialAmounts({ ...amounts, deliveryType: data.deliveryType, deliveryBaseFee: q.policy.flatFee }),
+      deliveryBenefit: deliveryBenefit(q.policy, data.deliveryType, q.productsNet) };
   });
 }
 
@@ -439,7 +442,7 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
 
       const quote = await priceCheckout(tx, data);
       if (!data.quoteFingerprint || data.quoteFingerprint !== quote.fingerprint) {
-        throw new DeliveryPolicyError("La cotización cambió o venció. Revisa el resumen actualizado y confirma nuevamente.");
+        throw new DeliveryPolicyError("La cotización cambió o venció. Revisa el resumen actualizado y confirma nuevamente.", 409, "QUOTE_CHANGED");
       }
       const { orderItems } = quote;
       const order = await createOnlineOrder(tx, {

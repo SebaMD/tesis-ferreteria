@@ -2,9 +2,11 @@ import { ArrowLeft, CreditCard, MapPin, RefreshCw, ShieldCheck, ShoppingCart, St
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { getApiError } from "../api/httpClient.js";
+import { getApiError, isApiConnectionError } from "../api/httpClient.js";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
+import { receiveCheckoutQuote, checkoutQuoteFailure } from "../helpers/checkoutQuote.js";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { readCheckoutIntent, resolveCheckoutItems } from "../helpers/checkoutIntent.js";
@@ -155,6 +157,7 @@ export default function CheckoutPage() {
     const refreshCheckout = () => {
       loadAvailability(false);
       loadPendingOrder(false);
+      setQuoteRefresh(value => value + 1);
     };
     const refreshTimer = window.setInterval(refreshCheckout, 30_000);
     window.addEventListener("focus", refreshCheckout);
@@ -201,12 +204,11 @@ export default function CheckoutPage() {
       const selectedItems = JSON.parse(quoteItemsKey);
       if (!selectedItems.length) return;
       quoteOnlineOrderRequest({ items: selectedItems, deliveryType, deliveryCommune: deliveryType === "DELIVERY" ? DELIVERY_COMMUNE : null })
-        .then(data => { if (active) setQuoteState({ key: quoteKey, data, error: "" }); })
-        .catch(error => { if (active) setQuoteState({ key: quoteKey, data: null, error: getApiError(error, "No se pudo actualizar la cotización. Intenta nuevamente.") }); });
+        .then(data => { if (active) setQuoteState(previous => receiveCheckoutQuote(previous, quoteKey, data)); })
+        .catch(error => { if (active) setQuoteState(previous => ({ ...previous, key: quoteKey, data: null, ...checkoutQuoteFailure(error, { connection: isApiConnectionError(error), message: getApiError(error, "No se pudo calcular el pedido. Revisa los productos y cantidades.") }) })); });
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
   }, [quoteItemsKey, deliveryType, quoteKey]);
-  const total = quote?.total;
   const hasAvailabilityIssues = Boolean(catalogError) || rows.some((row) => !row.isValid);
   const normalizedGuestEmail = guestData.email.trim().toLowerCase();
   const guestDataIsValid = isClient || (
@@ -238,6 +240,7 @@ export default function CheckoutPage() {
     && guestDataIsValid
     && emailVerifiedForCheckout
     && Boolean(quote)
+    && !quoteState.needsAcceptance
     && Boolean(deliveryDataIsValid);
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
@@ -321,6 +324,9 @@ export default function CheckoutPage() {
       redirectStarted = true;
     } catch (error) {
       toast.error(getApiError(error, "No se pudo iniciar el pago con Webpay"));
+      if (error?.response?.data?.code === "QUOTE_CHANGED") {
+        setQuoteState(previous => ({ ...previous, data: null, needsAcceptance: true }));
+      }
       setQuoteRefresh(value => value + 1);
       await Promise.all([loadAvailability(false), loadPendingOrder(false)]);
     } finally {
@@ -597,20 +603,14 @@ export default function CheckoutPage() {
           <aside className="sticky top-22 grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm max-[900px]:static">
             <h2 className="m-0 text-lg font-bold text-ink-950">Resumen</h2>
             <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega</span><strong className="text-right text-ink-950">{deliveryType === "DELIVERY" ? "Despacho a domicilio" : "Retiro en tienda"}</strong></div>
-            <div className="flex items-center justify-between border-t border-slate-200 pt-4">
-              <span className="font-bold text-slate-600">Total estimado</span>
-              <strong className="font-mono text-2xl text-ink-950">{quote ? formatClp(total) : "Por cotizar"}</strong>
-            </div>
-            {quote && <div className="grid gap-2 text-sm" aria-live="polite">
-              <div className="flex justify-between gap-2"><span>Subtotal de productos</span><strong>{formatClp(quote.productsSubtotal)}</strong></div>
-              <div className="flex justify-between gap-2"><span>Descuentos</span><strong>−{formatClp(quote.productsDiscountTotal)}</strong></div>
-              <div className="flex justify-between gap-2"><span>Despacho</span><strong>{formatClp(quote.deliveryFee)}</strong></div>
-              {quote.deliveryFeeReason === "FREE_THRESHOLD" && <small>Despacho gratuito por monto de productos.</small>}
-              {quote.isDemo && <small className="text-slate-500">Tarifa DEMO ficticia. No corresponde a una tarifa oficial de FYF.</small>}
-            </div>}
+            {quote && <div aria-live="polite"><OrderAmounts order={quote} /></div>}
+            {quote?.deliveryBenefit?.active && deliveryType === "DELIVERY" && <p role="status" className="m-0 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm font-semibold text-ink-950">{quote.deliveryBenefit.qualified ? "¡Tu compra tiene despacho gratis!" : `Te faltan ${formatClp(quote.deliveryBenefit.remaining)} en productos para obtener despacho gratis`}</p>}
+            {quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los importes y acepta el resumen actualizado antes de volver a iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => ({ ...previous, needsAcceptance: false }))}>Aceptar resumen actualizado</button></div>}
             {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
               <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
-              <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Actualizar cotización</button>
+              {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
+              {quoteState.errorKind === "DELIVERY_UNAVAILABLE" && <button className="min-h-11 w-full justify-center" type="button" onClick={() => setDeliveryType("PICKUP")}>Seleccionar retiro en tienda</button>}
+              {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to="/cart">Revisar productos y cantidades en el carrito</Link>}
             </div>}
             {!quote && !quoteError && <p role="status" className="text-sm text-slate-500">Actualizando cotización...</p>}
             {deliveryType === "DELIVERY" && <small className="text-slate-500">La comuna se valida por su nombre. No existe verificación geográfica automática ni delimitación de zonas.</small>}

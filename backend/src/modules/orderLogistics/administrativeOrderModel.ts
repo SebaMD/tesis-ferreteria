@@ -23,6 +23,7 @@ export function buildAdministrativeOrderModel(source: NonNullable<Awaited<Return
     baseSubtotal: commercial.baseSubtotal,
     totalDiscount: commercial.totalDiscount,
     total: commercial.total,
+    commercialAmounts: commercial.commercialAmounts,
     productsNet: commercial.productsNet,
     deliveryFee: commercial.deliveryFee,
     deliveryFeeLabel: commercial.deliveryFeeLabel,

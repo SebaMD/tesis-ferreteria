@@ -8,7 +8,7 @@ export const INSTITUTIONAL_CATALOG_SLIDE = Object.freeze({
   imageUrl: null,
 });
 
-export function buildCatalogSlides(presentation, notices) {
+export function buildCatalogSlides(presentation, notices, deliveryAnnouncement = null) {
   const institutional = presentation ? {
     ...INSTITUTIONAL_CATALOG_SLIDE,
     eyebrow: presentation.title || INSTITUTIONAL_CATALOG_SLIDE.eyebrow,
@@ -19,6 +19,8 @@ export function buildCatalogSlides(presentation, notices) {
   const publicNotices = Array.isArray(notices) ? notices : [];
   return [
     institutional,
+    ...(deliveryAnnouncement ? [{ id: "delivery-policy", title: deliveryAnnouncement.title, message: deliveryAnnouncement.message,
+      eyebrow: deliveryAnnouncement.isDemo ? "Despacho · DEMO" : "Información de despacho", displaySeconds: 9, institutional: false, imageUrl: null }] : []),
     ...publicNotices.map((notice) => ({
       id: `notice-${notice.id}`,
       title: notice.title,

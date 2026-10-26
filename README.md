@@ -289,9 +289,26 @@ La consulta y modificación administrativa están restringidas a ADMIN y MANAGER
 los demás roles e invitados no tienen acceso a estos endpoints. Cada guardado
 crea una revisión inmutable con el usuario responsable y controla los cambios
 concurrentes. Los pedidos y sus reintentos conservan
-los importes originales aunque cambie la configuración. Los umbrales opcionales
-usan el monto de productos después de promociones, antes del despacho. Las
+los importes originales aunque cambie la configuración. El umbral opcional de gratuidad
+usa el monto neto de productos después de descuentos, antes del despacho. Las
 ventas presenciales no incorporan este cargo.
+
+Las nuevas revisiones mantienen siempre retiro disponible sin cargo y no exigen
+compra mínima. Si una política antigua tiene otras reglas, el formulario informa
+la transición antes de confirmar una nueva revisión; nunca se reescribe el historial.
+El catálogo deriva automáticamente un aviso de gratuidad o suspensión desde la
+política vigente, sin crear avisos manuales ni promociones. Se actualiza al recuperar
+el foco y cada 30 segundos mientras la página está visible. La gratuidad solo se
+anuncia si existe una tarifa base mayor que cero.
+
+Checkout, historial, PDF, correo y ficha administrativa comparten el desglose:
+subtotal original + despacho previo al beneficio − descuentos de productos
+− beneficio de despacho = total final. La tarifa previa se obtiene de la revisión
+histórica del pedido, nunca de la política actual. Los registros sin desglose
+conservan su identificación histórica y no se les inventan cargos.
+Un cambio de cotización exige revisar y aceptar el nuevo resumen y volver a pulsar
+el pago; no se reenvía una compra automáticamente. Los errores de conexión ofrecen
+«Reintentar cálculo» y la suspensión permite elegir retiro explícitamente.
 
 La cobertura conserva la validación textual de Santa Juana; no hay sectores,
 geocodificación ni cálculo por distancia. Las estadísticas separan productos,

@@ -12,6 +12,7 @@ const suites = {
   tariffs: { port: 55446, file: "deliveryTariffs.integration.mjs", variable: "DELIVERY_TEST_DATABASE_URL" },
   promotions: { port: 55445, file: "promotions.integration.mjs", variable: "PROMOTIONS_TEST_DATABASE_URL" },
   email: { port: 55441, file: "emailVerification.integration.mjs", variable: "EMAIL_VERIFICATION_TEST_DATABASE_URL" },
+  notices: { port: 55443, file: "customerNotice.integration.mjs", variable: "CUSTOMER_NOTICE_TEST_DATABASE_URL" },
   logistics: { port: 55440, file: "block4b.integration.mjs", variable: "BLOCK4B_TEST_DATABASE_URL" },
 };
 const suite = suites[process.env.DELIVERY_TEST_SCOPE || "tariffs"];

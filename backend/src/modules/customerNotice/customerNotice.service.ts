@@ -1,4 +1,7 @@
 import { removeStoredImageFile, saveImageFile } from "../../utils/imageFiles.js";
+import { db } from "../../db/index.js";
+import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
+import { deliveryAnnouncement } from "../deliverySettings/deliveryPricing.js";
 import {
   createCustomerNotice,
   deleteCustomerNoticeById,
@@ -48,13 +51,15 @@ function presentNotice<T extends { imagePath?: string | null }>(notice: T) {
 }
 
 export async function getPublicCustomerNoticeService() {
-  const [presentation, notices] = await Promise.all([
+  const [presentation, notices, announcement] = await Promise.all([
     findCatalogPresentation(),
     findPublicCustomerNotices(),
+    db.transaction(async tx => deliveryAnnouncement(await currentDeliveryPolicy(tx))),
   ]);
   return {
     presentation: presentPresentation(presentation ?? DEFAULT_PRESENTATION),
     notices: notices.map(presentNotice),
+    deliveryAnnouncement: announcement,
   };
 }
 

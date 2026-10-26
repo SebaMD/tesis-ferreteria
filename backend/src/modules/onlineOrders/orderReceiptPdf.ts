@@ -104,21 +104,21 @@ function renderItems(document: PDFKit.PDFDocument, model: OrderCommercialModel) 
 }
 
 function renderTotal(document: PDFKit.PDFDocument, model: OrderCommercialModel) {
-  if (document.y > 670) {
+  if (document.y > 610) {
     document.addPage();
     document.font("Helvetica-Bold").fontSize(11).fillColor("#111827").text(`Comprobante ${model.folio}`);
   }
   document.moveDown(1);
-  const totalY = document.y;
-  document.font("Helvetica").fontSize(9).fillColor("#4b5563").text("Subtotal a precio normal", 315, totalY, { width: 120, align: "right" });
-  document.text(formatOrderMoney(model.baseSubtotal), 435, totalY, { width: 110, align: "right" });
-  document.text("Descuentos", 315, totalY + 16, { width: 120, align: "right" });
-  document.fillColor("#c2410c").text(`-${formatOrderMoney(model.totalDiscount)}`, 435, totalY + 16, { width: 110, align: "right" });
-  document.font("Helvetica").fontSize(9).fillColor("#4b5563").text("Despacho", 315, totalY + 32, { width: 120, align: "right" });
-  document.text(model.deliveryFee == null ? "Sin cargo registrado" : formatOrderMoney(model.deliveryFee), 435, totalY + 32, { width: 110, align: "right" });
-  document.font("Helvetica-Bold").fontSize(11).fillColor("#374151").text("Total pagado", 315, totalY + 52, { width: 120, align: "right" });
-  document.fontSize(15).fillColor("#111827").text(formatOrderMoney(model.total), 435, totalY + 51, { width: 110, align: "right" });
-  document.y = totalY + 76;
+  for (const line of model.commercialAmounts.lines) {
+    const y = document.y;
+    document.font(line.key === "total" ? "Helvetica-Bold" : "Helvetica").fontSize(line.key === "total" ? 11 : 9).fillColor("#374151");
+    const value = line.amount == null ? "No registrado" : `${line.discount ? "-" : ""}${formatOrderMoney(line.amount)}`;
+    const height = Math.max(document.heightOfString(line.label, { width: 285 }), document.heightOfString(value, { width: 205 })) + 9;
+    document.text(line.label, 50, y, { width: 285 });
+    document.text(value, 340, y, { width: 205, align: "right" });
+    document.y = y + height;
+  }
+  if (model.commercialAmounts.note) document.font("Helvetica").fontSize(8).text(model.commercialAmounts.note, 50, document.y, { width: 495 });
   if (model.deliveryIsDemo) document.font("Helvetica").fontSize(8).fillColor("#4b5563").text("Tarifa DEMO ficticia. No corresponde a una tarifa oficial de FYF.", TABLE.left, document.y);
   document.moveDown(2);
   document.font("Helvetica").fontSize(10).fillColor("#4b5563").text("Gracias por tu compra.", 50, document.y, { width: 495, align: "center" });

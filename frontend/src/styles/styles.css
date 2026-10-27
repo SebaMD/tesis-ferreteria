@@ -828,7 +828,15 @@
   margin: 0;
 }
 
+.bundle-general-fields > *, .bundle-general-fields .product-lookup-field { align-self: start; align-content: start; }
+.bundle-general-fields .product-lookup-field { row-gap: 7px; }
+.variant-has-error { border-color: var(--color-critical-600); }
+.catalog-attribute-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+
 .inventory-search { width: clamp(290px, 24vw, 380px); flex: 0 1 auto; }
+.product-mode-switch > button { width: 100%; min-width: 0; min-height: 44px; margin: 0 !important; white-space: normal; justify-content: center; }
+.product-mode-switch > button[aria-pressed="true"] { background: var(--color-rust-500); border-color: var(--color-rust-500); color: #10151f; }
+.product-mode-switch > button[aria-pressed="true"]:not(:disabled):hover { background: var(--color-rust-600); border-color: var(--color-rust-600); color: #ffffff; }
 .product-footer-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; align-items: stretch; margin-top: 12px; }
 .product-footer-actions > button, .product-footer-actions > div, .product-footer-actions > div > button { width: 100%; margin: 0 !important; min-height: 44px; }
 .variant-editor-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }

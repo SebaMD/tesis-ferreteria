@@ -9,6 +9,9 @@ const sizeClasses = {
   xlarge: "max-w-[1180px]",
 };
 
+const activeModalLocks = new Set();
+let originalBodyOverflow = "";
+
 export default function AppModal({
   open,
   suspended = false,
@@ -27,6 +30,7 @@ export default function AppModal({
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
+  const lastFocusedRef = useRef(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -35,8 +39,11 @@ export default function AppModal({
   useEffect(() => {
     if (!open || suspended) return undefined;
 
-    const previousOverflow = document.body.style.overflow;
     const previousActiveElement = document.activeElement;
+    const lock = dialogRef.current;
+    if (!activeModalLocks.size) originalBodyOverflow = document.body.style.overflow;
+    activeModalLocks.add(lock);
+    let active = true;
 
     const handleKeyDown = (event) => {
       const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
@@ -57,6 +64,10 @@ export default function AppModal({
 
       if (!firstElement || !lastElement) return;
 
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault(); firstElement.focus(); return;
+      }
+
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
         lastElement.focus();
@@ -68,12 +79,19 @@ export default function AppModal({
 
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
-    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    queueMicrotask(() => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (!active || dialogs[dialogs.length - 1] !== dialogRef.current) return;
+      const previous = lastFocusedRef.current;
+      (previous?.isConnected && previous.getClientRects().length ? previous : closeButtonRef.current)?.focus();
+    });
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      active = false;
+      activeModalLocks.delete(lock);
+      document.body.style.overflow = activeModalLocks.size ? "hidden" : originalBodyOverflow;
       window.removeEventListener("keydown", handleKeyDown);
-      previousActiveElement?.focus?.();
+      if (!document.querySelector('[role="dialog"][aria-modal="true"]')) previousActiveElement?.focus?.();
     };
   }, [open, suspended]);
 
@@ -90,6 +108,7 @@ export default function AppModal({
       <section
         className={`app-modal-panel flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
         ref={dialogRef}
+        onFocusCapture={event => { lastFocusedRef.current = event.target; }}
         role={suspended ? undefined : "dialog"}
         aria-modal={suspended ? undefined : true}
         aria-labelledby={titleId}

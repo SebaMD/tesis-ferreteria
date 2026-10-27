@@ -211,6 +211,7 @@ try {
   await (await import("./manualDelivery.integration.mjs")).testManualDelivery({pool,call,base,users,snapshot,transactions,productId:ids[0]});
   await (await import("./unifiedCreation.integration.mjs")).testUnifiedCreation({pool,call,body,snapshot,users});
   await (await import("./unifiedEditing.integration.mjs")).testUnifiedEditing({pool,call,body,snapshot,uploads,users});
+  await (await import("./productAttributeRename.integration.mjs")).testProductAttributeRename({pool,call,body,snapshot,users});
   if (process.env.BUNDLE_VISUAL_TEST === "1") {
     console.log("VISUAL isolated API ready 127.0.0.1:5188; login admin@example.test / IsolatedBundle2026!");
     if (process.env.BUNDLE_VISUAL_STOP_FILE) console.log(`VISUAL_STOP_FILE ${process.env.BUNDLE_VISUAL_STOP_FILE}`);

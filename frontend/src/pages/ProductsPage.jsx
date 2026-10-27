@@ -9,6 +9,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
 import ProductBundleEditor from "../components/ProductBundleEditor.jsx";
+import { ProductCategoryField, ProductUnitField } from "../components/ProductFormFields.jsx";
 import GroupedInventoryTable from "../components/GroupedInventoryTable.jsx";
 import { groupInventoryProducts, inventoryExportRows, inventoryVariantLabel } from "../helpers/inventoryGroups.js";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
@@ -18,7 +19,7 @@ import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatDate } from "../helpers/formatters.js";
 import { getMovementTone, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
-import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
+import { ADJUSTMENT_REASONS } from "../helpers/options.js";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
@@ -137,14 +138,14 @@ export default function ProductsPage() {
   const [variantsSeen, setVariantsSeen] = useState(false);
   const [bundleSaving, setBundleSaving] = useState(false);
   const bundleReviewRef = useRef(null);
+  const bundleContinueRef = useRef(false);
   const simpleModeRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [categoryListSearch, setCategoryListSearch] = useState("");
   const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
-  const [categorySearch, setCategorySearch] = useState("");
-  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -152,7 +153,7 @@ export default function ProductsPage() {
   const [showInactiveProducts, setShowInactiveProducts] = useState(false);
   const [variantsOnly, setVariantsOnly] = useState(false);
   const [unitSearch, setUnitSearch] = useState("unidad");
-  const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
+
   const [submittingMovement, setSubmittingMovement] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
@@ -267,17 +268,7 @@ export default function ProductsPage() {
     }, new Map()),
     [products],
   );
-  const filteredFormCategories = useMemo(() => {
-    const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase("es");
 
-    return [...categories]
-      .filter((category) =>
-        !normalizedCategorySearch ||
-        category.name.toLocaleLowerCase("es").includes(normalizedCategorySearch) ||
-        String(category.id).includes(normalizedCategorySearch),
-      )
-      .sort((left, right) => left.name.localeCompare(right.name, "es"));
-  }, [categories, categorySearch]);
   const normalizedCategoryListSearch = categoryListSearch.trim().toLocaleLowerCase("es");
   const filteredExistingCategories = useMemo(
     () =>
@@ -292,15 +283,7 @@ export default function ProductsPage() {
         .sort(compareCategoriesByNewest),
     [categories, normalizedCategoryListSearch],
   );
-  const normalizedUnitSearch = unitSearch.trim().toLocaleLowerCase("es");
-  const filteredUnitOptions = useMemo(
-    () =>
-      UNIT_OPTIONS.filter((unit) =>
-        !normalizedUnitSearch ||
-        unit.toLocaleLowerCase("es").includes(normalizedUnitSearch),
-      ),
-    [normalizedUnitSearch],
-  );
+
   const groupedProducts = useMemo(() => groupInventoryProducts(filteredProducts, visibleStatusProducts), [filteredProducts, visibleStatusProducts]);
   const productsPagination = usePagination(groupedProducts, {
     resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}|${visibleStatusProducts.length}`,
@@ -488,11 +471,26 @@ export default function ProductsPage() {
   };
   const useSimpleDraft = ({ fields, files }) => {
     setForm(current => ({ ...current, ...fields })); setUnitSearch(fields.unitMeasure);
-    setCategorySearch(categories.find(category => category.id === Number(fields.categoryId))?.name || "");
     setPendingProductImages(files); setVariantsEnabled(false);
-    requestAnimationFrame(() => simpleModeRef.current?.focus());
+    requestAnimationFrame(() => requestAnimationFrame(() => simpleModeRef.current?.focus()));
   };
-  const finishNewBundle = () => {
+  const finishNewBundle = async (result) => {
+    if (linkedRegistration?.step === "product" && !result.familyId) {
+      try {
+        const product = (await getProductsRequest()).find(item => item.id === result.productIds[0]);
+        if (!product) throw new Error("No se pudo recuperar el artículo guardado");
+        const quantity = Number(form.initialStock || 0);
+        const next = { ...linkedRegistration, product, entryCompleted: quantity > 0,
+          entryResult: quantity > 0 ? { quantity, unitMeasure: product.unitMeasure, productName: product.name, currentStock: product.currentStock } : null };
+        setEditingProductId(product.id); setForm({ ...emptyForm, ...product, categoryId: String(product.categoryId) });
+        setPendingProductImages([]); setBundleSaving(false);
+        if (bundleContinueRef.current) goToLinkedEntry(next);
+        else setLinkedRegistration(next);
+        return;
+      } catch {
+        toast.warning("Producto guardado. Consulta Inventario para continuar con sus movimientos.");
+      }
+    }
     setBundleSaving(false); setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
     setLinkedRegistration(null); setActiveForm(null); setPendingProductImages([]); setForm(emptyForm);
   };
@@ -686,7 +684,7 @@ export default function ProductsPage() {
   const handleCreateProduct = async (event, shouldContinue = false) => {
     event.preventDefault();
     if (variantsEnabled) { bundleReviewRef.current?.review(); return; }
-    if (!editingProductId && variantsSeen) { bundleReviewRef.current?.saveSimple(); return; }
+    if (!editingProductId) { bundleContinueRef.current = shouldContinue; bundleReviewRef.current?.saveSimple(); return; }
     const wasEditing = Boolean(editingProductId);
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
@@ -792,19 +790,13 @@ export default function ProductsPage() {
           variantOptionIds: product.variantOptionIds || [],
           associationReason: "",
         });
-        setCategorySearch(product.categoryName || "");
-        setShowCategorySuggestions(false);
         setUnitSearch(product.unitMeasure || "unidad");
-        setShowUnitSuggestions(false);
         setEditingProductId(product.id);
         if (shouldContinue) goToLinkedEntry(nextRegistration);
         else setLinkedRegistration(nextRegistration);
       } else {
         setForm(emptyForm);
-        setCategorySearch("");
-        setShowCategorySuggestions(false);
         setUnitSearch("unidad");
-        setShowUnitSuggestions(false);
         setEditingProductId(null);
         setPendingProductImages([]);
         setActiveForm(null);
@@ -931,10 +923,7 @@ export default function ProductsPage() {
     setCategoryListSearch("");
     setCategoryDeleteTarget(null);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setMovementForm(initialMovementForm());
     setProductSearch("");
     setShowMovementProductSuggestions(false);
@@ -981,10 +970,7 @@ export default function ProductsPage() {
       ...emptyForm,
       categoryId: String(category.id),
     });
-    setCategorySearch(product?.categoryName || category.name);
-    setShowCategorySuggestions(false);
     setUnitSearch(product?.unitMeasure || "unidad");
-    setShowUnitSuggestions(false);
     setActiveForm("product");
   };
 
@@ -1022,10 +1008,7 @@ export default function ProductsPage() {
       ...emptyForm,
       categoryId: String(category.id),
     });
-    setCategorySearch(category.name);
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setMovementForm(initialMovementForm());
     setProductSearch("");
     setShowMovementProductSuggestions(false);
@@ -1053,10 +1036,7 @@ export default function ProductsPage() {
       variantOptionIds: product.variantOptionIds || [],
       associationReason: "",
     });
-    setCategorySearch(product.categoryName || "");
-    setShowCategorySuggestions(false);
     setUnitSearch(product.unitMeasure || "");
-    setShowUnitSuggestions(false);
   };
 
   const cancelEditing = () => {
@@ -1065,10 +1045,7 @@ export default function ProductsPage() {
     setEditingProductId(null);
     setPendingProductImages([]);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setActiveForm(null);
   };
 
@@ -1110,10 +1087,7 @@ export default function ProductsPage() {
     setCategoryListSearch("");
     setCategoryDeleteTarget(null);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
   };
 
   const openProductForm = () => {
@@ -1123,10 +1097,7 @@ export default function ProductsPage() {
     setEditingProductId(null);
     setPendingProductImages([]);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
   };
 
   const openMovementForm = (movementType) => {
@@ -1206,27 +1177,6 @@ export default function ProductsPage() {
     setShowMovementProductSuggestions(false);
   };
 
-  const applyUnitMeasure = (value) => {
-    const unitMeasure = value.trim().replace(/\s+/g, " ");
-    if (!unitMeasure) return;
-
-    setUnitSearch(unitMeasure);
-    setShowUnitSuggestions(false);
-    setForm((current) => ({
-      ...current,
-      unitMeasure,
-    }));
-  };
-
-  const selectProductCategory = (category) => {
-    setForm((current) => ({ ...current, categoryId: String(category.id) }));
-    setCategorySearch(category.name);
-    setShowCategorySuggestions(false);
-  };
-
-  const selectUnitSuggestion = (unit) => {
-    applyUnitMeasure(unit);
-  };
 
   const selectMovementProduct = (product) => {
     setProductSearch(product.name);
@@ -1234,28 +1184,6 @@ export default function ProductsPage() {
     setMovementForm((current) => ({ ...current, productId: String(product.id) }));
   };
 
-  const handleProductCategorySearchKeyDown = (event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    const category = getSingleOrExactSuggestion(
-      filteredFormCategories,
-      categorySearch,
-      (item) => [item.name, item.id, `#${item.id}`],
-    );
-
-    if (category) selectProductCategory(category);
-  };
-
-  const handleUnitSearchKeyDown = (event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
-
-    if (unit) selectUnitSuggestion(unit);
-    else if (unitSearch.trim()) applyUnitMeasure(unitSearch);
-  };
 
   const handleMovementProductSearchKeyDown = (event) => {
     if (event.key !== "Enter") return;
@@ -1597,7 +1525,7 @@ export default function ProductsPage() {
       <AppModal
         open={canManage && activeForm === "product"}
         suspended={bundleDialogActive}
-        title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId ? "Editar producto" : "Nuevo producto"}
+        title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
         description="Completa la información comercial y de inventario."
         onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
         size={variantsEnabled ? "xlarge" : "large"}
@@ -1628,51 +1556,14 @@ export default function ProductsPage() {
         <div
           className={linkedRegistration?.step === "product" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
-          {!editingProductId && <div className="mb-4 grid gap-2 sm:grid-cols-2" role="group" aria-label="Tipo de producto nuevo">
+          {!editingProductId && <div className="product-mode-switch mb-4 grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Tipo de producto nuevo">
             <button ref={simpleModeRef} type="button" className={variantsEnabled ? secondaryButtonClass : "product-positive-action"} aria-pressed={!variantsEnabled} disabled={bundleSaving} onClick={()=>{if(variantsEnabled)bundleReviewRef.current?.continueAsSimple();}}>Producto simple</button>
             <button type="button" className={variantsEnabled ? "product-positive-action" : secondaryButtonClass} aria-pressed={variantsEnabled} disabled={bundleSaving} onClick={()=>{if(!variantsEnabled)selectVariantMode();}}>Producto con variantes</button>
           </div>}
           <div hidden={variantsEnabled} className={variantsEnabled ? "hidden" : ""}>
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
             <fieldset disabled={bundleSaving || Boolean(editingProductId && variantsEnabled)} className="m-0 grid min-w-0 gap-3.75 border-0 p-0" aria-label="Datos comerciales del producto">
-            <label className="relative">
-              Buscar categoría
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={categorySearch}
-                  onChange={(event) => {
-                    setCategorySearch(event.target.value);
-                    setForm((current) => ({ ...current, categoryId: "" }));
-                    setShowCategorySuggestions(Boolean(event.target.value.trim()));
-                  }}
-                  onFocus={() => setShowCategorySuggestions(Boolean(categorySearch.trim()))}
-                  onKeyDown={handleProductCategorySearchKeyDown}
-                  placeholder="Nombre o ID de categoría"
-                  required
-                />
-              </div>
-              {showCategorySuggestions && categorySearch.trim() && (
-                filteredFormCategories.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredFormCategories.slice(0, 6).map((category) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={category.id}
-                        onClick={() => selectProductCategory(category)}
-                      >
-                        <span>{category.name}</span>
-                        <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
-                )
-              )}
-            </label>
+            <ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>
             <label>
               Nombre
               <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
@@ -1708,48 +1599,9 @@ export default function ProductsPage() {
             </label>
             <label>
               Descripción
-              <input
-                value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              />
+              <textarea className="min-h-20 w-full min-w-0 resize-y rounded border border-slate-300 bg-white p-2 text-ink-950" value={form.description} onChange={event=>setForm(current=>({...current,description:event.target.value}))}/>
             </label>
-            <label className="relative">
-              Buscar unidad de medida
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={unitSearch}
-                  onChange={(event) => {
-                    setUnitSearch(event.target.value);
-                    setForm((current) => ({ ...current, unitMeasure: event.target.value }));
-                    setShowUnitSuggestions(Boolean(event.target.value.trim()));
-                  }}
-                  onFocus={() => setShowUnitSuggestions(Boolean(unitSearch.trim()))}
-                  onKeyDown={handleUnitSearchKeyDown}
-                  placeholder="Ej: caja, kg, metro"
-                  required
-                />
-              </div>
-              {showUnitSuggestions && unitSearch.trim() && (
-                filteredUnitOptions.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredUnitOptions.slice(0, 6).map((unit) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={unit}
-                        onClick={() => selectUnitSuggestion(unit)}
-                      >
-                        <span>{unit}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron unidades (presione Enter para agregar)</p>
-                )
-              )}
-            </label>
+            <ProductUnitField value={unitSearch} onChange={unitMeasure=>{setUnitSearch(unitMeasure);setForm(current=>({...current,unitMeasure}));}}/>
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Precio
@@ -1770,7 +1622,8 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            {!editingProductId && variantsSeen && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" required value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Se registrará una única entrada al guardar el producto simple.</span></label>}
+            {!editingProductId && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" required value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Al guardar se registra una entrada si es mayor que cero.</span></label>}
+            {editingProduct && <p className="m-0 text-sm">Stock actual: <strong>{formatQuantityWithUnit(editingProduct.currentStock,editingProduct.unitMeasure)}</strong></p>}
             <label className="variant-online-control rounded border border-slate-200 bg-slate-50 px-3!">
               <input
                 className="mt-0.5 size-4 shrink-0"
@@ -1835,8 +1688,8 @@ export default function ProductsPage() {
             {!canAddVariants && !variantsEnabled && !editingProduct?.familyId && <p id="variants-base-requirements" className="m-0 text-xs text-slate-500">Para agregar variantes, completa nombre, categoría, unidad, precio y stock mínimo. Si ingresas un código de barras, debe ser válido y no estar repetido.</p>}
           </form>
           </div>
-          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline modalOpen={variantsEnabled} simpleModeEnabled={variantsSeen} commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
-            reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
+          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline modalOpen={variantsEnabled} simpleModeEnabled commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
+            reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
           {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} modalOpen={variantsEnabled}
             commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
             categories={categories} onSaved={loadData} onBack={returnFromConversion} onClose={cancelEditing} onCreated={finishNewBundle} />}

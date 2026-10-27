@@ -4,9 +4,18 @@ import { authenticateJwt, type AuthenticatedRequest } from "../../middlewares/au
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { FamilyError, getFamilyForManagement, listFamilies, saveFamily, validateFamilyBody, detachProductFamily, validateDetachFamilyBody, setFamilyArchived, validateFamilyStateBody } from "./productFamilies.service.js";
+import { getAttributeRenameOperation, renameFamilyAttribute } from "./productAttributeRename.service.js";
 
 const router = Router();
 router.use(authenticateJwt, verifyRoles(["ADMIN"]));
+router.post("/:id/attributes/:attributeId/rename", async (req: AuthenticatedRequest, res) => {
+  try { return handleSuccess(res, 200, "Nombre del atributo actualizado", await renameFamilyAttribute(Number(req.params.id), Number(req.params.attributeId), req.body, req.user!.id)); }
+  catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo confirmar el renombrado. Consulte su resultado antes de reintentar.", e); }
+});
+router.get("/:id/attributes/:attributeId/rename-operations/:key", async (req: AuthenticatedRequest, res) => {
+  try { return handleSuccess(res, 200, "Resultado del renombrado", await getAttributeRenameOperation(Number(req.params.id), Number(req.params.attributeId), String(req.params.key), req.user!.id)); }
+  catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo consultar el renombrado", e); }
+});
 router.get("/conversion/:id", async (req, res) => {
   try { const id = Number(req.params.id); if (!Number.isSafeInteger(id) || id < 1) throw new FamilyError("ID inválido", 400);
     return handleSuccess(res, 200, "Producto original para conversión", await getProductConversion(id)); }

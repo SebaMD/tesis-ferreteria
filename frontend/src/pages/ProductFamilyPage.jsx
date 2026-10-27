@@ -56,8 +56,8 @@ export default function ProductFamilyPage() {
           {family.brand && <p className="text-sm text-slate-500">Marca: {family.brand}</p>}
         </div>
         {description.text && <p className="m-0 leading-7 text-slate-600">{description.text}</p>}
-        <div className="grid min-w-0 gap-3" aria-label="Seleccionar variante">
-          {family.attributes.map((attribute) => <fieldset key={attribute.id} className="min-w-0 border-0 p-0">
+        <div className="catalog-attribute-groups grid min-w-0 items-start gap-3" aria-label="Seleccionar variante">
+          {family.attributes.map((attribute) => <fieldset key={attribute.id} className="m-0 min-w-0 border-0 p-0">
             <legend className="mb-2 text-sm font-bold">{attribute.name}</legend>
             <div className="flex flex-wrap gap-2">{attribute.options.map((o) => {
               const option = variantOptionState(family.variants, selected, attribute.id, o.id);
@@ -72,8 +72,8 @@ export default function ProductFamilyPage() {
               </button>;
             })}</div>
           </fieldset>)}
-          <span className="sr-only" aria-live="polite" aria-atomic="true">{variantLabel(selected)}. {variantAvailability(selected)}</span>
-          {selectionNotice && <p className="m-0 text-xs text-slate-500" role="status">{selectionNotice}</p>}
+          <span className="sr-only col-span-full" aria-live="polite" aria-atomic="true">{variantLabel(selected)}. {variantAvailability(selected)}</span>
+          {selectionNotice && <p className="col-span-full m-0 text-xs text-slate-500" role="status">{selectionNotice}</p>}
         </div>
         <div className="min-h-10">{selected.status && <ProductPromotionPrice product={selected} size="detail" />}</div>
         <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">
@@ -82,7 +82,6 @@ export default function ProductFamilyPage() {
         </div>
         <div className="mx-auto w-full max-w-md">{selected.status && <ProductPurchaseControls key={selected.id} product={selected} showBuyNow />}</div>
         <p className="m-0 text-xs leading-5 text-slate-500">Agregar al carrito no reserva stock. La disponibilidad se vuelve a validar al iniciar el pago.</p>
-        {description.demo && <p className="m-0 text-xs text-slate-500">Catálogo de demostración: precios y existencias ficticios.</p>}
       </div>
     </section>
   </main>;

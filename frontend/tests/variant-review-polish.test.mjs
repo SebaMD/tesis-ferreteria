@@ -30,9 +30,10 @@ test("stock column stays textual but option alerts remain",async()=>{
 });
 test("attributes preserve drafts, expose restrictions and open for invalid fields",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");
- assert.match(s,/useState\(true\)/);assert.match(s,/aria-expanded=\{attributesOpen\}/);
+ assert.match(s,/\[attributesOpen, setAttributesOpen\] = useState\(!familyId\)/);assert.match(s,/aria-expanded=\{attributesOpen\}/);
  assert.match(s,/hidden=\{!attributesOpen\}/);assert.match(s,/disabled=\{locked \|\| definitionLocked\}/);
- assert.match(s,/No se pueden agregar, quitar ni renombrar/);
+ assert.match(s,/Puedes crear variantes con opciones nuevas de los atributos actuales/);
+ assert.match(s,/Renombrar este atributo requiere una operación controlada/);
  assert.match(s,/disabled=\{hasExisting\}/);
 });
 test("barcode uses existing keyboard scanner and never submits on Enter",async()=>{
@@ -44,7 +45,7 @@ test("barcode uses existing keyboard scanner and never submits on Enter",async()
 test("common photographs stay explicit and individual maintenance is integrated",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");
  assert.match(s,/<details[^>]*><summary[^>]*>Fotografías comunes/);
- assert.match(s,/draft.rows.filter\(r=>r.useCommon\)/);assert.match(s,/No reemplazan ni eliminan/);
+ assert.match(s,/draft.rows.filter\(r=>r.useCommon\)/);assert.match(s,/sin reemplazar sus fotos/);
  assert.doesNotMatch(s,/Detalle individual|Imágenes y datos individuales|setPendingIndividual/);assert.match(s,/<ProductImagesManager/);
  assert.match(s,/Descripción individual/);assert.match(s,/Unidad de este artículo/);
  assert.match(s,/<h4[^>]*>.*Producto #.*badgeClass/);

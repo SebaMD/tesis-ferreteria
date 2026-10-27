@@ -49,7 +49,8 @@ test("creation uses one window, compact accessible rows and explicit error recov
   assert.match(page, /Tipo de producto nuevo/); assert.match(page, /aria-pressed=\{!variantsEnabled\}/);
   assert.match(page, /<ProductBundleEditor inline/); assert.match(editor, /inline \? <div hidden=/);
   assert.match(editor, /aria-expanded=\{expandedRows.has\(row.key\)\}/); assert.match(editor, /aria-controls=\{`variant-fields-/);
-  assert.match(editor, /hidden=\{!expandedRows.has\(row.key\)\}/); assert.match(editor, /requestAnimationFrame\(\(\)=>e.target.focus\(\)\)/);
+  assert.match(editor, /hidden=\{!expandedRows.has\(row.key\)\}/); assert.match(editor, /destination\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(editor, /showError\(invalidControl.validationMessage/);
   assert.match(editor, /Continuar como producto simple/); assert.match(editor, /guard.current = true/); assert.match(editor, /saveProductBundleRequest\(frozen.current\)/);
   const modal = await read("components/AppModal.jsx"); assert.match(modal, /getClientRects\(\).length > 0/);
 });

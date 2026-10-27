@@ -21,6 +21,21 @@ export async function testUnifiedEditing({ pool, call, body, snapshot, uploads, 
   const movements = async () => (await pool.query("select * from inventory_movements where product_id=any($1) order by id", [created.productIds])).rows;
   let bundle = await get(); const before = await snapshot(), originalMovements = await movements();
   const a = bundle.variants[0], b = bundle.variants[1];
+  const restrictedChanges = [
+    value => { value.family.attributes[0].name = "Nombre nuevo no autorizado"; },
+    value => { value.variants[0].selections[0] = 1; },
+    value => { value.family.attributes.push({ name: "Tamaño", options: [{ label: "Mediano" }] }); value.variants.forEach(v => v.selections.push(0)); },
+    value => { value.family.attributes.pop(); value.variants.forEach(v => v.selections.pop()); },
+    value => { value.family.attributes[0].options[0].label = "Valor distinto"; },
+    value => { value.family.brand = "Otra marca"; },
+    value => { value.family.categoryId += 10000; },
+  ];
+  for (const mutate of restrictedChanges) {
+    const attempt = payload(bundle); mutate(attempt);
+    await call("POST", "/product-families/bundle", attempt, "ADMIN", 409);
+    assert.deepEqual(await snapshot(), before);
+  }
+  console.log("PASS family review: rename/value/add/remove dimension, used-option rename, brand and category restrictions retain every ID, image, stock movement and historical relationship");
   const badUnit = payload(bundle); badUnit.variants[0].unitMeasure = "litro";
   badUnit.variants[0].existingImages = { imageIds: [], primaryImageId: null };
   await call("POST", "/product-families/bundle", badUnit, "ADMIN", 409);

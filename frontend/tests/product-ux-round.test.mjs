@@ -13,8 +13,9 @@ test("editor sections simplify attributes and retain hidden row drafts with inva
  assert.match(s,/Atributos \(\{draft.attributes.length\}\)/);assert.match(s,/Nombre del atributo \{i\+1\}/);
  assert.doesNotMatch(s,/<h4[^>]*>Atributo /);assert.match(s,/useState\(!familyId\)/);
  assert.match(s,/aria-expanded=\{variantsOpen\}/);assert.match(s,/hidden=\{!variantsOpen\}/);
- assert.match(s,/onInvalidCapture=\{e=>\{setAttributesOpen\(true\);setVariantsOpen\(true\);/);
- assert.match(s,/openRow\(key\)/);
+ assert.match(s,/control.willValidate && !control.validity.valid/);
+ assert.match(s,/section === "attributes"\) setAttributesOpen\(true\)/);
+ assert.match(s,/if \(variantKey\) \{ setVariantsOpen\(true\); openRow\(variantKey\)/);
 });
 test("conflict recovery is explicit and confirms discarding draft, preserving version checks",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");
@@ -24,7 +25,7 @@ test("conflict recovery is explicit and confirms discarding draft, preserving ve
 });
 test("specific images remain pending and accessible, and commercial groups stay separate",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");
- assert.match(s,/variant-image-button/);assert.match(s,/<ProductImagesManager/);
+ assert.match(s,/<ProductImagesManager compact disabled=\{locked\} pendingFiles=\{commonFiles\}/);assert.match(s,/<ProductImagesManager/);
  assert.match(s,/files:\[\.\.\.row.files,\.\.\.selected\]/);assert.match(s,/onRemovePending=/);
  assert.match(s,/variant-editor-actions/);assert.match(s,/product-positive-action/);
 });

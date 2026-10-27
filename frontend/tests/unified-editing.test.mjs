@@ -53,5 +53,5 @@ test("single editor keeps separate accordions, safe conversion confirmation and 
   assert.match(editor,/<ProductImagesManager compact/); assert.match(editor,/onDelete=.*editBundleImages/);
   assert.doesNotMatch(editor,/onEditIndividual|pendingIndividual|Imágenes y datos individuales/);
   assert.match(editor,/disabled=\{row.hasHistory \|\| row.isOriginal\}/);
-  assert.match(editor,/disabled=\{locked \|\| definitionLocked\}/); assert.match(editor,/combinaciones protegidas/);
+  assert.match(editor,/disabled=\{locked \|\| definitionLocked\}/); assert.match(editor,/Agregar un atributo requiere reclasificar todas las variantes/);
 });

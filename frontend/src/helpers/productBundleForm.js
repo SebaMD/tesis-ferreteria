@@ -107,24 +107,26 @@ export function bundleDraftSignature(draft) {
 export function bundlePayload(draft, operationKey, files, commonFiles) {
   if (!draft.familyId && !draft.conversion && draft.rows.length < 2) throw new Error(SINGLE_VARIANT_MESSAGE);
   if (draft.conversion && (draft.conversion.reason.trim().length < 8 || draft.conversion.reason.trim().length > 500
-    || draft.rows.filter(r => r.id === draft.conversion.productId).length !== 1 || !draft.rows.some(r => !r.id))) throw new Error("Indica el motivo de conversión, conserva el original y agrega al menos una variante nueva.");
+    || draft.rows.filter(r => r.id === draft.conversion.productId).length !== 1 || !draft.rows.some(r => !r.id))) throw Object.assign(new Error("Indica el motivo de conversión, conserva el original y agrega al menos una variante nueva."), { section: draft.conversion.reason.trim().length < 8 || draft.conversion.reason.trim().length > 500 ? "prepare" : "variants" });
   const family = familyBody(draft, { categoryId: Number(draft.categoryId), brand: draft.brand || null }, {});
-  if (!family.attributes.length || family.attributes.some(a => !a.name.trim() || a.name.length > 60 || !a.options.length || a.options.some(o => !o.label.trim() || o.label.length > 100))) throw new Error("Completa el nombre de cada atributo y sus opciones.");
-  const combinations = new Set();
+  if (!family.attributes.length || family.attributes.some(a => !a.name.trim() || a.name.length > 60 || !a.options.length || a.options.some(o => !o.label.trim() || o.label.length > 100))) throw Object.assign(new Error("Completa el nombre de cada atributo y sus opciones."), { section: "attributes" });
+  const combinations = new Map();
   const names = new Set(), barcodes = new Set();
   const variants = draft.rows.map(row => {
-    const invalid = message => { throw Object.assign(new Error(message), { variantKey: row.key }); };
+    const invalid = (message, field) => { throw Object.assign(new Error(message), { variantKey: row.key, field }); };
     const selections = row.selections.map((selection, i) => typeof selection === "number" ? selection : draft.attributes[i]?.draftOptions?.findIndex(o => o.key === selection));
-    if (selections.length !== family.attributes.length || selections.some((s, i) => !Number.isInteger(s) || s < 0 || !family.attributes[i].options[s])) invalid("Completa los atributos de cada variante; una opción seleccionada pudo haberse quitado.");
-    const key = selections.join(","); if (combinations.has(key)) invalid("Hay combinaciones de atributos repetidas."); combinations.add(key);
+    if (selections.length !== family.attributes.length || selections.some((s, i) => !Number.isInteger(s) || s < 0 || !family.attributes[i].options[s])) invalid("Completa los atributos de cada variante; una opción seleccionada pudo haberse quitado.", "selections");
+    const key = selections.join(",");
+    if (combinations.has(key)) throw Object.assign(new Error("Hay combinaciones de atributos repetidas."), { variantKey: row.key, variantKeys: [combinations.get(key), row.key], section: "variants", field: "selections" });
+    combinations.set(key, row.key);
     const name = bundleRowName(draft, row).trim();
     if (name.length < 2 || name.length > 150 || row.price === "" || !Number.isSafeInteger(Number(row.price)) || Number(row.price) < 0 || Number(row.price) > 9999999999
       || !Number.isSafeInteger(Number(row.minimumStock)) || Number(row.minimumStock) < 0 || Number(row.minimumStock) > 2147483647
       || (!row.id && (!Number.isSafeInteger(Number(row.initialStock)) || Number(row.initialStock) < 0 || Number(row.initialStock) > 2147483647))
       || (row.barcode && !/^\d{1,64}$/.test(row.barcode))) invalid("Revisa nombre, precio, stock y código de barras de cada variante.");
     const normalizedName = name.toLocaleLowerCase("es");
-    if (names.has(normalizedName)) invalid("Hay nombres de variante repetidos."); names.add(normalizedName);
-    if (row.barcode && barcodes.has(row.barcode)) invalid("Hay códigos de barras repetidos."); if (row.barcode) barcodes.add(row.barcode);
+    if (names.has(normalizedName)) invalid("Hay nombres de variante repetidos.", "name"); names.add(normalizedName);
+    if (row.barcode && barcodes.has(row.barcode)) invalid("Hay códigos de barras repetidos.", "barcode"); if (row.barcode) barcodes.add(row.barcode);
     return { ...(row.id ? { id: row.id } : {}), name, selections,
       price: Number(row.price), barcode: row.barcode || null, minimumStock: Number(row.minimumStock), status: row.status, inStoreOnly: row.inStoreOnly,
       ...(row.description !== undefined ? { description: row.description } : {}), ...(row.unitMeasure !== undefined ? { unitMeasure: row.unitMeasure } : {}),

@@ -19,3 +19,10 @@ export async function saveProductBundleRequest(body) {
 export async function getProductBundleOperationRequest(key) {
   return (await api.get(`/product-families/operations/${key}`)).data.data;
 }
+
+export async function renameFamilyAttributeRequest(familyId, attributeId, body) {
+  return (await api.post(`/product-families/${familyId}/attributes/${attributeId}/rename`, body)).data.data;
+}
+export async function getAttributeRenameOperationRequest(familyId, attributeId, key) {
+  return (await api.get(`/product-families/${familyId}/attributes/${attributeId}/rename-operations/${key}`)).data.data;
+}

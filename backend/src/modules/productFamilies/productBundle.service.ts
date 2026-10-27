@@ -106,7 +106,7 @@ export async function getProductConversion(id: number) {
   });
 }
 
-async function bundleSnapshot(id: number, tx: DbTransaction) {
+export async function bundleSnapshot(id: number, tx: DbTransaction) {
   const family = await getFamily(id, tx);
   const members = await tx.select().from(products).where(eq(products.familyId, id)).orderBy(asc(products.id));
   const pictureRows = await tx.select({ id: images.id, productId: images.productId, position: images.position, isPrimary: images.isPrimary }).from(images)

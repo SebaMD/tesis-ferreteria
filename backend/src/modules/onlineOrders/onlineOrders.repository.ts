@@ -1,11 +1,12 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns, orderIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
   clientDeliveryAddressesTable,
   onlineOrderItemsTable,
   onlineOrdersTable,
   onlinePaymentsTable,
-  productsTable,
   rolesTable,
   usersTable,
   type NewOnlineOrderItem,
@@ -826,8 +827,7 @@ async function attachOrderData<T extends { id: number; total: string }>(orders: 
       .select({
         orderId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -838,7 +838,7 @@ async function attachOrderData<T extends { id: number; total: string }>(orders: 
         promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
       })
       .from(onlineOrderItemsTable)
-      .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+      .leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
       .where(inArray(onlineOrderItemsTable.orderId, orderIds)),
     db
       .select(paymentColumns)

@@ -31,8 +31,8 @@ test("stock column stays textual but option alerts remain",async()=>{
 test("attributes preserve drafts, expose restrictions and open for invalid fields",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");
  assert.match(s,/\[attributesOpen, setAttributesOpen\] = useState\(!familyId\)/);assert.match(s,/aria-expanded=\{attributesOpen\}/);
- assert.match(s,/hidden=\{!attributesOpen\}/);assert.match(s,/disabled=\{locked \|\| definitionLocked\}/);
- assert.match(s,/Puedes crear variantes con opciones nuevas de los atributos actuales/);
+ assert.match(s,/hidden=\{!attributesOpen\}/);assert.match(s,/disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/);
+ assert.match(s,/Una dimensión nueva se incorpora por separado, asignando una opción a todos los artículos/);
  assert.match(s,/Renombrar este atributo requiere una operación controlada/);
  assert.match(s,/disabled=\{hasExisting\}/);
 });

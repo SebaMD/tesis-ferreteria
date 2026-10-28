@@ -232,6 +232,34 @@
       "when": 1793025179484,
       "tag": "0032_delivery_quote_checkout",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793130071270,
+      "tag": "0033_commercial_identity_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793137229140,
+      "tag": "0034_controlled_product_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793139154961,
+      "tag": "0035_family_category_reclassification",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793141281163,
+      "tag": "0036_controlled_family_dimension",
+      "breakpoints": true
     }
   ]
 }

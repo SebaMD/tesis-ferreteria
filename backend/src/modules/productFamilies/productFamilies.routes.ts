@@ -5,9 +5,27 @@ import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { FamilyError, getFamilyForManagement, listFamilies, saveFamily, validateFamilyBody, detachProductFamily, validateDetachFamilyBody, setFamilyArchived, validateFamilyStateBody } from "./productFamilies.service.js";
 import { getAttributeRenameOperation, renameFamilyAttribute } from "./productAttributeRename.service.js";
+import { familyCategoryOperation } from "./familyCategory.service.js";
+import { familyDimensionOperation } from "./familyDimension.service.js";
 
 const router = Router();
 router.use(authenticateJwt, verifyRoles(["ADMIN"]));
+router.post("/:id/dimension-additions",async(req:AuthenticatedRequest,res)=>{
+ try{return handleSuccess(res,200,"Atributo incorporado",await familyDimensionOperation(Number(req.params.id),req.user!.id,req.body));}
+ catch(e){if(e instanceof FamilyError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"No se pudo confirmar la ampliación. Consulte el resultado antes de reintentar.",e);}
+});
+router.get("/:id/dimension-additions/:key",async(req:AuthenticatedRequest,res)=>{
+ try{return handleSuccess(res,200,"Resultado de ampliación",await familyDimensionOperation(Number(req.params.id),req.user!.id,undefined,String(req.params.key)));}
+ catch(e){if(e instanceof FamilyError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"No se pudo consultar el resultado",e);}
+});
+router.post("/:id/category-changes", async (req: AuthenticatedRequest,res)=>{
+  try{return handleSuccess(res,200,"Categoría actualizada",await familyCategoryOperation(Number(req.params.id),req.user!.id,req.body));}
+  catch(e){if(e instanceof FamilyError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"No se pudo confirmar la reclasificación. Consulte su resultado antes de reintentar.",e);}
+});
+router.get("/:id/category-changes/:key",async(req:AuthenticatedRequest,res)=>{
+  try{return handleSuccess(res,200,"Resultado de reclasificación",await familyCategoryOperation(Number(req.params.id),req.user!.id,undefined,String(req.params.key)));}
+  catch(e){if(e instanceof FamilyError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"No se pudo consultar el resultado",e);}
+});
 router.post("/:id/attributes/:attributeId/rename", async (req: AuthenticatedRequest, res) => {
   try { return handleSuccess(res, 200, "Nombre del atributo actualizado", await renameFamilyAttribute(Number(req.params.id), Number(req.params.attributeId), req.body, req.user!.id)); }
   catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo confirmar el renombrado. Consulte su resultado antes de reintentar.", e); }

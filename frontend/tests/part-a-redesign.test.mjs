@@ -39,7 +39,7 @@ test("progressive form keeps drafts mounted and isolates advanced actions",async
   const page=await read("pages/ProductsPage.jsx"),editor=await read("components/ProductBundleEditor.jsx");
   assert.match(page,/Tipo de producto nuevo/); assert.match(page,/Producto con variantes<\/button>/);
   assert.match(page,/<ProductBundleEditor inline/);
-  assert.match(page,/suspended=\{bundleDialogActive\}/);assert.match(page,/commonData=\{\{ \.\.\.form, unitMeasure: unitSearch \}\}/);
+  assert.match(page,/suspended=\{bundleDialogActive \|\| nameCorrectionOpen\}/);assert.match(page,/commonData=\{\{ \.\.\.form, unitMeasure: unitSearch \}\}/);
   assert.match(page,/Convertir en producto con variantes/);assert.match(editor,/Volver al producto/);assert.match(editor,/Confirmar conversión del producto/);
   assert.match(page,/pendingFiles=\{pendingProductImages\}/);assert.doesNotMatch(page,/Administración avanzada|<ProductVariantFields/);assert.match(page,/<ProductBundleEditor inline conversionId=\{editingProductId\}/);
   assert.match(page,/onClick=\{openVariants\}/); assert.match(page,/!canAddVariants && !variantsEnabled/); assert.doesNotMatch(page,/familyToolsOpen|ProductFamilyTools/);

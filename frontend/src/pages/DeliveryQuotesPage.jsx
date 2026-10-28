@@ -4,6 +4,7 @@ import { getApiError } from "../api/httpClient.js";
 import useAuth from "../hooks/useAuth.js";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import OrderAmounts from "../components/orders/OrderAmounts.jsx";
+import HistoricalIdentityNote from "../components/HistoricalIdentityNote.jsx";
 import { formatClp, formatDate as formatDateValue } from "../helpers/formatters.js";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import { saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
@@ -54,7 +55,7 @@ function QuoteDetails({id,guest,staff,warehouse,back}) {
       <section className="rounded-lg border border-slate-200 bg-white p-4"><h2 className="mt-0 text-lg">Solicitud #{q.id} · {states[q.status]||q.status}</h2><p className="text-sm text-slate-500">{formatDate(q.createdAt)} · Versión {q.version}</p>
         {!order&&<p className="text-sm">Esta solicitud no es un pedido pagado. Los productos todavía no están reservados.</p>}
         <div className="grid gap-2 text-sm sm:grid-cols-2"><span>Receptor: {q.delivery.recipientName}</span><span>Teléfono: {q.delivery.phone}</span><span className="break-words">Dirección: {q.delivery.address}, {q.delivery.commune}</span><span>Referencias: {q.delivery.reference||"Sin referencias"}</span><span>Entrega: {q.delivery.nonUrgent?"No urgente, a coordinar":"Urgencia por coordinar con FYF"}</span></div>
-        <ul className="mb-0 space-y-2 pl-5 text-sm">{q.items.map(i=><li key={i.productId}>{i.name} · Producto #{i.productId} · {i.quantity} {i.unitMeasure}</li>)}</ul>
+        <ul className="mb-0 space-y-2 pl-5 text-sm">{q.items.map(i=><li key={i.productId}>{i.name} · Producto #{i.productId} · {i.quantity} {i.unitMeasure}<HistoricalIdentityNote capture={i.historicalIdentity}/></li>)}</ul>
       </section>
       {q.revisions.length>0&&<section className="rounded-lg border border-slate-200 bg-white p-4">
         <h3 className="mt-0">Revisiones del flete</h3>

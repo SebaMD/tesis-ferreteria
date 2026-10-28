@@ -1,8 +1,9 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns, saleIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
-  productsTable,
   saleCancellationRequestItemsTable,
   saleCancellationRequestsTable,
   saleDetailsTable,
@@ -52,11 +53,10 @@ export async function findSales() {
       .select({
         saleId: saleDetailsTable.saleId,
         productId: saleDetailsTable.productId,
-        productName: productsTable.name,
-        productBarcode: productsTable.barcode,
+        ...historicalProductColumns,
       })
       .from(saleDetailsTable)
-      .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id)),
+      .leftJoin(identityCapture, saleIdentityJoin(saleDetailsTable.saleId, saleDetailsTable.productId)),
   ]);
   const latestRequestBySale = new Map<number, (typeof cancellationRequests)[number]>();
   const detailsBySale = new Map<number, typeof saleSearchDetails>();
@@ -94,15 +94,14 @@ export async function findSaleById(id: number) {
     .select({
       saleId: saleDetailsTable.saleId,
       productId: saleDetailsTable.productId,
-      productName: productsTable.name,
-      productBarcode: productsTable.barcode,
+      ...historicalProductColumns,
       quantity: saleDetailsTable.quantity,
       returnedQuantity: saleDetailsTable.returnedQuantity,
       unitPrice: saleDetailsTable.unitPrice,
       subtotal: saleDetailsTable.subtotal,
     })
     .from(saleDetailsTable)
-    .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id))
+    .leftJoin(identityCapture, saleIdentityJoin(saleDetailsTable.saleId, saleDetailsTable.productId))
     .where(eq(saleDetailsTable.saleId, id));
 
   const cancellationRequests = await findCancellationRequests(id);
@@ -270,7 +269,7 @@ const cancellationRequestItemColumns = {
   requestId: saleCancellationRequestItemsTable.requestId,
   saleId: saleCancellationRequestsTable.saleId,
   productId: saleCancellationRequestItemsTable.productId,
-  productName: productsTable.name,
+  ...historicalProductColumns,
   requestedQuantity: saleCancellationRequestItemsTable.requestedQuantity,
   soldQuantity: saleDetailsTable.quantity,
   returnedQuantity: saleDetailsTable.returnedQuantity,
@@ -287,7 +286,7 @@ async function attachCancellationRequestItems<T extends { id: number }>(requests
       saleCancellationRequestsTable,
       eq(saleCancellationRequestItemsTable.requestId, saleCancellationRequestsTable.id),
     )
-    .innerJoin(productsTable, eq(saleCancellationRequestItemsTable.productId, productsTable.id))
+    .leftJoin(identityCapture, saleIdentityJoin(saleCancellationRequestsTable.saleId, saleCancellationRequestItemsTable.productId))
     .innerJoin(
       saleDetailsTable,
       and(

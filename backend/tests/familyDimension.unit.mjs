@@ -1,0 +1,5 @@
+import {test} from "node:test";import assert from "node:assert/strict";
+import {validateFamilyDimension} from "../dist/modules/productFamilies/familyDimension.service.js";
+const body={name:" Color ",options:[" Negro ","Azul"],assignments:[{productId:2,optionIndex:1},{productId:1,optionIndex:0}],reason:"Confirmación de la clasificación",confirmed:true,operationKey:"12345678-1234-1234-1234-123456789012",expectedRevision:"a".repeat(64)};
+test("dimension command normalizes descriptive data and orders explicit assignments",()=>{const b=validateFamilyDimension(body);assert.equal(b.name,"Color");assert.deepEqual(b.options,["Negro","Azul"]);assert.equal(b.assignments[0].productId,1);});
+test("dimension command rejects unassigned, duplicate, invalid or unrelated changes",()=>{for(const c of [{name:""},{name:"x".repeat(61)},{name:"a\nb"},{options:[]},{options:["Azul"," azul "]},{assignments:[]},{assignments:[{productId:1,optionIndex:2}]},{assignments:[{productId:1,optionIndex:0},{productId:1,optionIndex:1}]},{stock:1},{reason:"corto"},{confirmed:false}])assert.throws(()=>validateFamilyDimension({...body,...c}));});

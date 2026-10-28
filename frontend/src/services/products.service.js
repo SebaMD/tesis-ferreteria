@@ -1,4 +1,10 @@
 import api from "../api/httpClient.js";
+export async function correctProductNameRequest(id, body) {
+  return (await api.post(`/products/${id}/name-corrections`, body)).data.data;
+}
+export async function getProductNameCorrectionRequest(id, key) {
+  return (await api.get(`/products/${id}/name-corrections/${encodeURIComponent(key)}`)).data.data;
+}
 import {
   resolveProductAssets,
   resolveProductImageAsset,

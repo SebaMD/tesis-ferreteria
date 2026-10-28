@@ -18,7 +18,7 @@ try {
   const dataDirectory = (await pool.query("show data_directory")).rows[0].data_directory.replaceAll("\\", "/");
   assert.match(dataDirectory, /\/fyf-delivery-test-[^/]+\/data$/);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 33);
+  assert.equal(journal.entries.length, 37);
   assert.ok(journal.entries[30].when > journal.entries[29].when);
   await mkdir(path.join(folder, "meta"));
   await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 30) }));
@@ -43,8 +43,8 @@ try {
   await pool.query("create database fyf_delivery_clean");
   const cleanUrl = new URL(url); cleanUrl.pathname = "/fyf_delivery_clean";
   const clean = new pg.Pool({ connectionString: cleanUrl.href });
-  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "33"); } finally { await clean.end(); }
-  console.log("PASS 33 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
+  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "37"); } finally { await clean.end(); }
+  console.log("PASS 37 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
 
   Object.assign(process.env, { DATABASE_URL: url.href, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const sdk = (await import("transbank-sdk")).default;

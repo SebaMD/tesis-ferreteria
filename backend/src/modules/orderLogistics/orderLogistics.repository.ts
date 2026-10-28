@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns, orderIdentityJoin, saleIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
   onlineOrderItemsTable,
   onlineOrdersTable,
   onlinePaymentsTable,
-  productsTable,
   saleDeliveriesTable,
   saleDetailsTable,
   salesTable,
@@ -74,14 +75,14 @@ export async function findOnlineAdministrativeOrder(orderId: number) {
   if (!order) return null;
   const [items, payments] = await Promise.all([
     db.select({
-      productId: onlineOrderItemsTable.productId, productName: productsTable.name,
-      unitMeasure: productsTable.unitMeasure, quantity: onlineOrderItemsTable.quantity,
+      productId: onlineOrderItemsTable.productId, ...historicalProductColumns,
+      quantity: onlineOrderItemsTable.quantity,
       unitPrice: onlineOrderItemsTable.unitPrice, subtotal: onlineOrderItemsTable.subtotal,
       discountAmount: onlineOrderItemsTable.discountAmount, promotionId: onlineOrderItemsTable.promotionId,
       promotionTypeSnapshot: onlineOrderItemsTable.promotionTypeSnapshot,
       promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
       promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
-    }).from(onlineOrderItemsTable).innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+    }).from(onlineOrderItemsTable).leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
       .where(eq(onlineOrderItemsTable.orderId, orderId)),
     db.select({ buyOrder: onlinePaymentsTable.buyOrder, authorizationCode: onlinePaymentsTable.authorizationCode,
       amount: onlinePaymentsTable.amount, transactionDate: onlinePaymentsTable.transactionDate })
@@ -127,6 +128,7 @@ const saleColumns = {
 
 type Actor = { id: number; names: string; surnames: string };
 type LogisticsItem = {
+  historicalIdentity?: import("../../db/schema/commercialIdentitySnapshots.js").HistoricalIdentity | null;
   productId: number;
   productName: string;
   unitMeasure: string | null;
@@ -308,8 +310,7 @@ export async function findLogisticsTasks(filters: {
       ? db.select({
         taskId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -319,20 +320,19 @@ export async function findLogisticsTasks(filters: {
         promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
         promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
       }).from(onlineOrderItemsTable)
-        .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+        .leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
         .where(inArray(onlineOrderItemsTable.orderId, onlineIds))
       : Promise.resolve([]),
     saleIds.length
       ? db.select({
         taskId: saleDetailsTable.saleId,
         productId: saleDetailsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: saleDetailsTable.quantity,
         unitPrice: saleDetailsTable.unitPrice,
         subtotal: saleDetailsTable.subtotal,
       }).from(saleDetailsTable)
-        .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id))
+        .leftJoin(identityCapture, saleIdentityJoin(saleDetailsTable.saleId, saleDetailsTable.productId))
         .where(inArray(saleDetailsTable.saleId, saleIds))
       : Promise.resolve([]),
     actorIds.length

@@ -2,6 +2,10 @@ import { Router, raw, type NextFunction, type Request, type Response } from "exp
 import { authenticateJwt } from "../../middlewares/authentication.middleware.js";
 import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { handleErrorClient } from "../../utils/helpers.js";
+import { handleSuccess, handleErrorServer } from "../../utils/helpers.js";
+import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
+import { ProductError } from "./products.service.js";
+import { correctProductName, getProductNameCorrection } from "./productNameCorrection.service.js";
 import {
   createProductController,
   deleteProduct,
@@ -43,6 +47,15 @@ function parseProductImageBody(req: Request, res: Response, next: NextFunction) 
 }
 
 router.use(authenticateJwt);
+
+router.post("/:id/name-corrections", verifyRoles(["ADMIN"]), async (req: AuthenticatedRequest, res) => {
+  try { return handleSuccess(res, 200, "Nombre corregido", await correctProductName(Number(req.params.id), req.body, req.user!.id)); }
+  catch (e) { if (e instanceof ProductError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo confirmar la corrección. Consulta su resultado antes de reintentar.", e); }
+});
+router.get("/:id/name-corrections/:key", verifyRoles(["ADMIN"]), async (req: AuthenticatedRequest, res) => {
+  try { return handleSuccess(res, 200, "Resultado de corrección", await getProductNameCorrection(Number(req.params.id), String(req.params.key), req.user!.id)); }
+  catch (e) { if (e instanceof ProductError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo consultar el resultado", e); }
+});
 
 router.get("/", verifyRoles(["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"]), getProducts);
 router.get(

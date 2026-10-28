@@ -58,6 +58,7 @@ export function formatAdministrativeOrderText(model) {
   lines.push("", "Productos comprados");
   for (const item of model.items) {
     lines.push(`${item.productName} | Cantidad: ${item.quantity} ${item.unitMeasure || "unidad"} | Precio unitario: ${formatClp(item.unitPrice)} | Descuento: ${formatClp(item.discountAmount)} | Subtotal: ${formatClp(item.subtotal)}`);
+    if (item.identityNote) lines.push(item.identityNote);
     if (item.promotionType) lines.push(promotionText(item));
   }
   section(economic);
@@ -116,6 +117,7 @@ export function printAdministrativeOrder(model) {
     heading.appendChild(headerRow); table.appendChild(heading);
     for (const item of model.items) {
       const row = node("tr"), product = node("td", item.productName);
+      if (item.identityNote) product.appendChild(node("p", item.identityNote));
       if (item.promotionType) product.appendChild(node("span", promotionText(item), "promotion"));
       row.appendChild(product);
       for (const value of [`${item.quantity} ${item.unitMeasure || "unidad"}`, formatClp(item.unitPrice), formatClp(item.discountAmount), formatClp(item.subtotal)]) row.appendChild(node("td", value));

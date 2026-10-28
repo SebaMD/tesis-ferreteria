@@ -1,5 +1,7 @@
 import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
+import { historicalProductColumns, orderIdentityJoin, saleIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
   onlineOrderItemsTable,
   onlineOrdersTable,
@@ -30,7 +32,7 @@ export async function findManagerStatisticsData(filters: ReportDateRange) {
         saleTotal: salesTable.total,
         saleStatus: salesTable.status,
         productId: productsTable.id,
-        productName: productsTable.name,
+        ...historicalProductColumns,
         quantity: saleDetailsTable.quantity,
         returnedQuantity: saleDetailsTable.returnedQuantity,
         unitPrice: saleDetailsTable.unitPrice,
@@ -38,6 +40,7 @@ export async function findManagerStatisticsData(filters: ReportDateRange) {
       .from(salesTable)
       .innerJoin(saleDetailsTable, eq(salesTable.id, saleDetailsTable.saleId))
       .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id))
+      .leftJoin(identityCapture, saleIdentityJoin(saleDetailsTable.saleId, saleDetailsTable.productId))
       .where(and(
         gte(salesTable.date, filters.from),
         lt(salesTable.date, filters.toExclusive),
@@ -50,7 +53,7 @@ export async function findManagerStatisticsData(filters: ReportDateRange) {
         deliveryFee: onlineOrdersTable.deliveryFee,
         orderStatus: onlineOrdersTable.status,
         productId: productsTable.id,
-        productName: productsTable.name,
+        ...historicalProductColumns,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -58,6 +61,7 @@ export async function findManagerStatisticsData(filters: ReportDateRange) {
       .from(onlineOrdersTable)
       .innerJoin(onlineOrderItemsTable, eq(onlineOrdersTable.id, onlineOrderItemsTable.orderId))
       .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+      .leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
       .where(and(
         inArray(onlineOrdersTable.status, [...COMPLETED_ONLINE_ORDER_STATUSES]),
         sql`${onlineCommercialDate} >= ${filters.from}`,

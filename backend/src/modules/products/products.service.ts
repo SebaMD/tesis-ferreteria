@@ -138,6 +138,7 @@ export async function editProductInTransaction(tx: DbTransaction, id: number, da
       assertProductRevision(locked.updatedAt, expectedUpdatedAt);
       const { familyId, variantOptionIds, associationReason, ...base } = data;
       const categoryId = data.categoryId ?? locked.categoryId;
+      if (base.name !== undefined && base.name !== locked.name) throw new ProductError("Utiliza Corregir nombre para una modificación independiente y auditada", 409);
       if (await productHasHistory(id, tx) && ((base.name !== undefined && base.name !== locked.name)
         || (base.brand !== undefined && base.brand !== locked.brand)
         || (base.unitMeasure !== undefined && base.unitMeasure !== locked.unitMeasure))) {

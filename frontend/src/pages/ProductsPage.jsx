@@ -4,6 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import HistoricalIdentityNote from "../components/HistoricalIdentityNote.jsx";
+import ProductNameCorrectionAction from "../components/ProductNameCorrectionAction.jsx";
+import { productNameDraftIsDirty } from "../helpers/productNameCorrection.js";
+import { identityProvenance } from "../helpers/historicalIdentity.js";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -131,6 +135,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState(emptyForm);
   const [movementForm, setMovementForm] = useState(initialMovementForm);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [nameCorrectionOpen, setNameCorrectionOpen] = useState(false);
   const [activeForm, setActiveForm] = useState(null);
   const [bundleEditor, setBundleEditor] = useState(null);
   const [variantsEnabled, setVariantsEnabled] = useState(false);
@@ -256,10 +261,6 @@ export default function ProductsPage() {
     }).sort(compareByNewest),
     [categoryFilter, lowStockOnly, normalizedSearch, outOfStockOnly, visibleStatusProducts, variantsOnly],
   );
-  const productById = useMemo(
-    () => new Map(products.map((product) => [String(product.id), product])),
-    [products],
-  );
   const categoryProductCounts = useMemo(
     () => products.reduce((counts, product) => {
       const key = String(product.categoryId);
@@ -292,8 +293,8 @@ export default function ProductsPage() {
   const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
   const filteredMovements = useMemo(
     () => sortedMovements.filter((movement) => {
-      const product = productById.get(String(movement.productId));
-      const matchesCategory = !categoryFilter || String(product?.categoryId || "") === categoryFilter;
+      const category = movement.historicalIdentity?.identity?.category;
+      const matchesCategory = !categoryFilter || String(category?.id || "") === categoryFilter;
 
       if (!matchesCategory) return false;
       if (!normalizedSearch) return true;
@@ -302,10 +303,10 @@ export default function ProductsPage() {
         String(movement.id).includes(normalizedSearch) ||
         String(movement.productId || "").includes(normalizedSearch) ||
         String(movement.productName || "").toLocaleLowerCase("es").includes(normalizedSearch) ||
-        String(product?.categoryName || "").toLocaleLowerCase("es").includes(normalizedSearch)
+        String(category?.name || "").toLocaleLowerCase("es").includes(normalizedSearch)
       );
     }),
-    [categoryFilter, normalizedSearch, productById, sortedMovements],
+    [categoryFilter, normalizedSearch, sortedMovements],
   );
   const movementsPagination = usePagination(filteredMovements, {
     resetKey: `${categoryFilter}|${normalizedSearch}|${movements.length}`,
@@ -1243,6 +1244,7 @@ export default function ProductsPage() {
         { key: "producto", header: "Producto" },
         { key: "tipo", header: "Tipo de movimiento" },
         { key: "cantidad", header: "Cantidad" },
+        { key: "identidad", header: "Procedencia de identidad" },
         { key: "responsable", header: "Responsable" },
         { key: "motivo", header: "Motivo" },
       ],
@@ -1251,6 +1253,7 @@ export default function ProductsPage() {
         producto: movement.productName,
         tipo: MOVEMENT_LABELS[movement.movementType] || movement.movementType,
         cantidad: Number(movement.quantity || 0),
+        identidad: identityProvenance(movement.historicalIdentity),
         responsable: movement.userNames || movement.userSurnames
           ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim()
           : "Sistema",
@@ -1524,7 +1527,7 @@ export default function ProductsPage() {
 
       <AppModal
         open={canManage && activeForm === "product"}
-        suspended={bundleDialogActive}
+        suspended={bundleDialogActive || nameCorrectionOpen}
         title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
         description="Completa la información comercial y de inventario."
         onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
@@ -1566,8 +1569,10 @@ export default function ProductsPage() {
             <ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>
             <label>
               Nombre
-              <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+              <input value={form.name} disabled={Boolean(editingProductId)} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
             </label>
+            {editingProduct && <ProductNameCorrectionAction key={editingProductId} product={editingProduct} dirty={productNameDraftIsDirty(form, unitSearch, editingProduct, pendingProductImages)} busy={bundleSaving || submittingProduct || managingProductImages} onOpenChange={setNameCorrectionOpen}
+              onConflict={()=>toast.warning("Recarga el editor y revisa los datos antes de guardar.")} onRenamed={async result=>{setForm(p=>({...p,name:result.name}));await loadData();}}/>}
             <label>
               Marca (opcional)
               <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />
@@ -2044,7 +2049,7 @@ export default function ProductsPage() {
             emptyMessage={sortedMovements.length === 0 ? "No hay movimientos registrados." : "No se encontraron movimientos con los filtros seleccionados."}
             renderSummary={(movement) => (
               <div className="grid min-w-0 gap-2">
-                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong>
+                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong><HistoricalIdentityNote capture={movement.historicalIdentity}/>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className={badgeClass(getMovementTone(movement))}>{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span>
                   <strong className="font-mono text-sm text-ink-950">{movement.quantity}</strong>
@@ -2077,7 +2082,7 @@ export default function ProductsPage() {
               {movementsPagination.paginatedItems.map((movement) => (
                 <tr key={movement.id}>
                   <td className={dateCellClass}>{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</td>
-                  <td>{movement.productName}</td>
+                  <td>{movement.productName}<HistoricalIdentityNote capture={movement.historicalIdentity}/></td>
                   <td>
                     <span className={badgeClass(getMovementTone(movement))}>
                       {MOVEMENT_LABELS[movement.movementType] || movement.movementType}

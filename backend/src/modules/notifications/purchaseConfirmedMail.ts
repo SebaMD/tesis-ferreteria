@@ -34,6 +34,7 @@ export function renderPurchaseConfirmedMail(
     const promotion = formatPromotionSummary(item);
     return `- ${item.productName}: ${formatOrderQuantity(item.quantity, item.unitMeasure)} · `
       + `${formatOrderMoney(item.unitPrice)} c/u · ${formatOrderMoney(item.subtotal)}`
+      + (item.identityNote ? `\n  ${item.identityNote}` : "")
       + (promotion ? `\n  ${promotion} · -${formatOrderMoney(item.discountAmount)}` : "");
   }).join("\n");
   const address = model.delivery.type === "DELIVERY" ? deliveryAddress(model) : "";
@@ -71,7 +72,7 @@ export function renderPurchaseConfirmedMail(
     const promotion = formatPromotionSummary(item);
     return `
     <tr>
-      <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeMailHtml(item.productName)}${promotion ? `<br><span style="color:#c2410c;font-size:11px;font-weight:700;">${escapeMailHtml(promotion)} · -${escapeMailHtml(formatOrderMoney(item.discountAmount))}</span>` : ""}</td>
+      <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeMailHtml(item.productName)}${item.identityNote ? `<br><span style="font-size:11px;color:#6b7280">${escapeMailHtml(item.identityNote)}</span>` : ""}${promotion ? `<br><span style="color:#c2410c;font-size:11px;font-weight:700;">${escapeMailHtml(promotion)} · -${escapeMailHtml(formatOrderMoney(item.discountAmount))}</span>` : ""}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#374151;text-align:right;white-space:nowrap;">${escapeMailHtml(formatOrderQuantity(item.quantity, item.unitMeasure))}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#374151;text-align:right;white-space:nowrap;">${escapeMailHtml(formatOrderMoney(item.unitPrice))}</td>
       <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;color:#111827;text-align:right;white-space:nowrap;font-weight:700;">${escapeMailHtml(formatOrderMoney(item.subtotal))}</td>

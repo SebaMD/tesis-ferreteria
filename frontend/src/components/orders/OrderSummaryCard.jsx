@@ -8,6 +8,8 @@ import {
 import { badgeClass } from "../../helpers/uiClasses.js";
 import OrderProductImage from "./OrderProductImage.jsx";
 import DownloadReceiptButton from "./DownloadReceiptButton.jsx";
+import HistoricalIdentityNote from "../HistoricalIdentityNote.jsx";
+import { formatQuantityWithUnit } from "../../helpers/units.js";
 
 const DATE_OPTIONS = { day: "2-digit", month: "short", year: "numeric" };
 
@@ -33,12 +35,13 @@ export default function OrderSummaryCard({
           <OrderProductImage src={primaryItem?.productImageUrl} alt={primaryItem?.productName || "Producto del pedido"} />
         </div>
 
-        <div className="grid min-w-0 content-start gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <strong className="block truncate text-base text-ink-950 max-[430px]:text-sm">{primaryItem?.productName || "Pedido online"}</strong>
+              <HistoricalIdentityNote capture={primaryItem?.historicalIdentity}/>
               <span className="mt-0.5 block text-xs text-slate-500">
-                {primaryItem ? `${primaryItem.quantity} ${Number(primaryItem.quantity) === 1 ? "unidad" : "unidades"}` : "Sin productos"}
+                {primaryItem ? formatQuantityWithUnit(primaryItem.quantity, primaryItem.unitMeasure || "unidad no registrada") : "Sin productos"}
                 {extraProducts > 0 ? ` · +${extraProducts} ${extraProducts === 1 ? "producto" : "productos"}` : ""}
               </span>
             </div>

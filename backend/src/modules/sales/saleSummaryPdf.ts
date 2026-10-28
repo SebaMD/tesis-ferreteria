@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import type { getSaleByIdService } from "./sales.service.js";
 import { formatOrderDate, formatOrderMoney } from "../onlineOrders/orderCommercialModel.js";
 import { INTERNAL_DOCUMENT_NOTICE } from "../../utils/internalDocuments.js";
+import { historicalIdentityNote } from "../products/historicalIdentity.js";
 
 type SaleSummarySource = Awaited<ReturnType<typeof getSaleByIdService>>;
 const SALE_STATES: Record<string, string> = { ACTIVE: "Activa", PARTIALLY_RETURNED: "Devuelta parcialmente", CANCELLED: "Cancelada" };
@@ -20,6 +21,7 @@ export function buildSaleSummaryModel(sale: SaleSummarySource) {
     netTotal: sale.netTotal,
     items: sale.details.map((item) => ({
       productName: item.productName,
+      identityNote: historicalIdentityNote(item.historicalIdentity),
       quantity: item.quantity,
       returnedQuantity: item.returnedQuantity,
       remainingQuantity: item.quantity - item.returnedQuantity,
@@ -80,7 +82,7 @@ export function renderSaleSummaryPdf(model: ReturnType<typeof buildSaleSummaryMo
     };
     const tableHeading = () => row(["Producto", "Vendidas", "Devueltas", "No devueltas", "Precio unitario", "Subtotal original"], true);
     tableHeading();
-    for (const item of model.items) row([item.productName, String(item.quantity), String(item.returnedQuantity),
+    for (const item of model.items) row([`${item.productName}\n${item.identityNote}`, String(item.quantity), String(item.returnedQuantity),
       String(item.remainingQuantity), formatOrderMoney(item.unitPrice), formatOrderMoney(item.subtotal)]);
     doc.moveDown();
     const totals = [

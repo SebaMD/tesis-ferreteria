@@ -92,7 +92,7 @@ test("stock columns are balanced, restrictions remain enforced and recovery stil
   const editor = await read("components/ProductBundleEditor.jsx");
   assert.match(editor, /variant-inventory-fields grid min-w-0 items-start gap-3 sm:grid-cols-2/);
   assert.match(editor, /disabled=\{hasExisting\}/);
-  assert.match(editor, /disabled=\{locked \|\| definitionLocked\}/);
+  assert.match(editor, /disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/);
   assert.match(editor, /disabled=\{row.hasHistory && !row.isOriginal\}/);
   assert.match(editor, /saveProductBundleRequest\(frozen.current\)/);
   assert.match(editor, /getProductBundleOperationRequest\(key\)/);

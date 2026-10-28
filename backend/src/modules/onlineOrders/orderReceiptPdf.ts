@@ -80,13 +80,14 @@ function renderItems(document: PDFKit.PDFDocument, model: OrderCommercialModel) 
   for (const item of model.items) {
     document.font("Helvetica").fontSize(9);
     const promotionSummary = formatPromotionSummary(item);
-    const productHeight = document.heightOfString(item.productName, { width: TABLE.product - 12 });
+    const productText = `${item.productName}\n${item.identityNote}`;
+    const productHeight = document.heightOfString(productText, { width: TABLE.product - 12 });
     const promotionText = promotionSummary ? `${promotionSummary} · -${formatOrderMoney(item.discountAmount)}` : null;
     const promotionHeight = promotionText ? document.fontSize(7.5).heightOfString(promotionText, { width: TABLE.product - 12 }) + 2 : 0;
     const rowHeight = Math.max(28, productHeight + promotionHeight + 12);
     ensureTableSpace(document, rowHeight, model);
     const y = document.y;
-    document.font("Helvetica").fontSize(9).fillColor("#111827").text(item.productName, TABLE.left + 6, y + 6, { width: TABLE.product - 12 });
+    document.font("Helvetica").fontSize(9).fillColor("#111827").text(productText, TABLE.left + 6, y + 6, { width: TABLE.product - 12 });
     if (promotionSummary) {
       document.fillColor("#c2410c").fontSize(7.5).text(
         promotionText!,

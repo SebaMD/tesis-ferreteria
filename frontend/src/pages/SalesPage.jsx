@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import HistoricalIdentityNote from "../components/HistoricalIdentityNote.jsx";
 import DownloadSaleSummaryButton from "../components/orders/DownloadSaleSummaryButton.jsx";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -1221,7 +1222,7 @@ export default function SalesPage() {
               <div className="mt-3 grid gap-1.5 border-t border-slate-200 pt-3 text-sm">
                 {(requestToReverse.details || []).map((detail) => (
                   <div className="flex justify-between gap-3" key={`${requestToReverse.id}-${detail.productId}`}>
-                    <span>{detail.productName}</span>
+                    <span>{detail.productName}<HistoricalIdentityNote capture={detail.historicalIdentity}/></span>
                     <strong className="font-mono">{detail.requestedQuantity}</strong>
                   </div>
                 ))}
@@ -1301,7 +1302,7 @@ export default function SalesPage() {
                         aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`}
                       />
                       <div className="min-w-0">
-                        <strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                        <strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                         <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
                       </div>
                     </div>
@@ -1381,7 +1382,7 @@ export default function SalesPage() {
                           </td>
                           <td>
                             <div className="grid gap-0.5">
-                              <strong className="text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                              <strong className="text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                               <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
                             </div>
                           </td>
@@ -1552,7 +1553,7 @@ export default function SalesPage() {
               emptyMessage="No hay productos asociados a esta solicitud."
               renderSummary={(detail) => (
                 <div className="grid min-w-0 gap-2">
-                  <strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                  <strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span>Solicitada: {detail.requestedQuantity}</span>
                     <strong className="font-mono">{formatClp(detail.requestedSubtotal)}</strong>
@@ -1586,7 +1587,7 @@ export default function SalesPage() {
                   {(requestToReview?.details || []).map((detail) => (
                     <tr key={`${requestToReview.id}-${detail.productId}`}>
                       <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                      <td>{detail.productName || `Producto #${detail.productId}`}</td>
+                      <td>{detail.productName || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                       <td className={numericCellClass}>{detail.soldQuantity}</td>
                       <td className={numericCellClass}>{detail.returnedQuantity}</td>
                       <td className={numericCellClass}>{detail.requestedQuantity}</td>
@@ -1709,7 +1710,7 @@ export default function SalesPage() {
                   emptyMessage="No hay productos asociados a esta venta."
                   renderSummary={(detail) => (
                     <div className="grid min-w-0 gap-2">
-                      <strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong>
+                      <strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                       <div className="flex items-center justify-between gap-3 text-xs">
                         <span>Vendida: {detail.quantity}</span>
                         <strong className="font-mono">{formatClp(detail.subtotal)}</strong>
@@ -1743,7 +1744,7 @@ export default function SalesPage() {
                       {getSaleDetails(saleDetail).map((detail) => (
                         <tr key={`${detail.saleId}-${detail.productId}`}>
                           <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                          <td>{detail.productName || detail.name || `Producto #${detail.productId}`}</td>
+                          <td>{detail.productName || detail.name || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                           <td className={numericCellClass}>{detail.quantity}</td>
                           <td className={numericCellClass}>{detail.returnedQuantity || 0}</td>
                           <td className={numericCellClass}>{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</td>
@@ -1837,7 +1838,7 @@ export default function SalesPage() {
                                         className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 max-[720px]:grid-cols-[minmax(0,1fr)_auto]"
                                         key={`${request.id}-${detail.productId}`}
                                       >
-                                        <span className="truncate text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span>
+                                        <span className="truncate text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                                         <span className="font-mono text-slate-500">{detail.requestedQuantity} unidades</span>
                                         <strong className="font-mono text-ink-950 max-[720px]:col-span-2 max-[720px]:justify-self-end">
                                           {formatClp(detail.requestedSubtotal)}

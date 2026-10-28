@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import { deliveryQuoteRequestsTable as requests, deliveryQuoteItemsTable as items, deliveryQuoteRevisionsTable as revisions, deliveryQuoteEventsTable as events,
   guestDeliveryQuoteTokensTable as tokens, usersTable as users, rolesTable as roles, productsTable as products, deliveryPolicyRevisionsTable as policies, deliverySettingsTable as settings, emailVerificationChallengesTable as challenges } from "../../db/schema/index.js";
 import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
@@ -64,7 +66,8 @@ async function load(tx:DbTransaction,id:number,p:QuotePrincipal){
   const u=await authorize(tx,q,p);return {q,u};
 }
 async function view(tx:DbTransaction,q:Quote,u:Actor|null){
-  const cargo=await tx.select({productId:items.productId,quantity:items.quantity,name:items.productName,unitMeasure:items.unitMeasure}).from(items).where(eq(items.requestId,q.id)).orderBy(items.id);
+  const cargo=await tx.select({productId:items.productId,quantity:items.quantity,name:items.productName,unitMeasure:items.unitMeasure,
+    historicalIdentity:historicalProductColumns.historicalIdentity}).from(items).leftJoin(identityCapture,eq(identityCapture.deliveryQuoteItemId,items.id)).where(eq(items.requestId,q.id)).orderBy(items.id);
   const history=await tx.select().from(events).where(eq(events.requestId,q.id)).orderBy(events.id);
   const quotes=await tx.select().from(revisions).where(eq(revisions.requestId,q.id)).orderBy(revisions.version);
   const administrative=Boolean(u&&staff.includes(u.role));

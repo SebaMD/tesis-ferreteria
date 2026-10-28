@@ -90,7 +90,7 @@ async function conversionSnapshot(id: number, tx: DbTransaction) {
   if (product.familyId !== null || product.variantKey !== null) throw new FamilyError("El producto ya pertenece a una familia. Abra la edición familiar.");
   // Conversion creates a NEW classification, never a route around historical recovery.
   const associations = await tx.select({ id: events.id }).from(events).where(and(eq(events.productId, id),
-    sql`not (${events.familyId} is null and coalesce(${events.next}->>'operation', '')='SIMPLE_SAVE')`)).limit(1);
+    sql`not (${events.familyId} is null and coalesce(${events.next}->>'operation', '') in ('SIMPLE_SAVE','PRODUCT_NAME_CORRECTION'))`)).limit(1);
   const orphan = await tx.execute(sql`select 1 from product_variant_values where product_id=${id} limit 1`);
   if (associations.length || orphan.rows.length) throw new FamilyError("El producto tiene asociaciones familiares anteriores. Use la administración avanzada y sus reglas de recuperación; no puede convertirse en una familia nueva.");
   const pictures = await tx.select().from(images).where(eq(images.productId, id)).orderBy(asc(images.id));

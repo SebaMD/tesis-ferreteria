@@ -225,6 +225,11 @@ export function buildManagerStatistics(
   };
 
   return {
+    identityHistory: [...source.pointOfSaleRows, ...source.onlineRows].reduce((counts, row) => {
+      const origin = row.historicalIdentity?.origin;
+      if (origin === "ORIGINAL") counts.originalLines++; else if (origin) counts.referenceLines++; else counts.missingLines++;
+      return counts;
+    }, { originalLines: 0, referenceLines: 0, missingLines: 0 }),
     period: { from: filters.fromLabel, to: filters.toLabel },
     kpis: {
       productsIncome: fromCents(netCents),

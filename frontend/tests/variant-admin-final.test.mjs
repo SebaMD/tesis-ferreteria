@@ -39,7 +39,7 @@ test("inventory menu reuses portal positioning, outside click, keyboard and conc
 });
 test("conversion stays inline and suspends only for sensitive confirmations without losing draft",async()=>{
  const page=await read("pages/ProductsPage.jsx"),editor=await read("components/ProductBundleEditor.jsx");
- assert.match(page,/suspended=\{bundleDialogActive\}/);assert.match(page,/<ProductBundleEditor inline conversionId=/);assert.match(page,/onBack=\{returnFromConversion\}/);
+ assert.match(page,/suspended=\{bundleDialogActive \|\| nameCorrectionOpen\}/);assert.match(page,/<ProductBundleEditor inline conversionId=/);assert.match(page,/onBack=\{returnFromConversion\}/);
  assert.match(editor,/Atributos \(\{draft.attributes.length\}\)/);assert.match(editor,/Confirmar conversión del producto/);assert.match(editor,/onDialogChange\?\.\(singleVariant \|\| confirmSave/);
  assert.doesNotMatch(page,/ProductFamilyTools|Gestión de familias|Administración avanzada|<ProductVariantFields/);
 });

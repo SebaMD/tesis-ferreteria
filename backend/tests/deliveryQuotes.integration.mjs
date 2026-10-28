@@ -14,9 +14,9 @@ const migrationFolder=path.join(path.dirname(dir),"previous-schema");
 const businessTables=["products","inventory_movements","online_orders","online_order_items","online_payments","sales","sale_details"];
 const business=async()=>Object.fromEntries(await Promise.all(businessTables.map(async t=>[t,(await pool.query(`select row_to_json(t) r from ${t} t order by row_to_json(t)::text`)).rows])));
 try{
-  const journal=JSON.parse(await readFile("drizzle/meta/_journal.json","utf8"));assert.equal(journal.entries.at(-1).tag,"0032_delivery_quote_checkout");assert.equal(journal.entries.length,33);
-  await mkdir(path.join(migrationFolder,"meta"),{recursive:true});await writeFile(path.join(migrationFolder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,-2)}));
-  for(const entry of journal.entries.slice(0,-2))await copyFile(`drizzle/${entry.tag}.sql`,path.join(migrationFolder,`${entry.tag}.sql`));
+  const journal=JSON.parse(await readFile("drizzle/meta/_journal.json","utf8"));assert.equal(journal.entries.at(-1).tag,"0036_controlled_family_dimension");assert.equal(journal.entries.length,37);
+  await mkdir(path.join(migrationFolder,"meta"),{recursive:true});await writeFile(path.join(migrationFolder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,31)}));
+  for(const entry of journal.entries.slice(0,31))await copyFile(`drizzle/${entry.tag}.sql`,path.join(migrationFolder,`${entry.tag}.sql`));
   await migrate(drizzle(pool),{migrationsFolder:migrationFolder});
   assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"31");
   assert.equal((await pool.query("select to_regclass('delivery_quote_requests') as name")).rows[0].name,null);
@@ -34,9 +34,9 @@ try{
   assert.equal(upgraded.delivery_quote_request_id,null);assert.equal(upgraded.delivery_quote_acceptance_id,null);
   const policyAfter=(await pool.query("select * from delivery_policy_revisions where id=$1",[oldPolicy.id])).rows[0];for(const[k,v]of Object.entries(oldPolicy))assert.deepEqual(policyAfter[k],v);assert.equal(policyAfter.pricing_mode,null);
   await pool.query("create database quote_clean");const cleanUrl=new URL(url);cleanUrl.pathname="/quote_clean";const clean=new pg.Pool({connectionString:cleanUrl.href});
-  try{await migrate(drizzle(clean),{migrationsFolder:"drizzle"});assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"33");assert.equal((await clean.query("select count(*) from delivery_policy_revisions")).rows[0].count,"0");}finally{await clean.end();}
+  try{await migrate(drizzle(clean),{migrationsFolder:"drizzle"});assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"37");assert.equal((await clean.query("select count(*) from delivery_policy_revisions")).rows[0].count,"0");}finally{await clean.end();}
   const guards=(await pool.query("select tgname from pg_trigger where not tgisinternal and tgname like '%quote%' ")).rows;assert.ok(guards.length>=6);
-  console.log("PASS migration: previous 31 to 33, clean/replay, constraints/triggers verified, legacy order/policy preserved and no manual activation");
+  console.log("PASS migration: previous 31 to 37, clean/replay, constraints/triggers verified, legacy order/policy preserved and no manual activation");
 
   Object.assign(process.env,{DATABASE_URL:url.href,SESSION_SECRET:randomBytes(32).toString("hex"),EMAIL_VERIFICATION_SECRET:randomBytes(32).toString("hex"),LOGISTICS_QR_SECRET:randomBytes(32).toString("hex"),MAIL_ENABLED:"true",SMTP_HOST:"127.0.0.1",SMTP_PORT:"1",MAIL_FROM:"test@example.test",WEBPAY_ENVIRONMENT:"integration",NODE_ENV:"test",FRONTEND_URL:"http://127.0.0.1:5192"});
   const messages=[];let mailFails=false;

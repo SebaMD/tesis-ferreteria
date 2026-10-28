@@ -289,6 +289,7 @@ export default function StatisticsPage() {
       <div className={pageHeaderClass}>
         <div>
           <h1>Estadísticas</h1>
+          {statistics?.identityHistory && <p className="text-xs text-slate-500">Identidades de las operaciones: {statistics.identityHistory.originalLines} originales, {statistics.identityHistory.referenceLines} capturas posteriores de referencia y {statistics.identityHistory.missingLines} sin captura. Los importes no se recalculan con el catálogo actual.</p>}
           <p>Indicadores descriptivos para apoyar decisiones comerciales y de stock.</p>
         </div>
       </div>

@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import {randomUUID} from "node:crypto";
+export async function testFamilyCategory({pool,call,body,users}){
+ const b=body();b.variants.forEach(v=>v.barcode=null);b.variants[1].status=false;
+ const created=await call("POST","/product-families/bundle",b,"ADMIN",200,true),id=created.familyId;
+ const target=(await pool.query("insert into categories(name) values($1) returning id",[`Destino ${randomUUID()}`])).rows[0].id;
+ await call("POST","/sales",{paymentMethod:"efectivo",details:[{productId:created.productIds[0],quantity:1}]},"CASHIER",201);
+ const raw=async()=> (await pool.query("select * from products where family_id=$1 order by id",[id])).rows;
+ const captures=async()=> (await pool.query("select * from commercial_identity_snapshots where product_id=any($1) order by id",[created.productIds])).rows;
+ const before=await raw();let history=await captures();
+ const snapshot=await call("GET",`/product-families/${id}/bundle`,null,"ADMIN");
+ const input={categoryId:target,reason:"Reclasificación comercial justificada",expectedRevision:snapshot.revision,operationKey:randomUUID(),confirmed:true};
+ const endpoint=`/product-families/${id}/category-changes`;
+ for(const role of [undefined,"CLIENT","WAREHOUSE","CASHIER","MANAGER"])await call("POST",endpoint,input,role,role?403:401);
+ const {familyCategoryOperation}=await import("../dist/modules/productFamilies/familyCategory.service.js");
+ await assert.rejects(familyCategoryOperation(id,users.MANAGER,input),e=>e.statusCode===403);
+ await call("POST",endpoint,{...input,price:10},"ADMIN",400);
+ await call("POST",endpoint,{...input,expectedRevision:"a".repeat(64)},"ADMIN",409);
+ await call("POST",endpoint,{...input,categoryId:999999},"ADMIN",404);
+ const collision=await call("POST","/products",{name:before[0].name,categoryId:target,price:100,unitMeasure:"unidad"},"ADMIN",201);
+ await call("POST",endpoint,input,"ADMIN",409);assert.deepEqual(await raw(),before);
+ await pool.query("delete from products where id=$1",[collision.id]);
+ const policy=(await pool.query("select id from delivery_policy_revisions order by id desc limit 1")).rows[0].id;
+ const pending=(await pool.query("insert into delivery_quote_requests(client_id,request_key,request_hash,recipient_name,phone,address,commune,policy_revision_id,commercial_snapshot,evaluation_expires_at) values($1,$2,$3,'Receptor','123456789','Dirección aislada','Concepción',$4,'{}',now()+interval '1 day') returning id",[users.CLIENT,randomUUID(),'d'.repeat(64),policy])).rows[0].id;
+ await pool.query("insert into delivery_quote_items(request_id,product_id,quantity,product_name,unit_measure) values($1,$2,1,$3,$4)",[pending,before[0].id,before[0].name,before[0].unit_measure]);
+ await call("POST",endpoint,input,"ADMIN",409);await pool.query("update delivery_quote_requests set status='CANCELLED',version=version+1 where id=$1",[pending]);history=await captures();
+ const promos=[];for(let i=0;i<2;i++)promos.push((await pool.query("insert into promotions(name,type,is_active,percentage) values($1,'PERCENTAGE_DISCOUNT',true,10) returning id",[`Reclasificación ${i}`])).rows[0].id);
+ await pool.query("insert into promotion_products(promotion_id,product_id) values($1,$2)",[promos[0],before[1].id]);await pool.query("insert into promotion_categories(promotion_id,category_id) values($1,$2)",[promos[1],target]);
+ await call("POST",endpoint,input,"ADMIN",409);assert.deepEqual(await raw(),before);
+ await pool.query("update promotions set is_active=false where id=$1",[promos[0]]);
+ const cart={items:[{productId:before[0].id,quantity:1}],deliveryType:'PICKUP'};
+ const cartQuote=await call('POST','/online-orders/quote',cart);
+ await pool.query("create function fail_category_audit_test() returns trigger language plpgsql as $$ begin if NEW.next->>'operation'='FAMILY_CATEGORY_CHANGE' then raise exception 'deliberate category audit failure'; end if; return NEW; end $$;create trigger fail_category_audit_test before insert on product_family_events for each row execute function fail_category_audit_test()");
+ try{await call("POST",endpoint,input,"ADMIN",500);}finally{await pool.query("drop trigger fail_category_audit_test on product_family_events;drop function fail_category_audit_test()");}
+ assert.deepEqual(await raw(),before);assert.equal(await call("GET",`${endpoint}/${input.operationKey}`,null,"ADMIN"),null);
+ const [one,two]=await Promise.all([call("POST",endpoint,input,"ADMIN"),call("POST",endpoint,input,"ADMIN")]);assert.notEqual(one.replayed,two.replayed);
+ const after=await raw();for(let i=0;i<before.length;i++){const {category_id:oldCategory,updated_at:oldTime,...old}=before[i];const {category_id:newCategory,updated_at:newTime,...current}=after[i];assert.deepEqual(current,old);assert.equal(oldCategory,b.family.categoryId);assert.equal(newCategory,target);assert.ok(oldTime&&newTime);}
+ assert.deepEqual(await captures(),history);
+ assert.equal((await pool.query("select category_id from product_families where id=$1",[id])).rows[0].category_id,target);
+ const result=await call("GET",`${endpoint}/${input.operationKey}`,null,"ADMIN");assert.equal(result.category.id,target);
+ assert.equal((await pool.query("select count(*)::int n from product_family_events where next->>'operationKey'=$1",[input.operationKey])).rows[0].n,1);
+ await assert.rejects(pool.query("update product_family_events set reason='alterado' where next->>'operationKey'=$1",[input.operationKey]),/immutable/);
+ await call("POST",endpoint,{...input,operationKey:randomUUID()},"ADMIN",409);
+ const publicFamily=await call("GET",`/catalog/families/${id}`);assert.equal(publicFamily.categoryId,target);
+ const latest=await call("GET",`/product-families/${id}/bundle`,null,"ADMIN");
+ assert.equal(latest.variants.length,2);assert.notEqual(latest.revision,snapshot.revision);
+ await call('POST','/online-orders/checkout',{...cart,quoteFingerprint:cartQuote.quoteFingerprint,checkoutKey:randomUUID()},'HISTORY_CLIENT',409);
+ const freshQuote=await call('POST','/online-orders/quote',cart);
+ await call('POST','/online-orders/checkout',{...cart,quoteFingerprint:freshQuote.quoteFingerprint,checkoutKey:randomUUID()},'HISTORY_CLIENT',201);
+ await call('POST',endpoint,{...input,categoryId:b.family.categoryId,expectedRevision:latest.revision,operationKey:randomUUID()},'ADMIN',409);
+ console.log("PASS categoría familiar: ADMIN, activos/inactivos, IDs/datos/capturas, colisión, revisión, idempotencia concurrente, recuperación, auditoría inmutable, rollback deliberado y catálogo");
+}

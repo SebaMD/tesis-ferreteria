@@ -1,4 +1,6 @@
 import { buildCommercialAmounts, type CommercialAmounts } from "./commercialAmounts.js";
+import { historicalIdentityNote } from "../products/historicalIdentity.js";
+import type { HistoricalIdentity } from "../../db/schema/commercialIdentitySnapshots.js";
 
 export const RECEIPT_ELIGIBLE_ORDER_STATUSES = new Set([
   "PAID",
@@ -59,6 +61,7 @@ export function formatOrderQuantity(quantity: number, unitMeasure: string | null
 }
 
 type CommercialOrderItemSource = {
+  historicalIdentity?: HistoricalIdentity | null;
   productId: number;
   productName: string;
   unitMeasure?: string | null;
@@ -113,6 +116,8 @@ export type OrderCommercialModel = {
     email: string;
   };
   items: Array<{
+    historicalIdentity?: HistoricalIdentity | null;
+    identityNote: string;
     productId: number;
     productName: string;
     unitMeasure: string | null;
@@ -155,6 +160,8 @@ export function isReceiptEligibleStatus(status: string) {
 export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCommercialModel {
   const deliveryType = order.deliveryType === "DELIVERY" ? "DELIVERY" : "PICKUP";
   const items = order.items.map((item) => ({
+    historicalIdentity: item.historicalIdentity,
+    identityNote: historicalIdentityNote(item.historicalIdentity),
     productId: item.productId,
     productName: item.productName,
     unitMeasure: item.unitMeasure?.trim() || null,

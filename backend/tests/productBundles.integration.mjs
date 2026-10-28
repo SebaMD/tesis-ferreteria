@@ -16,8 +16,9 @@ assert.match(dataDirectory, /\/fyf-bundle-test-[^/]+\/data$/);
 const uploads = await mkdtemp(path.join(path.dirname(dataDirectory), "uploads-"));
 let server, applicationDb;
 try {
+  if (process.env.BUNDLE_TEST_SCHEMA_READY !== "1") await (await import("./commercialHistory.integration.mjs")).testCommercialHistoryMigration(pool, url, dataDirectory);
   if (process.env.BUNDLE_TEST_SCHEMA_READY === "1") {
-    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "33");
+    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "37");
   } else await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
   Object.assign(process.env, { DATABASE_URL: url.href, UPLOADS_ROOT: uploads, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const users = {}, password = await bcrypt.hash("IsolatedBundle2026!", 10);
@@ -212,6 +213,10 @@ try {
   await (await import("./unifiedCreation.integration.mjs")).testUnifiedCreation({pool,call,body,snapshot,users});
   await (await import("./unifiedEditing.integration.mjs")).testUnifiedEditing({pool,call,body,snapshot,uploads,users});
   await (await import("./productAttributeRename.integration.mjs")).testProductAttributeRename({pool,call,body,snapshot,users});
+  await (await import("./commercialHistory.integration.mjs")).testCommercialHistory({pool,call,body,users,transactions,base});
+  await (await import("./productNameCorrection.integration.mjs")).testProductNameCorrection({pool,call,body,users,base});
+  await (await import("./familyCategory.integration.mjs")).testFamilyCategory({pool,call,body,users});
+  await (await import("./familyDimension.integration.mjs")).testFamilyDimension({pool,call,body,users});
   if (process.env.BUNDLE_VISUAL_TEST === "1") {
     console.log("VISUAL isolated API ready 127.0.0.1:5188; login admin@example.test / IsolatedBundle2026!");
     if (process.env.BUNDLE_VISUAL_STOP_FILE) console.log(`VISUAL_STOP_FILE ${process.env.BUNDLE_VISUAL_STOP_FILE}`);

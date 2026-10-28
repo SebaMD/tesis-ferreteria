@@ -1,6 +1,7 @@
 import { ChevronDown, MapPin, Store, Truck } from "lucide-react";
 import { useState } from "react";
 import AppModal from "../AppModal.jsx";
+import HistoricalIdentityNote from "../HistoricalIdentityNote.jsx";
 import { formatClp, formatDate } from "../../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
@@ -168,6 +169,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
           onToggle={() => toggleSection("products")}
         >
           <div className="grid gap-2">
+            {(order.items || []).some(item => item.productImageUrl) && <p className="m-0 text-xs text-slate-500">Imágenes ilustrativas del catálogo actual; no forman parte de la captura histórica.</p>}
             {(order.items || []).map((item) => (
               <article className="grid grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-slate-200 p-3 max-[430px]:grid-cols-[48px_minmax(0,1fr)]" key={`${order.id}-${item.productId}`}>
                 <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100 max-[430px]:size-12">
@@ -175,6 +177,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
                 </div>
                 <div className="min-w-0">
                   <strong className="block truncate text-sm text-ink-950">{item.productName}</strong>
+                  <HistoricalIdentityNote capture={item.historicalIdentity}/>
                   <span className="text-xs text-slate-500">{item.quantity} × {formatClp(item.unitPrice)}</span>
                   <OrderItemPromotion item={item} />
                 </div>

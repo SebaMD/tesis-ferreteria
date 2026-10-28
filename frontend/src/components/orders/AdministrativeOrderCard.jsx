@@ -7,6 +7,7 @@ import { canViewAdministrativeOrder, formatAdministrativeOrderText, getAdministr
 import { formatClp } from "../../helpers/formatters.js";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../ResponsiveTableView.jsx";
 import OrderItemPromotion from "./OrderItemPromotion.jsx";
+import HistoricalIdentityNote from "../HistoricalIdentityNote.jsx";
 
 export default function AdministrativeOrderCard({ orderId, role }) {
   const allowed = canViewAdministrativeOrder(role);
@@ -69,9 +70,9 @@ export default function AdministrativeOrderCard({ orderId, role }) {
         <section className="grid min-w-0 gap-2.5">
           <h4 className="m-0 text-xs font-bold uppercase tracking-wide text-slate-600">Productos comprados</h4>
         <ResponsiveTableView rows={model.items} getRowKey={(item) => item.productId} getRowLabel={(item) => item.productName} resetKey={model.folio}
-          renderSummary={(item) => <div><strong className="text-sm text-ink-950">{item.productName}</strong><OrderItemPromotion item={promotionItem(item)} compact /></div>}
+          renderSummary={(item) => <div><strong className="text-sm text-ink-950">{item.productName}</strong><HistoricalIdentityNote capture={item.historicalIdentity}/><OrderItemPromotion item={promotionItem(item)} compact /></div>}
           renderDetails={(item) => <MobileDetailGrid><MobileDetailField label="Cantidad">{item.quantity}</MobileDetailField><MobileDetailField label="Precio unitario">{formatClp(item.unitPrice)}</MobileDetailField><MobileDetailField label="Descuento">{formatClp(item.discountAmount)}</MobileDetailField><MobileDetailField label="Subtotal">{formatClp(item.subtotal)}</MobileDetailField></MobileDetailGrid>}
-          desktop={<div className="overflow-x-auto"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Subtotal</th></tr></thead><tbody>{model.items.map((item) => <tr key={item.productId}><td>{item.productName}<OrderItemPromotion item={promotionItem(item)} compact /></td><td>{item.quantity}</td><td>{formatClp(item.unitPrice)}</td><td>{formatClp(item.discountAmount)}</td><td>{formatClp(item.subtotal)}</td></tr>)}</tbody></table></div>} />
+          desktop={<div className="overflow-x-auto"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Descuento</th><th>Subtotal</th></tr></thead><tbody>{model.items.map((item) => <tr key={item.productId}><td>{item.productName}<HistoricalIdentityNote capture={item.historicalIdentity}/><OrderItemPromotion item={promotionItem(item)} compact /></td><td>{item.quantity}</td><td>{formatClp(item.unitPrice)}</td><td>{formatClp(item.discountAmount)}</td><td>{formatClp(item.subtotal)}</td></tr>)}</tbody></table></div>} />
         </section>
         {fieldsSection(sections[2], true)}
         {fieldsSection(sections[3])}

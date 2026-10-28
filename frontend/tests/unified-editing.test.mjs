@@ -46,12 +46,12 @@ test("returning a new draft to simple retains its explicit individual descriptio
 test("single editor keeps separate accordions, safe conversion confirmation and no secondary individual editor", async () => {
   const editor=await read("components/ProductBundleEditor.jsx"), page=await read("pages/ProductsPage.jsx"), modal=await read("components/AppModal.jsx");
   assert.match(page,/<ProductBundleEditor inline conversionId=\{editingProductId\}/);
-  assert.match(page,/Convertir en producto con variantes/); assert.match(page,/suspended=\{bundleDialogActive\}/);
+  assert.match(page,/Convertir en producto con variantes/); assert.match(page,/suspended=\{bundleDialogActive \|\| nameCorrectionOpen\}/);
   assert.match(modal,/if \(!open \|\| suspended\) return undefined/); assert.match(modal,/role=\{suspended \? undefined : "dialog"\}/);
   assert.match(modal,/grid place-items-center overflow-clip/);
   assert.match(editor,/new Set\(current\)/); assert.match(editor,/aria-expanded=\{expandedRows.has\(row.key\)\}/);
   assert.match(editor,/<ProductImagesManager compact/); assert.match(editor,/onDelete=.*editBundleImages/);
   assert.doesNotMatch(editor,/onEditIndividual|pendingIndividual|Imágenes y datos individuales/);
   assert.match(editor,/disabled=\{row.hasHistory \|\| row.isOriginal\}/);
-  assert.match(editor,/disabled=\{locked \|\| definitionLocked\}/); assert.match(editor,/Agregar un atributo requiere reclasificar todas las variantes/);
+  assert.match(editor,/disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/); assert.match(editor,/Una dimensión nueva se incorpora por separado/);
 });

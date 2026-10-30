@@ -2,6 +2,27 @@ import { compareByNewest } from "./formatters.js";
 import { isLowStockProduct, isOutOfStockProduct, getStockStatus } from "./inventory.js";
 
 export const inventoryVariantLabel = product => (product.variantValues || []).map(v => `${v.attribute}: ${v.label}`).join(" · ");
+// State filters are OR at SKU level; structure, category and search are AND.
+// Inactive visibility is still permission-gated, never inferred from family state.
+export function filterInventoryProducts(products, { inactive = false, low = false, out = false, variantsOnly = false, category = "", search = "", canViewInactive = false } = {}) {
+  const term = search.trim().toLocaleLowerCase("es");
+  const includeInactive = inactive && canViewInactive;
+  const hasStates = includeInactive || low || out;
+  return products.filter(p => {
+    if (p.status === false && !canViewInactive) return false;
+    if (variantsOnly && !p.familyId) return false;
+    if (category && String(p.categoryId) !== String(category)) return false;
+    if (hasStates ? !((includeInactive && p.status === false) || (low && isLowStockProduct(p)) || (out && isOutOfStockProduct(p))) : p.status === false) return false;
+    return !term || [p.id, p.barcode, p.name, p.categoryName, p.familyName, inventoryVariantLabel(p)].some(v => String(v ?? "").toLocaleLowerCase("es").includes(term));
+  }).sort(compareByNewest);
+}
+// Presentation only: grouping, actions and exports continue to use concrete SKU IDs.
+export function inventoryGroupIdentity(group) {
+  const source = group.representative || group.products?.[0];
+  const value = group.kind === "family" ? source?.familyId : source?.id;
+  const label = group.kind === "family" ? "Familia" : "Producto";
+  return Number.isSafeInteger(value) && value > 0 ? `${label} #${value}` : label;
+}
 export function selectedInventoryProduct(group, selectedId, search = "") {
   const exact = search.trim().toLocaleLowerCase("es");
   return group.products.find(p => p.id === selectedId)

@@ -5,10 +5,12 @@ import { productsTable as products, productFamilyEventsTable as events, productI
 import { saveImageFile, removeStoredImageFile, validateImageBuffer } from "../../utils/imageFiles.js";
 import { applyInventoryMovement } from "../inventory/inventory.service.js";
 import { assertProductPromotionCompatibilityTx } from "../promotions/promotions.service.js";
+import { acquirePromotionPricingLock } from "../promotions/promotions.repository.js";
 import { createProductTx, findProductsByFamilyId, findProductsByIds } from "../products/products.repository.js";
 import { editProductInTransaction } from "../products/products.service.js";
 import { validateCreateProductBody, type ProductBody } from "../products/products.validation.js";
 import { assignVariant, FamilyError, getFamily, productHasHistory, saveFamily, validateFamilyBody } from "./productFamilies.service.js";
+import { assertUnitPreviewAdmin, previewUnitChange, validateUnitEligibilityQuery } from "./productUnitEligibility.service.js";
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const lock = (tx: DbTransaction) => tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
@@ -90,7 +92,7 @@ async function conversionSnapshot(id: number, tx: DbTransaction) {
   if (product.familyId !== null || product.variantKey !== null) throw new FamilyError("El producto ya pertenece a una familia. Abra la edición familiar.");
   // Conversion creates a NEW classification, never a route around historical recovery.
   const associations = await tx.select({ id: events.id }).from(events).where(and(eq(events.productId, id),
-    sql`not (${events.familyId} is null and coalesce(${events.next}->>'operation', '') in ('SIMPLE_SAVE','PRODUCT_NAME_CORRECTION'))`)).limit(1);
+    sql`not (${events.familyId} is null and coalesce(${events.next}->>'operation', '') in ('SIMPLE_SAVE','PRODUCT_NAME_CORRECTION','PRODUCT_CLASSIFICATION_CORRECTION'))`)).limit(1);
   const orphan = await tx.execute(sql`select 1 from product_variant_values where product_id=${id} limit 1`);
   if (associations.length || orphan.rows.length) throw new FamilyError("El producto tiene asociaciones familiares anteriores. Use la administración avanzada y sus reglas de recuperación; no puede convertirse en una familia nueva.");
   const pictures = await tx.select().from(images).where(eq(images.productId, id)).orderBy(asc(images.id));
@@ -127,6 +129,20 @@ export async function getProductBundle(id: number) {
     return { ...snapshot, variants: variants.map(v => ({ ...v, hasHistory: history.rows.find(h => h.id === v.id)?.has_history ?? false })) };
   });
 }
+export async function getFamilyUnitEligibility(id: number, actorId: number, input: Record<string, unknown>) {
+  if (!Number.isSafeInteger(id) || id < 1) throw new FamilyError("Familia inválida", 400);
+  const query = validateUnitEligibilityQuery(input);
+  return db.transaction(async tx => {
+    await assertUnitPreviewAdmin(tx, actorId);
+    const snapshot = await bundleSnapshot(id, tx);
+    if (snapshot.revision !== query.expectedRevision) throw new FamilyError("La familia o sus variantes cambiaron. Recargue antes de revisar las unidades.");
+    if (snapshot.family.archivedAt) throw new FamilyError("Reactive la familia antes de modificar sus unidades.");
+    const members = await tx.select({ id: products.id, unitMeasure: products.unitMeasure }).from(products).where(eq(products.familyId, id)).orderBy(asc(products.id));
+    const variants = [];
+    for (const product of members) variants.push(await previewUnitChange(tx, product, query.unitMeasure));
+    return { familyId: id, revision: snapshot.revision, target: query.unitMeasure, variants };
+  }, { accessMode: "read only", isolationLevel: "repeatable read" });
+}
 async function operation(tx: DbTransaction, key: string) {
   const [event] = await tx.select().from(events).where(sql`${events.next}->>'operation' in ('BUNDLE_SAVE','SIMPLE_SAVE') and ${events.next}->>'operationKey'=${key}`).limit(1);
   return event;
@@ -156,6 +172,7 @@ export async function saveProductBundle(input: unknown, actorId: number) {
   };
   try {
     const result = await db.transaction(async tx => {
+      await acquirePromotionPricingLock(tx);
       await lock(tx);
       const prior = await operation(tx, body.operationKey);
       if (prior) {
@@ -241,6 +258,7 @@ export async function saveProductBundle(input: unknown, actorId: number) {
       }
       await tx.insert(events).values({ familyId, productId: body.simple ? ids[0] : null, userId: actorId, previous,
         next: { operation: body.simple ? "SIMPLE_SAVE" : "BUNDLE_SAVE", operationKey: body.operationKey, requestHash: hash, productIds: ids,
+          ...(!body.simple ? { attributeDefinitions: (await getFamily(familyId!,tx)).attributes } : {}),
           variants: await tx.select().from(products).where(inArray(products.id, ids)).orderBy(asc(products.id)),
           images: await tx.select().from(images).where(inArray(images.productId, ids)).orderBy(asc(images.id)) }, reason: body.simple ? "Alta de producto simple" : "Guardado conjunto de familia y variantes" });
       return { familyId, productIds: ids, replayed: false };

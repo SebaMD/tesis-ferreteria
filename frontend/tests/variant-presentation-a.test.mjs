@@ -26,7 +26,8 @@ test("contextual messages are structured, linked to controls, and only the persi
   assert.match(editor, /variant-has-error/); assert.match(editor, /Revisar variante/);
   assert.equal((editor.match(/role="alert"/g) || []).length, 1);
   assert.match(editor, /toast.error\(<span aria-hidden="true">\{message\}<\/span>/);
-  assert.match(editor, /e.response \? \{\} : e/);
+  assert.match(editor, /unitProblem\?\.field === "unitMeasure"/);
+  assert.match(editor, /variantKey:affected.key,field:"unitMeasure"/);
   assert.match(editor, /setErrorMessage\(message\); setErrorTarget\(null\)/);
 });
 
@@ -40,14 +41,14 @@ test("new conversion data order stays vertical with an optional barcode after st
   assert.match(summary, /Number\(original.price\) !== Number\(originalRow.price\)/);
 });
 
-test("individual settings stay mounted, show the current unit and open for an invalid nested control", async () => {
+test("individual unit stays visible in inventory, preserves history restrictions and field feedback", async () => {
   const editor = await read("components/ProductBundleEditor.jsx"), fields = await read("components/ProductFormFields.jsx");
-  assert.match(editor, /individualRows, setIndividualRows/);
-  assert.match(editor, /<details data-individual-settings open=\{individualRows.has\(row.key\)\}/);
-  assert.match(editor, /Configuración individual · Unidad: \{row.unitMeasure \?\? draft.unitMeasure\}/);
-  assert.match(editor, /control\?\.closest\("\[data-individual-settings\]"\)/);
-  assert.match(editor, /disabled=\{row.hasHistory \|\| row.isOriginal\}/);
+  assert.match(editor, /label="Unidad individual"/);
+  assert.match(editor, /value=\{row.unitMeasure\?\?draft.unitMeasure\}/);
+  assert.match(editor, /Unidad protegida por ventas, pedidos o movimientos de inventario, incluidas entradas/);
+  assert.match(editor, /disabled=\{locked\|\|row.hasHistory\|\|row.isOriginal\}/);
   assert.match(editor, /inputProps=\{\{"data-bundle-field":"unitMeasure",\.\.\.fieldFeedback/);
+  assert.match(editor, /editIcon=\{!\(row.hasHistory\|\|row.isOriginal\)\}/);
   assert.match(fields, /<input \{\.\.\.inputProps\} id=\{id\}/);
 });
 

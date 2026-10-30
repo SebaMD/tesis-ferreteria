@@ -16,6 +16,7 @@ import { presentProductImage } from "../productImages/productImages.presenter.js
 import { findProductById, findProducts, findProductsByFamilyId, findProductsByIds } from "../products/products.repository.js";
 import type { CatalogQuery } from "./catalog.validation.js";
 import { getFamily, FamilyError } from "../productFamilies/productFamilies.service.js";
+import { attributeOptionLabel } from "../productFamilies/attributeMeasurements.js";
 import {
   catalogEffectivePriceSql,
   catalogHasActivePromotionSql,
@@ -154,7 +155,7 @@ export async function findCatalogProductsPage(filters: CatalogQuery) {
       ilike(productsTable.description, pattern),
       ilike(productsTable.brand, pattern),
       ilike(productFamiliesTable.name, pattern),
-      sql`exists(select 1 from product_variant_values v join family_attribute_options o on o.id=v.option_id where v.product_id=${productsTable.id} and o.label ilike ${pattern})`,
+      sql`exists(select 1 from product_variant_values v join family_attribute_options o on o.id=v.option_id join family_attributes a on a.id=v.attribute_id where v.product_id=${productsTable.id} and (o.label || case when a.unit_code is null then '' else ' ' || a.unit_code end) ilike ${pattern})`,
     );
     if (searchCondition) conditions.push(searchCondition);
   }
@@ -312,7 +313,7 @@ export async function findCatalogFamilyById(id: number) {
     ? { ...toCatalogProduct(p, reserved.get(p.id) ?? 0, promotions.get(p.id) ?? null), status: true }
     : { id: p.id, name: p.name, familyId: id, status: false, variantValues: p.variantValues });
   return { id: family.id, name: family.name, description: family.description, categoryId: family.categoryId, brand: family.brand,
-    attributes: family.attributes.map((a) => ({ id: a.id, name: a.name, options: a.options.map((o) => ({ id: o.id, label: o.label })) })), variants };
+    attributes: family.attributes.map((a) => ({ id: a.id, name: a.name, options: a.options.map((o) => ({ id: o.id, label: attributeOptionLabel(o.label,a.unitCode) })) })), variants };
 }
 
 export async function findCatalogProductById(id: number) {

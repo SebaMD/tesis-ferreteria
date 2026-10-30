@@ -52,6 +52,6 @@ test("single editor keeps separate accordions, safe conversion confirmation and 
   assert.match(editor,/new Set\(current\)/); assert.match(editor,/aria-expanded=\{expandedRows.has\(row.key\)\}/);
   assert.match(editor,/<ProductImagesManager compact/); assert.match(editor,/onDelete=.*editBundleImages/);
   assert.doesNotMatch(editor,/onEditIndividual|pendingIndividual|Imágenes y datos individuales/);
-  assert.match(editor,/disabled=\{row.hasHistory \|\| row.isOriginal\}/);
+  assert.match(editor,/disabled=\{locked\|\|row.hasHistory\|\|row.isOriginal\}/);
   assert.match(editor,/disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/); assert.match(editor,/Una dimensión nueva se incorpora por separado/);
 });

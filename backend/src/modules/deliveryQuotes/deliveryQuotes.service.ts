@@ -6,6 +6,7 @@ import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/sc
 import { deliveryQuoteRequestsTable as requests, deliveryQuoteItemsTable as items, deliveryQuoteRevisionsTable as revisions, deliveryQuoteEventsTable as events,
   guestDeliveryQuoteTokensTable as tokens, usersTable as users, rolesTable as roles, productsTable as products, deliveryPolicyRevisionsTable as policies, deliverySettingsTable as settings, emailVerificationChallengesTable as challenges } from "../../db/schema/index.js";
 import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
+import { legacyManualPolicy } from "./manualDeliveryAuthorization.js";
 import { priceCheckoutItems } from "../onlineOrders/onlineOrders.service.js";
 import { createGuestOrderAccessToken, hashGuestOrderAccessToken, hashGuestSessionId } from "../onlineOrders/guestOrderAccess.js";
 import { DeliveryQuoteError, command, integer, text, validateFreight, validateManualSettings, validateQuoteRequest } from "./deliveryQuotes.validation.js";
@@ -41,7 +42,7 @@ async function authorize(tx:DbTransaction,q:Quote,p:QuotePrincipal){
 }
 async function manualPolicy(tx:DbTransaction){
   const p=await currentDeliveryPolicy(tx);
-  if(!p||p.pricingMode!=="MANUAL_QUOTE")throw new DeliveryQuoteError("La configuración manual aún no fue activada por un usuario autorizado",409);
+  if(!p||p.pricingMode!=="MANUAL_QUOTE")throw new DeliveryQuoteError(p?.pricingMode==="LOCAL_FIXED"?"Las nuevas compras utilizan despacho local desde el checkout; no se admiten nuevas cotizaciones manuales.":"La configuración manual aún no fue activada por un usuario autorizado",409);
   if(!p.deliveryEnabled)throw new DeliveryQuoteError("El despacho no está disponible por ahora",409);
   return p;
 }
@@ -153,8 +154,9 @@ export async function actOnDeliveryQuote(id:number,p:QuotePrincipal,action:Quote
       await actor(tx,p.userId,action==="PROPOSE"?[...staff,"WAREHOUSE"]:staff);
     }
     // Policy before request, then pricing/products; administrative policy saves never lock requests.
-    const policy=action==="PROPOSE"||action==="APPROVE"?await currentDeliveryPolicy(tx):null;
+    let policy=action==="PROPOSE"||action==="APPROVE"?await currentDeliveryPolicy(tx):null;
     const loaded=await load(tx,integer(id),p);let q=loaded.q;const u=loaded.u;
+    if(policy?.pricingMode==="LOCAL_FIXED")policy=await legacyManualPolicy(tx,q.policyRevisionId);
     if(action==="CANCEL"){
       if(u&&!staff.includes(u.role)&&u.role!=="CLIENT")throw new DeliveryQuoteError("No tienes permisos para cancelar",403);
     }else if(!u||(action==="PROPOSE"?![...staff,"WAREHOUSE"].includes(u.role):!staff.includes(u.role)))throw new DeliveryQuoteError("No tienes permisos para esta operación",403);
@@ -185,6 +187,8 @@ export async function actOnDeliveryQuote(id:number,p:QuotePrincipal,action:Quote
         if(q.status!=="PROPOSED")throw new DeliveryQuoteError("Solo se aprueba una propuesta vigente",409);
         const [proposal]=await tx.select().from(revisions).where(eq(revisions.requestId,q.id)).orderBy(desc(revisions.version)).limit(1);
         if(!proposal||proposal.kind!=="PROPOSAL"||proposal.id!==integer(b.proposalRevisionId))throw new DeliveryQuoteError("La propuesta cambió o pertenece a otra solicitud",409);
+        policy=await legacyManualPolicy(tx,proposal.policyRevisionId);
+        if(!policy||!policy.deliveryEnabled)throw new DeliveryQuoteError("El despacho no está disponible por ahora",409);
         const requested=await tx.select({productId:items.productId,quantity:items.quantity}).from(items).where(eq(items.requestId,q.id));
         const priced=await priceCheckoutItems(tx,requested);const productsNet=priced.reduce((sum,i)=>sum+Number(i.subtotal),0);
         if(proposal.reason==="FREE_CONDITIONAL"&&(!policy!.conditionalFreeEnabled||!q.nonUrgent||!proposal.coordinated||productsNet<Number(policy!.conditionalFreeFrom)))throw new DeliveryQuoteError("La gratuidad condicionada requiere umbral neto, coordinación y entrega no urgente; no se aprobó",409);
@@ -234,6 +238,7 @@ export async function saveManualDeliverySettings(userId:number,input:unknown){
     const [setting]=await tx.select().from(settings).where(eq(settings.id,1)).for("update");
     if(setting.currentRevisionId!==expectedRevisionId)throw new DeliveryQuoteError("La configuración cambió. Recarga antes de guardar",409);
     const [old]=setting.currentRevisionId?await tx.select().from(policies).where(eq(policies.id,setting.currentRevisionId)):[];
+    if(old?.pricingMode==="LOCAL_FIXED")throw new DeliveryQuoteError("La tarifa local está activa. No se pueden reactivar nuevas cotizaciones manuales.",409);
     const [policy]=await tx.insert(policies).values({...data,version:(old?.version??0)+1,pricingMode:"MANUAL_QUOTE",pickupEnabled:true,flatFee:"0.00",minimumProductsTotal:null,freeShippingFrom:null,isDemo:false,createdBy:userId}).returning();
     await tx.update(settings).set({currentRevisionId:policy.id}).where(eq(settings.id,1));return policy;
   });

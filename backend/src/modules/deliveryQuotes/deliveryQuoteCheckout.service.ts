@@ -9,15 +9,16 @@ import { createCheckoutForOwner, priceCheckoutItems, continueOnlineOrderPaymentS
 import { createGuestOrderAccessToken, hashGuestDeviceId } from "../onlineOrders/guestOrderAccess.js";
 import { createGuestOrderAccessRecord } from "../onlineOrders/guestOrderAccess.repository.js";
 import { loadDeliveryQuote, expireDeliveryQuote, recordDeliveryQuoteEvent, type QuotePrincipal } from "./deliveryQuotes.service.js";
-import { assertApprovedFreight } from "./manualDeliveryAuthorization.js";
+import { assertApprovedFreight, legacyManualPolicy } from "./manualDeliveryAuthorization.js";
 import { DeliveryQuoteError, command, integer, text } from "./deliveryQuotes.validation.js";
 
 type Quote=typeof requests.$inferSelect;
 async function commercial(tx:DbTransaction,q:Quote) {
-  const policy=await currentDeliveryPolicy(tx);
+  await currentDeliveryPolicy(tx);
   if(q.status!=="APPROVED")throw new DeliveryQuoteError("La solicitud no tiene una aprobación vigente",409);
   const [approval]=await tx.select().from(revisions).where(and(eq(revisions.requestId,q.id),eq(revisions.kind,"APPROVED"))).orderBy(desc(revisions.version)).limit(1);
   if(!approval)throw new DeliveryQuoteError("FYF debe aprobar el flete antes de pagar",409);
+  const policy=await legacyManualPolicy(tx,approval.policyRevisionId);
   const requested=await tx.select({productId:items.productId,quantity:items.quantity}).from(items).where(eq(items.requestId,q.id)).orderBy(items.productId);
   const orderItems=await priceCheckoutItems(tx,requested);
   const productsSubtotal=orderItems.reduce((n,i)=>n+Number(i.unitPrice)*i.quantity,0);

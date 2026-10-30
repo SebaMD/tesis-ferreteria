@@ -10,6 +10,9 @@ export async function getProductBundleRequest(id) {
   const data = (await api.get(`/product-families/${id}/bundle`)).data.data;
   return { ...data, variants: resolveProductListAssets(data.variants, api.defaults.baseURL) };
 }
+export async function getFamilyUnitEligibilityRequest(id, unitMeasure, expectedRevision) {
+  return (await api.get(`/product-families/${id}/unit-eligibility`, { params: { unitMeasure, expectedRevision } })).data.data;
+}
 export async function saveProductBundleRequest(body) {
   const response = await api.post("/product-families/bundle", JSON.stringify(body), {
     headers: { "Content-Type": "application/vnd.fyf.product-bundle+json" },

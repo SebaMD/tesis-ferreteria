@@ -59,15 +59,14 @@ test("public conditions use FYF references, never the automatic DEMO threshold, 
   const values = deliveryConditionsInformation({ freeShippingFrom: 1, flatFee: 3000 });
   assert.deepEqual(values, { coverage: "Región del Biobío", radius: 5, outboundKm: 1000, conditionalThreshold: 500000 });
   assert.equal(deliveryConditionsInformation({ conditionalFreeThresholdReference: 600000 }).conditionalThreshold, 600000);
-  const page = await read("pages/DeliveryConditionsPage.jsx"); assert.match(page, /No es automático ni garantizado/); assert.match(page, /entrega no urgente/);
-  assert.match(page, /getStoreContactDetails/); assert.match(page, /pendiente de confirmar su dirección oficial/);
+  const page = await read("pages/DeliveryConditionsPage.jsx"); assert.match(page, /No se ofrece despacho a otras comunas/); assert.match(page, /no significa que el pedido haya sido entregado/);
   assert.equal(FYF_CONTACT.confirmed.address, false); assert.equal(getStoreContactDetails().some(c => c.kind === "address"), false);
   assert.doesNotMatch(page, /navigator.geolocation|leaflet|directionsService/);
 });
 
-test("checkout has a short linked note, no payable delivery total and keeps final payment guards", async () => {
+test("checkout has a short linked local note, definitive server total and keeps final payment guards", async () => {
   const page = await read("pages/CheckoutPage.jsx"), note = await read("components/DeliveryConditions.jsx");
-  assert.match(note, /to="\/delivery-conditions"/); assert.match(page, /<span>Despacho<\/span><span>Por cotizar<\/span>/);
-  assert.match(page, /&& deliveryType === "PICKUP"/); assert.match(page, /quoteFingerprint: quote.quoteFingerprint/);
-  assert.match(page, /quoteState.errorKind === "MANUAL_DELIVERY"/); assert.doesNotMatch(page, /3\.000|500\.000|1\.000/);
+  assert.match(note, /to="\/delivery-conditions"/); assert.match(page, /<OrderAmounts order=\{quote\}/);
+  assert.match(page, /&& destinationValid/); assert.match(page, /quoteFingerprint: quote.quoteFingerprint/);
+  assert.doesNotMatch(page, /3\.000|500\.000|1\.000|Por cotizar/);
 });

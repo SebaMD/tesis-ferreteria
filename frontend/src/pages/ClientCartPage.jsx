@@ -15,6 +15,7 @@ import { getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
+import { variantLabel } from "../helpers/productVariants.js";
 import { createProductDetailNavigationState } from "../helpers/catalogNavigation.js";
 
 const CART_PRODUCT_DETAIL_STATE = createProductDetailNavigationState({ source: "cart" });
@@ -104,6 +105,7 @@ export default function ClientCartPage() {
                   </Link>
                   <div className="grid min-w-0 gap-1.5">
                     <Link className="break-words font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
+                    {variantLabel(row.product)&&<span className="break-words text-xs text-slate-500">{variantLabel(row.product)}</span>}
                     <span className="text-xs text-slate-500">Precio por {getDisplayUnit(1, row.product.unitMeasure)}</span>
                     <ProductPromotionPrice product={row.product} quantity={row.quantity} showLineSummary />
                     {row.available ? <ProductEstimatedAvailability product={row.product} compact inCart /> : (

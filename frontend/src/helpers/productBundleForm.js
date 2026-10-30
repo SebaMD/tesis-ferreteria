@@ -1,4 +1,5 @@
 import { familyBody, familyDraft } from "./productFamilyForm.js";
+import { normalizeAttributeNumber, attributeOptionLabel } from "./attributeMeasurements.js";
 
 export function reconcileAttributeOptions(attribute, optionsText) {
   const pool = [...(attribute.optionPool || attribute.draftOptions || []), ...(attribute.options || []).map(o => ({ ...o, key: `option-${o.id}` }))];
@@ -12,7 +13,7 @@ export function reconcileAttributeOptions(attribute, optionsText) {
 export const newBundleAttribute = () => reconcileAttributeOptions({ name: "", options: [] }, "");
 export const newBundleRow = (attributeCount = 1, common = {}) => ({ key: crypto.randomUUID(), selections: Array(attributeCount).fill(""), name: "", nameCustomized: false,
   price: common.price ?? "", barcode: "", minimumStock: common.minimumStock ?? 0, initialStock: 0, status: true,
-  inStoreOnly: Boolean(common.inStoreOnly), files: [], useCommon: false });
+  unitMeasure: common.unitMeasure ?? "unidad", inStoreOnly: Boolean(common.inStoreOnly), files: [], useCommon: false });
 
 export const SINGLE_VARIANT_MESSAGE = "Has configurado una sola variante. Agrega otra o guarda este artículo como producto simple";
 export function resumeBundleDraft(draft, base) {
@@ -48,14 +49,15 @@ export function editBundleImages(images, action) {
 export function setBundleRowOption(draft, rowKey, index, value) {
   const attribute = draft.attributes[index];
   const row = draft.rows.find(r => r.key === rowKey);
-  const label = value.trim();
+  let label = value.trim();
+  if (attribute.unitCode && label) { try { label = normalizeAttributeNumber(label); } catch { label = ""; } }
   const normalize = text => text.trim().toLocaleLowerCase("es");
   const usedElsewhere = new Set(draft.rows.filter(r => r.key !== rowKey).map(r => r.selections[index]));
   const current = attribute.draftOptions.find(o => o.key === row.selections[index]);
   const matching = attribute.draftOptions.find(o => normalize(o.label) === normalize(label));
   const option = label ? matching || { label, key: current && !current.id && !usedElsewhere.has(current.key) ? current.key : crypto.randomUUID() } : null;
   const rows = draft.rows.map(r => r.key === rowKey ? { ...r,
-    optionTexts: draft.attributes.map((_, i) => i === index ? value : r.optionTexts?.[i] ?? bundleRowLabels(draft, r)[i]),
+    optionTexts: draft.attributes.map((a, i) => i === index ? value : r.optionTexts?.[i] ?? bundleRowValues(draft, r)[i]),
     selections: r.selections.map((s, i) => i === index ? option?.key || "" : s) } : r);
   const used = new Set(rows.map(r => r.selections[index]));
   const options = attribute.draftOptions.filter(o => o.id || used.has(o.key)).filter(o => o.key !== option?.key);
@@ -82,9 +84,12 @@ export function bundleDraft(snapshot, initial = {}) {
     rows: variants.map(v => ({ ...newBundleRow(), ...v, originalImageIds: (v.images || []).map(image => image.id), nameCustomized: true, key: `product-${v.id}`,
       selections: attributes.map(a => a.draftOptions.find(o => v.variantOptionIds.includes(o.id))?.key || "") })) };
 }
-export function bundleRowLabels(draft, row) {
+export function bundleRowValues(draft, row) {
   return draft.attributes.map((a, i) => a.draftOptions?.find(o => o.key === row.selections[i])?.label
     || (typeof row.selections[i] === "number" ? a.optionsText.split("\n").map(s => s.trim()).filter(Boolean)[row.selections[i]] : "") || "");
+}
+export function bundleRowLabels(draft, row) {
+  return bundleRowValues(draft, row).map((label, i) => attributeOptionLabel(label, draft.attributes[i].unitCode));
 }
 // Conversion and removal of saved photos need confirmation; ordinary edits save directly.
 export const bundleRequiresConfirmation = draft => Boolean(draft.conversion || draft.rows?.some(row => row.originalImageIds?.some(id => !row.images?.some(image => image.id === id))));
@@ -114,6 +119,7 @@ export function bundlePayload(draft, operationKey, files, commonFiles) {
   const names = new Set(), barcodes = new Set();
   const variants = draft.rows.map(row => {
     const invalid = (message, field) => { throw Object.assign(new Error(message), { variantKey: row.key, field }); };
+    draft.attributes.forEach((a,i) => { if (a.unitCode && row.optionTexts?.[i]) { try { normalizeAttributeNumber(row.optionTexts[i]); } catch(e) { invalid(e.message, "selections"); } } });
     const selections = row.selections.map((selection, i) => typeof selection === "number" ? selection : draft.attributes[i]?.draftOptions?.findIndex(o => o.key === selection));
     if (selections.length !== family.attributes.length || selections.some((s, i) => !Number.isInteger(s) || s < 0 || !family.attributes[i].options[s])) invalid("Completa los atributos de cada variante; una opción seleccionada pudo haberse quitado.", "selections");
     const key = selections.join(",");

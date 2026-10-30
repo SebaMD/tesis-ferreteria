@@ -12,7 +12,7 @@ let running = false;
 try {
   run(path.join(bin, "initdb.exe"), ["-D", path.join(root, "data"), "-U", "postgres", "-A", "trust", "--encoding=UTF8", "--locale=C", "--no-sync"]);
   run(path.join(bin, "pg_ctl.exe"), ["-D", path.join(root, "data"), "-l", path.join(root, "postgres.log"), "-o", "-h 127.0.0.1 -p 55447 -c timezone=UTC", "-w", "start"]); running = true;
-  run(process.execPath, ["tests/productBundles.integration.mjs"], { BUNDLE_TEST_DATABASE_URL: "postgresql://postgres@127.0.0.1:55447/postgres", MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration" });
+  run(process.execPath, [process.env.UNIT_APPLICATION_ONLY === "1" ? "tests/unitApplication.integration.mjs" : process.env.IDENTITY_COMMITMENTS_ONLY === "1" ? "tests/identityCommitments.integration.mjs" : "tests/productBundles.integration.mjs"], { BUNDLE_TEST_DATABASE_URL: "postgresql://postgres@127.0.0.1:55447/postgres", MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration" });
 } finally {
   if (running) run(path.join(bin, "pg_ctl.exe"), ["-D", path.join(root, "data"), "-m", "fast", "-w", "stop"]);
   const resolved = realpathSync(root);

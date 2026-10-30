@@ -29,7 +29,7 @@ test("cotización actualizada requiere aceptación explícita, incluso tras erro
   assert.match(checkout, /Aceptar resumen actualizado/);
   assert.match(checkout, /code === "QUOTE_CHANGED"/);
   assert.doesNotMatch(checkout, /Actualizar cotización/);
-  assert.match(checkout, /Seleccionar retiro en tienda/);
+  assert.match(checkout, /Retiro en tienda/);
   assert.match(checkout, /Reintentar cálculo/);
 });
 test("errores contextuales diferencian conexión, suspensión y productos", () => {
@@ -64,7 +64,7 @@ test("actualización entre navegadores y configuración simplificada mantienen c
   assert.match(provider, /30_000/); assert.match(provider, /visibilitychange/); assert.match(provider, /"focus", refreshVisible/); assert.match(provider, /request !== generation.current/);
   const settings = await read("components/DeliverySettingsManager.jsx");
   assert.doesNotMatch(settings, /checked=\{form.pickupEnabled\}|value=\{form.minimumProductsTotal\}/);
-  assert.match(settings, /Solo al confirmar una nueva revisión/);
+  assert.match(settings, /Cada guardado crea una revisión/);
   assert.match(settings, /max-\[720px\]:w-full/);
   assert.match(settings, /refreshNotices\(\)/);
 });

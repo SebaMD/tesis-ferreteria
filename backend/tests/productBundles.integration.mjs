@@ -18,7 +18,7 @@ let server, applicationDb;
 try {
   if (process.env.BUNDLE_TEST_SCHEMA_READY !== "1") await (await import("./commercialHistory.integration.mjs")).testCommercialHistoryMigration(pool, url, dataDirectory);
   if (process.env.BUNDLE_TEST_SCHEMA_READY === "1") {
-    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "37");
+    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "42");
   } else await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
   Object.assign(process.env, { DATABASE_URL: url.href, UPLOADS_ROOT: uploads, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const users = {}, password = await bcrypt.hash("IsolatedBundle2026!", 10);
@@ -207,7 +207,7 @@ try {
     assert.equal((await pool.query("select count(*) from online_payments")).rows[0].count, attemptsBefore);
     console.log("PASS Parte A: stable option reordering, equivalent policy revision, authoritative per-item signature, read-only quotes, stale fingerprint creates no payment");
   }
-  await (await import("./productConversion.integration.mjs")).testProductConversion({pool,call,categoryId,simple,users,snapshot});
+  await (await import("./productConversion.integration.mjs")).testProductConversion({pool,call,categoryId,simple,users,snapshot,apiBase:base});
   await (await import("./variantStatus.integration.mjs")).testVariantStatus({pool,call,body,snapshot});
   await (await import("./manualDelivery.integration.mjs")).testManualDelivery({pool,call,base,users,snapshot,transactions,productId:ids[0]});
   await (await import("./unifiedCreation.integration.mjs")).testUnifiedCreation({pool,call,body,snapshot,users});
@@ -217,6 +217,11 @@ try {
   await (await import("./productNameCorrection.integration.mjs")).testProductNameCorrection({pool,call,body,users,base});
   await (await import("./familyCategory.integration.mjs")).testFamilyCategory({pool,call,body,users});
   await (await import("./familyDimension.integration.mjs")).testFamilyDimension({pool,call,body,users});
+  await (await import("./familyBrand.integration.mjs")).testFamilyBrand({pool,call,body,users});
+  await (await import("./familyOptionLabel.integration.mjs")).testFamilyOptionLabel({pool,call,body,users});
+  await (await import("./productClassification.integration.mjs")).testProductClassification({pool,call,body,users,base});
+  await (await import("./familyDeactivation.integration.mjs")).testFamilyDeactivation({pool,call,body,users});
+  await (await import("./attributeMeasurements.integration.mjs")).testAttributeMeasurements({pool,call,body,users,base});
   if (process.env.BUNDLE_VISUAL_TEST === "1") {
     console.log("VISUAL isolated API ready 127.0.0.1:5188; login admin@example.test / IsolatedBundle2026!");
     if (process.env.BUNDLE_VISUAL_STOP_FILE) console.log(`VISUAL_STOP_FILE ${process.env.BUNDLE_VISUAL_STOP_FILE}`);

@@ -9,6 +9,7 @@ import { ROUTE_PERMISSIONS } from "./helpers/roles.js";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProductsPage from "./pages/ProductsPage.jsx";
+import ProductAuditHistoryPage from "./pages/ProductAuditHistoryPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SalesPage from "./pages/SalesPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
@@ -122,6 +123,10 @@ export default function App() {
             <DashboardPage />
           </ProtectedPage>
         }
+      />
+      <Route
+        path="/products/administrative-changes"
+        element={<ProtectedPage allowedRoles={ROUTE_PERMISSIONS.productAudits}><ProductAuditHistoryPage /></ProtectedPage>}
       />
       <Route
         path="/products"

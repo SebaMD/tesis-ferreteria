@@ -35,7 +35,7 @@ test("inventory menu reuses portal positioning, outside click, keyboard and conc
  const select=await read("components/AppSelect.jsx"),table=await read("components/GroupedInventoryTable.jsx"),page=await read("pages/ProductsPage.jsx");
  assert.match(select,/createPortal\(popup, document.body\)/);assert.match(select,/fixed z-1000/);assert.match(select,/pointerdown/);assert.match(select,/ArrowDown/);assert.match(select,/Escape/);
  assert.doesNotMatch(table,/<details|<summary/);assert.match(table,/renderValue=/);assert.match(table,/onStatus\(product\)/);assert.doesNotMatch(table,/onMovement/);
- assert.match(page,/variantsOnly && !product.familyId/);assert.match(page,/showInactiveProducts\}\|\$\{variantsOnly/);assert.match(page,/inventory-search/);
+ assert.match(page,/filterInventoryProducts\(products/);assert.match(page,/showInactiveProducts\}\|\$\{variantsOnly/);assert.match(page,/inventory-search/);
 });
 test("conversion stays inline and suspends only for sensitive confirmations without losing draft",async()=>{
  const page=await read("pages/ProductsPage.jsx"),editor=await read("components/ProductBundleEditor.jsx");

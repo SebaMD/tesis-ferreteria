@@ -26,7 +26,6 @@ import AdministrativeOrderCard from "../components/orders/AdministrativeOrderCar
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { buildDeliveryRouteUrl } from "../helpers/delivery.js";
 import DeliverySettingsManager from "../components/DeliverySettingsManager.jsx";
-import { Link } from "react-router-dom";
 import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
@@ -450,8 +449,7 @@ export default function OnlineOrdersManagementPage() {
       <header className={pageHeaderClass}>
         <div>
           <h1>Pedidos y repartos</h1>
-          <Link to="/delivery-requests" className="inline-block py-2 text-sm font-bold text-rust-600">Solicitudes de despacho (cotizaciones, no pedidos)</Link>
-          <p>{canManage ? "Prepara y entrega compras online o ventas en caja con despacho." : "Consulta el avance de las tareas logísticas."}</p>
+          <p>{canManage ? "Prepara y entrega pedidos pagados: retiro en tienda, despacho local en Santa Juana y repartos de ventas en caja." : "Consulta pedidos pagados, retiros en tienda y el avance de los repartos."}</p>
         </div>
         {canManage && (
           <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">

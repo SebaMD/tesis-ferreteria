@@ -9,6 +9,7 @@ mkdirSync(temporaryParent, { recursive: true });
 const root = mkdtempSync(path.join(temporaryParent, "fyf-delivery-test-"));
 const bin = process.env.PG_TEST_BIN || "C:/Program Files/PostgreSQL/18/bin";
 const suites = {
+  local: { port: 55446, file: "localDelivery.integration.mjs", variable: "DELIVERY_TEST_DATABASE_URL" },
   tariffs: { port: 55446, file: "deliveryTariffs.integration.mjs", variable: "DELIVERY_TEST_DATABASE_URL" },
   promotions: { port: 55445, file: "promotions.integration.mjs", variable: "PROMOTIONS_TEST_DATABASE_URL" },
   email: { port: 55441, file: "emailVerification.integration.mjs", variable: "EMAIL_VERIFICATION_TEST_DATABASE_URL" },

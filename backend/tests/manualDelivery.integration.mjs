@@ -35,7 +35,7 @@ export async function testManualDelivery({ pool, call, base, users, snapshot, tr
     assert.equal(notice.deliveryInformation.onlineQuoteRequestsEnabled,false);
     assert.equal(notice.deliveryInformation.minimumOutboundKmPriceReference,1000);
     for(const role of [null,"CLIENT"]){
-      await request("POST","/online-orders/quote",{items,deliveryType:"DELIVERY",deliveryCommune:"Concepción"},role,409,"DELIVERY_MANUAL_QUOTE_REQUIRED");
+      await request("POST","/online-orders/quote",{items,deliveryType:"DELIVERY",deliveryCommune:"Santa Juana"},role,409,"DELIVERY_MANUAL_QUOTE_REQUIRED");
     }
     const pickup=await call("POST","/online-orders/quote",{items,deliveryType:"PICKUP"});
     assert.equal(pickup.deliveryFee,"0.00");assert.equal(pickup.deliveryBenefit.active,false);
@@ -51,7 +51,7 @@ export async function testManualDelivery({ pool, call, base, users, snapshot, tr
   assert.deepEqual((await pool.query("select * from email_verification_challenges where id=$1",[challenge.id])).rows[0],challenge);
   await save({deliveryEnabled:false},"ADMIN");
   assert.equal((await call("GET","/customer-notice")).deliveryAnnouncement.kind,"SUSPENDED");
-  await request("POST","/online-orders/quote",{items,deliveryType:"DELIVERY"},null,409,"DELIVERY_UNAVAILABLE");
+  await request("POST","/online-orders/quote",{items,deliveryType:"DELIVERY",deliveryCommune:"Santa Juana"},null,409,"DELIVERY_UNAVAILABLE");
   assert.equal((await call("POST","/online-orders/quote",{items,deliveryType:"PICKUP"})).deliveryFee,"0.00");
   await save({deliveryEnabled:true});
   assert.equal((await call("GET","/customer-notice")).deliveryAnnouncement.kind,"MANUAL_QUOTE");

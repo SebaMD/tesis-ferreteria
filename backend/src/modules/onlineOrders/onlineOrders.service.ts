@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { commercialQuoteSignature } from "../deliverySettings/deliveryPricing.js";
+import { canonicalizeDeliveryCommune } from "../../utils/delivery.js";
 import { assertManualDeliveryPaymentAuthorization } from "../deliveryQuotes/manualDeliveryAuthorization.js";
 import { db, type DbTransaction } from "../../db/index.js";
 import { logServerError } from "../../utils/helpers.js";
@@ -131,7 +132,8 @@ export async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckou
   });
 }
 
-async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "items" | "deliveryType">) {
+async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "items" | "deliveryType"> & {deliveryCommune?:string|null}) {
+  if(data.deliveryType==="DELIVERY"&&!canonicalizeDeliveryCommune(data.deliveryCommune))throw new DeliveryPolicyError("El despacho local solo está disponible para Santa Juana, Región del Biobío.",400,"DELIVERY_OUTSIDE_COVERAGE");
   const policy = await currentDeliveryPolicy(tx);
   const orderItems = await priceCheckoutItems(tx, data.items);
   const productsSubtotal = orderItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
@@ -143,7 +145,7 @@ async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "
   return { orderItems, policy: policy!, delivery, fingerprint, productsSubtotal, productsDiscountTotal, productsNet, total: productsNet + delivery.fee };
 }
 
-export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "items" | "deliveryType">) {
+export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "items" | "deliveryType"> & {deliveryCommune?:string|null}) {
   return db.transaction(async tx => {
     const q = await priceCheckout(tx, data);
     const amounts = { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),

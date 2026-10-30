@@ -2,11 +2,12 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 const read=p=>readFile(new URL("../src/"+p,import.meta.url),"utf8");
-test("quick variant view resets incompatible states and disables their controls",async()=>{
+test("quick variant view and states toggle independently with shared desktop/mobile wiring",async()=>{
  const s=await read("pages/ProductsPage.jsx");
- assert.match(s,/setVariantsOnly\(v => !v\); setShowInactiveProducts\(false\); setLowStockOnly\(false\); setOutOfStockOnly\(false\)/);
- for(const state of ["showInactiveProducts","lowStockOnly","outOfStockOnly"]) assert.match(s,new RegExp("disabled=\\{variantsOnly[^}]+\\} aria-pressed=\\{"+state+"\\}"));
- assert.match(s,/variantsOnly \? "Mostrar productos activos" : "Mostrar productos con variantes"/);
+ assert.match(s,/setEnabled\(value => !value\)/);
+ assert.doesNotMatch(s,/disabled=\{variantsOnly/);
+ for(const state of ["variantsOnly", "showInactiveProducts","lowStockOnly","outOfStockOnly"]) assert.ok(s.includes(state));
+ assert.match(s,/aria-pressed=\{enabled\}/);
 });
 test("editor sections simplify attributes and retain hidden row drafts with invalid recovery",async()=>{
  const s=await read("components/ProductBundleEditor.jsx");

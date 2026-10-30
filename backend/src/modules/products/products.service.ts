@@ -18,6 +18,9 @@ import {
 import type { EditProductBody, ProductBody } from "./products.validation.js";
 import { assertProductPromotionCompatibilityTx } from "../promotions/promotions.service.js";
 import { PromotionError } from "../promotions/promotions.service.js";
+import { acquirePromotionPricingLock } from "../promotions/promotions.repository.js";
+import { assertNoPendingIdentityCommitments } from "../productFamilies/productFamilies.service.js";
+import { assertUnitChangeAllowed } from "../productFamilies/productUnitEligibility.service.js";
 
 export class ProductError extends Error {
   constructor(
@@ -75,6 +78,7 @@ export async function createProductService(data: ProductBody, actorId: number | 
   let createdId: number;
   try {
     createdId = await db.transaction(async (tx) => {
+      await acquirePromotionPricingLock(tx);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
       const { familyId, variantOptionIds, associationReason, ...base } = data;
       const product = await createProductTx(tx, base);
@@ -132,16 +136,23 @@ export async function editProductService(id: number, data: EditProductBody, acto
 }
 
 export async function editProductInTransaction(tx: DbTransaction, id: number, data: EditProductBody, actorId: number | null, expectedUpdatedAt?: string) {
+      await acquirePromotionPricingLock(tx);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
       const [locked] = await tx.select().from(productsTable).where(eq(productsTable.id, id)).for("update");
       if (!locked) throw new ProductError("Producto no encontrado", 404);
       assertProductRevision(locked.updatedAt, expectedUpdatedAt);
       const { familyId, variantOptionIds, associationReason, ...base } = data;
       const categoryId = data.categoryId ?? locked.categoryId;
+      if(locked.familyId===null && categoryId!==locked.categoryId && await productHasHistory(id,tx))throw new ProductError("Utiliza la corrección administrativa de categoría para este producto con historial",409);
       if (base.name !== undefined && base.name !== locked.name) throw new ProductError("Utiliza Corregir nombre para una modificación independiente y auditada", 409);
+      if (base.unitMeasure !== undefined) await assertUnitChangeAllowed(tx, locked, base.unitMeasure);
+      if ((base.brand !== undefined && base.brand !== locked.brand)
+        || (base.categoryId !== undefined && base.categoryId !== locked.categoryId)
+        || (base.barcode !== undefined && base.barcode !== locked.barcode)) {
+        await assertNoPendingIdentityCommitments(tx, id);
+      }
       if (await productHasHistory(id, tx) && ((base.name !== undefined && base.name !== locked.name)
-        || (base.brand !== undefined && base.brand !== locked.brand)
-        || (base.unitMeasure !== undefined && base.unitMeasure !== locked.unitMeasure))) {
+        || (base.brand !== undefined && base.brand !== locked.brand))) {
         throw new ProductError("Producto con historial: conserve nombre, marca y unidad; cree otro producto para otro artículo", 409);
       }
       const finalFamilyId = familyId === undefined ? locked.familyId : familyId;

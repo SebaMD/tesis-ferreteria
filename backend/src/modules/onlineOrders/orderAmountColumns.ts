@@ -4,6 +4,7 @@ export const orderAmountColumns = {
   productsSubtotal: orders.productsSubtotal, productsDiscountTotal: orders.productsDiscountTotal,
   deliveryFee: orders.deliveryFee, deliveryPolicyRevisionId: orders.deliveryPolicyRevisionId,
   deliveryFeeReason: orders.deliveryFeeReason,
+  deliveryPricingMode: sql<string | null>`(select ${revisions.pricingMode} from ${revisions} where ${revisions.id} = ${orders.deliveryPolicyRevisionId})`,
   deliveryBaseFee: sql<string | null>`(select ${revisions.flatFee} from ${revisions} where ${revisions.id} = ${orders.deliveryPolicyRevisionId})`,
   deliveryIsDemo: sql<boolean | null>`(select ${revisions.isDemo} from ${revisions} where ${revisions.id} = ${orders.deliveryPolicyRevisionId})`,
 };

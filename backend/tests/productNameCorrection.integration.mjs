@@ -45,7 +45,7 @@ export async function testProductNameCorrection({ pool, call, body, users, base 
   assert.equal((await call("GET", `/catalog/products/${id}`)).name, renamed.name);
   await assert.rejects(pool.query("update products set name='Sin autorización' where id=$1", [id]), /Name correction requires/);
   await assert.rejects(pool.query("update products set unit_measure='caja' where id=$1", [id]), /identity cannot change/);
-  await assert.rejects(pool.query("update products set brand='Otro fabricante' where id=$1", [id]), /identity cannot change/);
+  await assert.rejects(pool.query("update products set brand='Otro fabricante' where id=$1", [id]), e => e.code === "23514" && /audit/.test(e.message));
   await assert.rejects(pool.query("update product_family_events set reason='alterado' where next->>'operation'='PRODUCT_NAME_CORRECTION'"), /immutable/);
   const quote = await call("POST", "/online-orders/quote", {items:[{productId:id,quantity:1}],deliveryType:"PICKUP"});
   const order = await call("POST", "/online-orders/checkout", {items:[{productId:id,quantity:1}],deliveryType:"PICKUP",quoteFingerprint:quote.quoteFingerprint,checkoutKey:randomUUID()}, "HISTORY_CLIENT", 201);

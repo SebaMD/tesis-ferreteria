@@ -43,7 +43,7 @@ test("progressive form keeps drafts mounted and isolates advanced actions",async
   assert.match(page,/Convertir en producto con variantes/);assert.match(editor,/Volver al producto/);assert.match(editor,/Confirmar conversión del producto/);
   assert.match(page,/pendingFiles=\{pendingProductImages\}/);assert.doesNotMatch(page,/Administración avanzada|<ProductVariantFields/);assert.match(page,/<ProductBundleEditor inline conversionId=\{editingProductId\}/);
   assert.match(page,/onClick=\{openVariants\}/); assert.match(page,/!canAddVariants && !variantsEnabled/); assert.doesNotMatch(page,/familyToolsOpen|ProductFamilyTools/);
-  assert.match(editor,/Agregar otro atributo/);assert.match(editor,/Agregar otra variante/);assert.match(editor,/nameCustomized: true/);assert.match(editor,/disabled=\{row.hasHistory \|\| row.isOriginal\}/);
+  assert.match(editor,/Agregar otro atributo/);assert.match(editor,/Agregar otra variante/);assert.match(editor,/nameCustomized: true/);assert.match(editor,/disabled=\{locked\|\|row.hasHistory\|\|row.isOriginal\}/);
   const preview=await read("components/ProductBundlePreview.jsx");assert.match(preview,/Vista previa — sin guardar/);assert.match(preview,/URL.revokeObjectURL/);assert.match(preview,/CatalogCardSurface/);
   assert.doesNotMatch(preview,/useCart|ProductPurchaseControls|saveProduct|createOrder|productId:|promotion:/);
 });

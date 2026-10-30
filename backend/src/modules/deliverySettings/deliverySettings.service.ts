@@ -23,8 +23,10 @@ export async function getDeliverySettings() {
 export function validateDeliverySettings(body: unknown) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new DeliveryPolicyError("Configuración inválida", 400);
   const input = body as Record<string, unknown>;
-  const allowed = ["expectedRevisionId", "pickupEnabled", "deliveryEnabled", "flatFee", "minimumProductsTotal", "freeShippingFrom", "isDemo"];
-  const required = allowed.filter(k => !["pickupEnabled", "minimumProductsTotal"].includes(k));
+  const allowed = ["expectedRevisionId", "pickupEnabled", "deliveryEnabled", "flatFee", "minimumProductsTotal", "freeShippingFrom", "isDemo","pricingMode"];
+  const required = allowed.filter(k => !["pickupEnabled", "minimumProductsTotal","pricingMode"].includes(k));
+  if(input.pricingMode!==undefined&&input.pricingMode!=="LOCAL_FIXED")throw new DeliveryPolicyError("Modo de despacho inválido",400);
+  if(input.pricingMode==="LOCAL_FIXED"&&input.isDemo!==false)throw new DeliveryPolicyError("La tarifa local no es una simulación",400);
   if (Object.keys(input).some(k => !allowed.includes(k)) || required.some(k => !(k in input))) throw new DeliveryPolicyError("La configuración contiene campos faltantes o no permitidos", 400);
   if (("pickupEnabled" in input && input.pickupEnabled !== true) || ("minimumProductsTotal" in input && input.minimumProductsTotal !== null)) throw new DeliveryPolicyError("Las nuevas revisiones mantienen retiro habilitado y no admiten compra mínima para despacho", 400);
   if (input.expectedRevisionId !== null && (!Number.isSafeInteger(input.expectedRevisionId) || Number(input.expectedRevisionId) < 1)) throw new DeliveryPolicyError("Versión inválida", 400);
@@ -38,7 +40,7 @@ export function validateDeliverySettings(body: unknown) {
   return { expectedRevisionId: input.expectedRevisionId as number | null,
     pickupEnabled: true, deliveryEnabled: input.deliveryEnabled as boolean,
     isDemo: input.isDemo as boolean, flatFee: amount("flatFee")!,
-    minimumProductsTotal: null, freeShippingFrom: amount("freeShippingFrom", true) };
+    minimumProductsTotal: null, freeShippingFrom: amount("freeShippingFrom", true),...(input.pricingMode==="LOCAL_FIXED"?{pricingMode:"LOCAL_FIXED"}: {}) };
 }
 
 export async function saveDeliverySettings(actorId: number, body: unknown) {
@@ -49,7 +51,7 @@ export async function saveDeliverySettings(actorId: number, body: unknown) {
     const [current] = await tx.select().from(settings).where(eq(settings.id, 1)).for("update");
     if (current.currentRevisionId !== expectedRevisionId) throw new DeliveryPolicyError("Otro usuario autorizado cambió la configuración. Cierra y vuelve a abrir el formulario para revisar la versión vigente.");
     const [previous] = current.currentRevisionId ? await tx.select().from(revisions).where(eq(revisions.id, current.currentRevisionId)) : [];
-    if(previous?.pricingMode==="MANUAL_QUOTE")throw new DeliveryPolicyError("La política vigente es manual. Utiliza la configuración de solicitudes de despacho; no se restauró la tarifa antigua.");
+    if((previous?.pricingMode==="MANUAL_QUOTE"||previous?.pricingMode==="LOCAL_FIXED")&&!("pricingMode" in values))throw new DeliveryPolicyError("No se puede restaurar una política antigua mediante este contrato.");
     const [revision] = await tx.insert(revisions).values({ ...values, version: (previous?.version ?? 0) + 1, createdBy: actorId }).returning();
     await tx.update(settings).set({ currentRevisionId: revision.id }).where(eq(settings.id, 1));
     return revision;

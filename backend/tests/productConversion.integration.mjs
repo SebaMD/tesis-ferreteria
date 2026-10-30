@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-export async function testProductConversion({pool,call,categoryId,simple,users,snapshot}) {
+export async function testProductConversion({pool,call,categoryId,simple,users,snapshot,apiBase}) {
  const originalRows=id=>pool.query("select * from products where id=$1",[id]).then(r=>r.rows[0]);
  const base=async id=>{
    const s=await call("GET",`/product-families/conversion/${id}`,null,"ADMIN"),p=s.product;
@@ -20,7 +20,17 @@ export async function testProductConversion({pool,call,categoryId,simple,users,s
  await call("POST",`/sales/${sale.id}/returns`,{reason:"Devolución previa a convertir",details:[{productId:p.id,quantity:1}]},"ADMIN");
  await call("POST","/promotions",{name:"Promoción del original preservada",type:"PERCENTAGE_DISCOUNT",percentage:10,isActive:true,startsAt:new Date(Date.now()-3600000).toISOString(),endsAt:new Date(Date.now()+3600000).toISOString(),productIds:[p.id],categoryIds:[]},"MANAGER",201);
  const quote=await call("POST","/online-orders/quote",{items:[{productId:p.id,quantity:1}],deliveryType:"PICKUP"});
- await call("POST","/online-orders/checkout",{items:[{productId:p.id,quantity:1}],deliveryType:"PICKUP",checkoutKey:randomUUID(),quoteFingerprint:quote.quoteFingerprint},"CLIENT",201);
+ const pending=await call("POST","/online-orders/checkout",{items:[{productId:p.id,quantity:1}],deliveryType:"PICKUP",checkoutKey:randomUUID(),quoteFingerprint:quote.quoteFingerprint},"CLIENT",201);
+ // This fixture itself creates a commitment. Verify its business rejection first,
+ // then finalize it through the already simulated payment/logistics APIs before
+ // testing conversion rollback. Do not bypass the guard or rewrite order status.
+ const pendingBefore=await snapshot();
+ await call("POST","/product-families/bundle",await base(p.id),"ADMIN",409);
+ assert.deepEqual(await snapshot(),pendingBefore);
+ const paid=await fetch(apiBase+"/online-orders/payments/webpay/return",{method:"POST",redirect:"manual",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({token_ws:pending.token})});
+ assert.equal(paid.status,303);
+ for(const action of ["start-preparation","finish-preparation"])await call("POST",`/order-logistics/online/${pending.orderId}/${action}`,{},"WAREHOUSE");
+ await call("POST",`/order-logistics/online/${pending.orderId}/complete-delivery`,{receiverName:"Receptor de prueba",receiverRut:"11111111-1"},"WAREHOUSE");
  const referencesBefore=(await pool.query("select * from promotion_products where product_id=$1",[p.id])).rows;
  const paymentBefore=(await pool.query("select * from online_payments order by id")).rows;
  const original=await originalRows(p.id),before=await snapshot(),request=await base(p.id);
@@ -41,7 +51,7 @@ export async function testProductConversion({pool,call,categoryId,simple,users,s
  for(const t of ["sales","sale_details","online_orders","online_order_items"])assert.deepEqual(after[t],before[t]);
  assert.deepEqual((await pool.query("select * from promotion_products where product_id=$1",[p.id])).rows,referencesBefore);
  assert.deepEqual((await pool.query("select * from online_payments order by id")).rows,paymentBefore);
- assert.equal((await call("GET",`/catalog/products/${p.id}`)).reservedQuantity,1);
+ assert.equal((await call("GET",`/catalog/products/${p.id}`)).reservedQuantity,0);
  assert.deepEqual(after.inventory_movements.filter(m=>m.r.product_id===p.id),before.inventory_movements.filter(m=>m.r.product_id===p.id));
  const entry=after.inventory_movements.filter(m=>m.r.product_id===created.productIds[1]);assert.equal(entry.length,1);assert.equal(entry[0].r.movement_type,"ENTRY");assert.equal(entry[0].r.quantity,4);assert.equal(entry[0].r.user_id,users.ADMIN);
  assert.equal((await pool.query("select count(*) from product_family_events where product_id=$1 and next->>'operation'='CONVERT_SIMPLE'",[p.id])).rows[0].count,"1");

@@ -18,7 +18,7 @@ try {
   const dataDirectory = (await pool.query("show data_directory")).rows[0].data_directory.replaceAll("\\", "/");
   assert.match(dataDirectory, /\/fyf-delivery-test-[^/]+\/data$/);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 37);
+  assert.equal(journal.entries.length, 42);
   assert.ok(journal.entries[30].when > journal.entries[29].when);
   await mkdir(path.join(folder, "meta"));
   await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 30) }));
@@ -43,8 +43,8 @@ try {
   await pool.query("create database fyf_delivery_clean");
   const cleanUrl = new URL(url); cleanUrl.pathname = "/fyf_delivery_clean";
   const clean = new pg.Pool({ connectionString: cleanUrl.href });
-  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "37"); } finally { await clean.end(); }
-  console.log("PASS 37 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
+  try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, String(journal.entries.length)); } finally { await clean.end(); }
+  console.log("PASS 39 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
 
   Object.assign(process.env, { DATABASE_URL: url.href, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const sdk = (await import("transbank-sdk")).default;
@@ -94,7 +94,7 @@ try {
   const pickup = await quote("PICKUP"); assert.equal(pickup.deliveryFee, "0.00"); assert.equal(pickup.total, "10000.00");
   const initialQuote = await quote(); assert.equal(initialQuote.total, "10000.00"); assert.equal(initialQuote.isDemo, true);
   assert.equal((await pool.query("select count(*) from online_orders")).rows[0].count, "1"); assert.equal(transactions.size, 0);
-  await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Otra comuna" }, null, 409);
+  await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Otra comuna" }, null, 400);
   for (const extra of [{ total: 1 }, { deliveryFee: 0 }, { items: [{ ...items[0], unitPrice: 1 }] }]) await call("POST", "/online-orders/quote", { items, deliveryType: "PICKUP", ...extra }, null, 400);
   const delivery = { deliveryType: "DELIVERY", deliveryRecipientName: "Comprador Demo", deliveryPhone: "+56911111111", deliveryAddress: "Dirección de prueba", deliveryCommune: "Santa Juana", saveDeliveryAddress: false };
   const checkout = { ...delivery, checkoutKey: "delivery-checkout-000001", items, quoteFingerprint: initialQuote.quoteFingerprint };
@@ -136,7 +136,7 @@ try {
   const assertManualDelivery = async () => {
     const before = (await pool.query("select (select count(*) from online_orders) orders, (select count(*) from online_payments) payments, (select sum(current_stock) from products) stock")).rows[0];
     const attempts = transactions.size;
-    const rejected = await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Concepción" }, null, 409);
+    const rejected = await call("POST", "/online-orders/quote", { items, deliveryType: "DELIVERY", deliveryCommune: "Santa Juana" }, null, 409);
     assert.equal(rejected.code, "DELIVERY_MANUAL_QUOTE_REQUIRED");
     const blocked = await call("POST", "/online-orders/checkout", { ...checkout, checkoutKey: randomBytes(16).toString("hex") }, "CLIENT", 409);
     assert.equal(blocked.code, "DELIVERY_MANUAL_QUOTE_REQUIRED");

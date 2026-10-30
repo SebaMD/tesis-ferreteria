@@ -47,6 +47,6 @@ test("common photographs stay explicit and individual maintenance is integrated"
  assert.match(s,/<details[^>]*><summary[^>]*>Fotografías comunes/);
  assert.match(s,/draft.rows.filter\(r=>r.useCommon\)/);assert.match(s,/sin reemplazar sus fotos/);
  assert.doesNotMatch(s,/Detalle individual|Imágenes y datos individuales|setPendingIndividual/);assert.match(s,/<ProductImagesManager/);
- assert.match(s,/Descripción individual/);assert.match(s,/Unidad de este artículo/);
+ assert.match(s,/Descripción individual/);assert.match(s,/Unidad individual/);
  assert.match(s,/<h4[^>]*>.*Producto #.*badgeClass/);
 });

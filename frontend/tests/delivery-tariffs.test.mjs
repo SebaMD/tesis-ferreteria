@@ -14,8 +14,8 @@ test("checkout usa cotización backend vinculada al carrito/modalidad y bloquea 
   const source = await read("pages/CheckoutPage.jsx");
   assert.match(source, /quoteOnlineOrderRequest/); assert.match(source, /quoteState.key === quoteKey/);
   assert.match(source, /&& Boolean\(quote\)/); assert.match(source, /quoteFingerprint: quote.quoteFingerprint/);
-  assert.match(source, /<OrderAmounts order=\{quote\}/); assert.match(source, /Por cotizar/);
-  assert.match(source, /setQuoteRefresh\(value => value \+ 1\)/);
+  assert.match(source, /<OrderAmounts order=\{quote\}/); assert.doesNotMatch(source, /Por cotizar/);
+  assert.match(source, /setQuoteRefresh\(v => v \+ 1\)/);
 });
 test("configuración solo ADMIN/MANAGER, revisión previa, concurrencia y controles accesibles existentes", async () => {
   const source = await read("components/DeliverySettingsManager.jsx");

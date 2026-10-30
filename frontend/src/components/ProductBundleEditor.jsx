@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
-import { Eye, Plus, Save, Trash2, CheckCircle, XCircle, ChevronDown, ScanBarcode, Info } from "lucide-react";
+import { Eye, Plus, Save, Trash2, CheckCircle, XCircle, ChevronDown, ScanBarcode, Info, Pencil } from "lucide-react";
+import AttributeSuggestionDialog from "./AttributeSuggestionDialog.jsx";
+import AttributeMeasurementFields from "./AttributeMeasurementFields.jsx";
+import { validAttributeMeasurement, attributeOptionLabel, legacyMeasurementCandidate } from "../helpers/attributeMeasurements.js";
 import AuditedValueControl from "./AuditedValueControl.jsx";
+import FamilyBrandDialog from "./FamilyBrandDialog.jsx";
+import OptionLabelCorrectionDialog from "./OptionLabelCorrectionDialog.jsx";
+import { pendingOptionLabel } from "../helpers/optionLabelCorrection.js";
+import { pendingBrandCorrection } from "../helpers/familyBrand.js";
 import { toast } from "sonner";
 import AppModal from "./AppModal.jsx";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
@@ -16,9 +23,11 @@ import { pendingCategoryChange } from "../helpers/familyCategory.js";
 import ProductNameCorrectionAction from "./ProductNameCorrectionAction.jsx";
 import { readPendingAttributeRename } from "../helpers/attributeRename.js";
 import { ProductCategoryField, ProductUnitField } from "./ProductFormFields.jsx";
+import ProductUnitApplicationDialog from "./ProductUnitApplicationDialog.jsx";
+import { normalizeUnit, validUnit, unitApplicationPlan, unitSelectionPlan, applyUnitSelection } from "../helpers/productUnits.js";
 import { getApiError } from "../api/httpClient.js";
-import { getProductBundleRequest, getProductConversionRequest, getProductBundleOperationRequest, saveProductBundleRequest } from "../services/productFamilies.service.js";
-import { bundleDraft, conversionDraft, bundlePayload, bundleRowLabels, bundleRowName, bundleDraftSignature, newBundleAttribute, newBundleRow, setBundleRowOption, bundleRequiresConfirmation, resumeBundleDraft, resumeConversionDraft, simpleDraftFromBundle, simpleProductPayload, editBundleImages } from "../helpers/productBundleForm.js";
+import { getProductBundleRequest, getProductConversionRequest, getProductBundleOperationRequest, saveProductBundleRequest, getFamilyUnitEligibilityRequest } from "../services/productFamilies.service.js";
+import { bundleDraft, conversionDraft, bundlePayload, bundleRowLabels, bundleRowValues, bundleRowName, bundleDraftSignature, newBundleAttribute, newBundleRow, setBundleRowOption, bundleRequiresConfirmation, resumeBundleDraft, resumeConversionDraft, simpleDraftFromBundle, simpleProductPayload, editBundleImages } from "../helpers/productBundleForm.js";
 import { deactivateProductRequest, updateProductRequest } from "../services/products.service.js";
 import { secondaryButtonClass, dangerButtonClass, badgeClass } from "../helpers/uiClasses.js";
 import useAuth from "../hooks/useAuth.js";
@@ -64,11 +73,21 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   const [renameTarget, setRenameTarget] = useState(() => familyId ? readPendingAttributeRename(user.id, familyId) : null);
   const [nameCorrectionOpen, setNameCorrectionOpen] = useState(false);
   const [categoryDialog,setCategoryDialog]=useState(()=>Boolean(familyId&&pendingCategoryChange(user.id,familyId)));
+  const [brandDialog,setBrandDialog]=useState(()=>Boolean(familyId&&pendingBrandCorrection(user.id,familyId)));
+  const [optionLabelTarget,setOptionLabelTarget]=useState(()=>familyId?pendingOptionLabel(user.id,familyId)?.target||null:null);
   const [dimensionDialog,setDimensionDialog]=useState(()=>Boolean(familyId&&pendingDimension(user.id,familyId)));
   const [dimensionReview,setDimensionReview]=useState(false);
+  const [attributePicker,setAttributePicker]=useState(false),[dimensionName,setDimensionName]=useState("");
+  const [unitPreview,setUnitPreview]=useState(null);
+  const [unitInput,setUnitInput]=useState(null);
+  const unitPreviewRequest=useRef(0);
+  useEffect(()=>()=>{unitPreviewRequest.current++;},[]);
+  const [dimensionAttributeSlot,setDimensionAttributeSlot]=useState(null),[dimensionActionSlot,setDimensionActionSlot]=useState(null),[dimensionRowSlots,setDimensionRowSlots]=useState({});
+  const optionLabelReturn=useRef(null);
+  const dimensionSlotRefs=useRef(new Map());
+  function dimensionRowRef(id){if(!dimensionSlotRefs.current.has(id))dimensionSlotRefs.current.set(id,el=>setDimensionRowSlots(old=>old[id]===el?old:{...old,[id]:el}));return dimensionSlotRefs.current.get(id);}
   const [dimensionLocked,setDimensionLocked]=useState(()=>Boolean(familyId&&pendingDimension(user.id,familyId)));
   const [expandedRows, setExpandedRows] = useState(() => new Set(familyId ? [] : [draftState.rows[0]?.key]));
-  const [individualRows, setIndividualRows] = useState(() => new Set());
   const [singleVariant, setSingleVariant] = useState(false);
   const singleVariantChoice = useRef(null), singleVariantReturn = useRef(null);
   useEffect(() => {
@@ -80,7 +99,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   const guard = useRef(false), frozen = useRef(null), formRef = useRef(null), previewTrigger = useRef(null), initialCommon = useRef(commonData);
   const errorRef = useRef(null), reasonRef = useRef(null), configurationRef = useRef(null);
   useEffect(() => { onBusyChange?.(busy || uncertain || dimensionLocked); }, [busy, uncertain, dimensionLocked, onBusyChange]);
-  useEffect(() => { onDialogChange?.(singleVariant || confirmSave || Boolean(statusTarget) || reloadConfirm || Boolean(renameTarget) || nameCorrectionOpen || categoryDialog || dimensionReview); }, [singleVariant, confirmSave, statusTarget, reloadConfirm, renameTarget, nameCorrectionOpen, categoryDialog, dimensionReview, onDialogChange]);
+  useEffect(() => { onDialogChange?.(singleVariant || confirmSave || Boolean(statusTarget) || reloadConfirm || Boolean(renameTarget) || nameCorrectionOpen || categoryDialog || brandDialog || Boolean(optionLabelTarget) || dimensionReview || attributePicker || Boolean(unitPreview)); }, [unitPreview, attributePicker, singleVariant, confirmSave, statusTarget, reloadConfirm, renameTarget, nameCorrectionOpen, categoryDialog, brandDialog, optionLabelTarget, dimensionReview, onDialogChange]);
   useEffect(() => {
     let live = true;
     if (familyId) getProductBundleRequest(familyId).then(data => { if (live) { savedStock.current=stockSnapshots(data.variants);const next=bundleDraft(data);setDraft(next);setBaseline(bundleDraftSignature(next)); } }).catch(e => { if (live) setError(getApiError(e)); }).finally(() => { if (live) setBusy(false); });
@@ -95,6 +114,33 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   const files = [...new Set([...draft.rows.flatMap(row => row.files), ...(draft.rows.some(row => row.useCommon) ? commonFiles : [])])];
   const locked = busy || uncertain || dimensionDialog || !enabled || Boolean(familyId && !draft.familyId) || Boolean(conversionId && !draft.conversion);
   const dirty = !baseline || bundleDraftSignature(draft) !== baseline || files.length > 0 || commonFiles.length > 0;
+  const unitPlan = unitApplicationPlan(draft);
+  const closeUnitPreview = () => { unitPreviewRequest.current++;setUnitPreview(null);setUnitInput(null); requestAnimationFrame(()=>requestAnimationFrame(()=>formRef.current?.querySelector('[data-bundle-field="generalUnit"]')?.focus())); };
+  async function openUnitPreview(target) {
+    setUnitInput(null);
+    if (locked || normalizeUnit(target)===normalizeUnit(draft.unitMeasure)) return;
+    if (!validUnit(target)) { toast.warning("Indica una unidad válida de 1 a 50 caracteres."); return; }
+    const request = ++unitPreviewRequest.current;
+    const plan = unitSelectionPlan(draft,target);
+    setUnitPreview({...plan,loading:Boolean(draft.familyId),canApply:!draft.familyId&&plan.canApply});
+    if (!draft.familyId) return;
+    try {
+      const eligibility = await getFamilyUnitEligibilityRequest(draft.familyId,plan.target,draft.revision);
+      if (request===unitPreviewRequest.current) setUnitPreview(unitSelectionPlan(draft,target,eligibility));
+    } catch (e) {
+      if (request!==unitPreviewRequest.current) return;
+      if (e.response?.status===409) setConflict(true);
+      setUnitPreview({...plan,canApply:false,error:getApiError(e,"No se pudo verificar la elegibilidad. Cierra y vuelve a consultar antes de aplicar.")});
+    }
+  }
+  function applyGeneralUnit() {
+    if (locked) return;
+    const result = applyUnitSelection(draft, unitPreview);
+    if (!result.applied) { toast.warning("El borrador cambió o contiene variantes bloqueadas. Vuelve a revisar la aplicación de unidades."); closeUnitPreview(); return; }
+    setDraft(result.draft);
+    closeUnitPreview();
+    toast.success(`Unidad aplicada a ${result.count} variantes del borrador. Guarda el conjunto para registrar los cambios.`);
+  }
   const openRow = key => setExpandedRows(current => new Set([...current, key]));
   const focusInEditor = target => requestAnimationFrame(() => requestAnimationFrame(() => {
     const element = typeof target === "function" ? target() : target;
@@ -113,7 +159,6 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     if (section === "attributes") setAttributesOpen(true);
     if (variantKey) { setVariantsOpen(true); openRow(variantKey); }
     variantKeys.forEach(openRow);
-    if (variantKey && control?.closest("[data-individual-settings]")) setIndividualRows(current => new Set([...current, variantKey]));
     focusInEditor(() => control || (section === "prepare" && reasonRef.current)
       || (variantKey && formRef.current?.querySelector(`[data-variant-key="${variantKey}"] input:not(:disabled)`))
       || (section === "attributes" && formRef.current?.querySelector("#bundle-attribute-fields input:not(:disabled)")) || errorRef.current);
@@ -165,6 +210,8 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   }
   function review() {
     if(dimensionDialog)return;
+    if(unitPreview)return;
+    if(unitInput!==null){void openUnitPreview(unitInput);return;}
     onReviewOpen?.();
     if (draft.conversion && conversionStep === "prepare") { continueConversion(); return; }
     if (guard.current || !validateDraft()) return;
@@ -199,7 +246,13 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     } catch(e) { setConflict(true); showError(getApiError(e,e.message || "No se pudo confirmar el cambio. Consulta el estado actualizado antes de reintentar."));setStatusTarget(null); }
     finally { guard.current=false;setBusy(false); }
   }
-  const addAttribute = () => { setAttributesOpen(true); change({ attributes:[...draft.attributes,newBundleAttribute()],rows:draft.rows.map(r=>({...r,selections:[...r.selections,""]})) }); };
+  const addAttributes = names => {
+    setAttributePicker(false);setAttributesOpen(true);setVariantsOpen(true);
+    if(definitionLocked){setDimensionName(names[0]);setDimensionDialog(true);setExpandedRows(new Set(draft.rows.map(r=>r.key)));return;}
+    const added=names.map(name=>({...newBundleAttribute(),name}));
+    change({attributes:[...draft.attributes,...added],rows:draft.rows.map(r=>({...r,selections:[...r.selections,...names.map(()=>"")],optionTexts:[...draft.attributes.map((_,i)=>r.optionTexts?.[i]??bundleRowValues(draft,r)[i]),...names.map(()=>"")]}))});
+    focusInEditor(()=>formRef.current?.querySelector(`[data-bundle-attribute="${added[0].key}"]`));
+  };
   useBarcodeScanner({ enabled: modalOpen && !locked, captureInModal: true,
     isInputAllowed: target => Boolean(target?.dataset.bundleBarcode),
     onScan: (barcode, {target}) => { if(target?.dataset.bundleBarcode) rowChange(target.dataset.bundleBarcode,{barcode}); } });
@@ -245,9 +298,12 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
       setVariantsOpen(true);
       if (frozen.current && (!status || status >= 500)) { setUncertain(true); setCanRetry(true); }
       else { frozen.current = null; sessionStorage.removeItem(pendingKey); setUncertain(false); }
-      showError(getApiError(e, e.message || "No se pudo guardar. Revisa los datos."), e.response ? {} : e);
+      const unitProblem = e.response?.data?.details;
+      const affected = unitProblem?.field === "unitMeasure" && draft.rows.find(row=>row.id===unitProblem.productId);
+      showError(getApiError(e, e.message || "No se pudo guardar. Revisa los datos."), e.response ? affected ? { section:"variants",variantKey:affected.key,field:"unitMeasure" } : {} : e);
     } finally { guard.current = false; setBusy(false); }
   }
+  const previewAction = <button ref={previewTrigger} type="button" disabled={locked} className={secondaryButtonClass} onClick={() => setPreview(true)}><Eye size={16} />Vista previa del catálogo</button>;
   const content = <form noValidate ref={formRef} className="grid min-w-0 gap-4" onSubmit={e => { e.preventDefault(); if(embedded){if(validateDraft())onBack();}else review(); }}>
       {modalOpen && !contextualError && errorNotice}
 
@@ -256,7 +312,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
       {conversionId && !draft.conversion && busy && <p role="status" className="m-0 text-sm">Cargando producto original…</p>}
       {conflict && (familyId || conversionId) && <button type="button" className={`${secondaryButtonClass} w-fit text-xs`} disabled={locked} onClick={()=>setReloadConfirm(true)}>Recargar información vigente</button>}
       {uncertain && <div className={box}><p className="m-0 text-sm">Hay un guardado cuyo resultado debe verificarse antes de continuar.</p><div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={recover}>Consultar resultado</button>{canRetry && <button type="button" disabled={busy} onClick={save}>Reintentar mismo guardado</button>}</div></div>}
-      <fieldset disabled={locked} className="m-0 grid min-w-0 gap-4 border-0 p-0">
+      <fieldset disabled={locked&&!dimensionDialog} className="m-0 grid min-w-0 gap-4 border-0 p-0">
         {draft.conversion && <section hidden={conversionStep !== "prepare"} className={conversionStep === "prepare" ? box : "hidden"} aria-label="Preparar conversión">
           <h3 className="m-0 text-base font-bold">1. Preparar conversión</h3>
           <p className="m-0 break-words text-sm"><strong>Producto #{draft.original.id}</strong> · {draft.original.name}</p>
@@ -268,7 +324,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
         </section>}
         <div hidden={Boolean(conversionId && conversionStep === "prepare")} className={conversionId && conversionStep === "prepare" ? "hidden" : "grid min-w-0 gap-4"}>
         {draft.conversion && <h3 ref={configurationRef} tabIndex={-1} className="m-0 text-base font-bold">2. Configurar variantes</h3>}
-        {!embedded && <section className={box} aria-label="Datos generales">
+        {!embedded && <section inert={dimensionDialog} className={box} aria-label="Datos generales">
           <h3 className="m-0 text-base font-bold">Datos generales</h3>
           {contextualError && errorTarget.section === "general" && errorNotice}
           <div className="bundle-general-fields grid min-w-0 items-start gap-3 sm:grid-cols-2">
@@ -277,12 +333,18 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
               help={dirty ? "Guarda o descarta los cambios pendientes antes de cambiar categoría." : "Operación independiente para todas las variantes."}
               onClick={()=>{if(dirty){toast.warning("Guarda o descarta explícitamente el borrador antes de cambiar categoría. No se perderán tus cambios.");return;}setCategoryDialog(true);}}/>
               : <ProductCategoryField categories={categories} value={draft.categoryId} disabled={hasExisting} inputProps={{"data-bundle-field":"categoryId",...fieldFeedback("categoryId")}} onChange={categoryId=>change({categoryId})}/>}
-            <div className="grid min-w-0 content-start gap-1"><label>Marca (opcional)<input maxLength={100} placeholder="Sin marca registrada" disabled={hasExisting} value={draft.brand} onChange={e => change({ brand: e.target.value })} /></label>
-              {hasExisting && <p className="m-0 flex items-start gap-1 text-xs text-slate-500"><Info size={14} className="mt-0.5 shrink-0" aria-hidden="true"/>La marca está protegida para conservar la identidad comercial y las asociaciones de los artículos.</p>}</div>
-            <ProductUnitField label={hasExisting ? "Unidad para variantes nuevas" : "Buscar unidad de medida"} disabled={Boolean(draft.conversion)} value={draft.unitMeasure} inputProps={{"data-bundle-field":"generalUnit",...fieldFeedback("generalUnit")}} onChange={unitMeasure=>change({unitMeasure})}/>
+            {familyId&&user.role==="ADMIN" ? <AuditedValueControl data-brand-correction label="Marca" value={draft.brand||"Sin marca registrada"} action="Corregir marca" disabled={locked||conflict}
+              help={dirty ? "Guarda o descarta los cambios pendientes antes de corregir la marca." : "Corrección independiente del mismo fabricante, para todas las variantes."}
+              onClick={()=>{if(dirty){toast.warning("Guarda o descarta explícitamente el borrador antes de corregir la marca. Tus datos se conservan.");return;}setBrandDialog(true);}}/>
+              : <div className="grid min-w-0 content-start gap-1"><label>Marca (opcional)<input maxLength={100} placeholder="Sin marca registrada" disabled={hasExisting} value={draft.brand} onChange={e => change({ brand: e.target.value })} /></label>
+              {hasExisting && <p className="m-0 flex items-start gap-1 text-xs text-slate-500"><Info size={14} className="mt-0.5 shrink-0" aria-hidden="true"/>La marca está protegida; sus correcciones requieren una operación independiente.</p>}</div>}
+            <div className="grid min-w-0 content-start gap-2"><ProductUnitField label="Unidad general" disabled={locked||Boolean(draft.conversion)} value={unitInput??draft.unitMeasure} inputProps={{"data-bundle-field":"generalUnit",...fieldFeedback("generalUnit")}} onChange={setUnitInput} onCommit={openUnitPreview}/>
+              <p className="m-0 text-xs text-slate-500">Selecciona una unidad o escríbela y pulsa Enter para revisar su aplicación. Solo la confirmación actualiza el borrador; cancelar conserva las unidades.</p>
+              {unitPlan.valid&&unitPlan.same===unitPlan.rows.length&&<span className="text-xs text-slate-500">Todas las variantes ya utilizan esta unidad.</span>}
+            </div>
           </div>
           <label>Características generales (opcional)<textarea className={area} value={draft.description} onChange={e => change({ description: e.target.value })} /></label>
-          {hasExisting && <p className="m-0 text-xs text-slate-500">Nombre y características describen la familia, no los artículos. La unidad general se usa solo para variantes nuevas.</p>}
+          {hasExisting && <p className="m-0 text-xs text-slate-500">Nombre y características describen la familia, no los artículos. La unidad general es el valor inicial de las variantes nuevas; aplicarla a otras requiere confirmar la vista previa.</p>}
           <details className="min-w-0 text-xs"><summary className="cursor-pointer py-2 font-semibold">Fotografías comunes (opcional){commonFiles.length>0 ? ` · ${commonFiles.length} seleccionadas` : ""}</summary>
             <div className="grid min-w-0 gap-2 pt-2">
             <ProductImagesManager compact disabled={locked} pendingFiles={commonFiles}
@@ -294,23 +356,26 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
         </section>}
         <section className={box} aria-label="Atributos de variación">
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="m-0 text-base font-bold">{familyId ? <button type="button" className="variant-section-toggle" aria-expanded={attributesOpen} aria-controls="bundle-attribute-fields" onClick={()=>setAttributesOpen(v=>!v)}><ChevronDown size={17} className={attributesOpen ? "rotate-180" : ""}/>Atributos ({draft.attributes.length})</button> : <>Atributos ({draft.attributes.length})</>}</h3>
-            {draft.attributes.length<8 && <button type="button" data-add-dimension className={`${secondaryButtonClass} ml-auto! mr-0! min-h-11 text-xs`} disabled={locked || (definitionLocked && !familyId)} onClick={()=>{if(definitionLocked){if(dirty||conflict){toast.warning(conflict?"Recarga la familia antes de ampliar sus atributos.":"Guarda o descarta explícitamente el borrador antes de ampliar los atributos. Tus datos se conservan.");return;}setDimensionDialog(true);}else addAttribute();}}><Plus size={16}/>Agregar otro atributo</button>}
+            {draft.attributes.length<8 && <button type="button" data-add-dimension className={`${secondaryButtonClass} ml-auto! mr-0! min-h-11 text-xs`} disabled={locked || (definitionLocked && !familyId)} onClick={()=>{if(definitionLocked&& (dirty||conflict)){toast.warning(conflict?"Recarga la familia antes de ampliar sus atributos.":"Guarda o descarta explícitamente el borrador antes de ampliar los atributos. Tus datos se conservan.");return;}setAttributePicker(true);}}><Plus size={16}/>Agregar otro atributo</button>}
           </div>
           {contextualError && errorTarget.section === "attributes" && errorNotice}
           {definitionLocked && <p className="m-0 flex items-start gap-1 text-xs text-slate-500"><Info size={14} className="mt-0.5 shrink-0" aria-hidden="true"/>Una dimensión nueva se incorpora por separado, asignando una opción a todos los artículos. No se eliminan ni reasignan las dimensiones existentes.</p>}
           <div id="bundle-attribute-fields" hidden={!attributesOpen} className={attributesOpen ? "grid min-w-0 gap-2" : "hidden"}>
           <p className="m-0 text-xs text-slate-500">La presentación (por ejemplo, 400 ml) es una opción; no cambia la unidad de venta.</p>
-          {draft.attributes.map((a, i) => <div key={a.key} className="grid min-w-0 gap-2 py-2">
+          {draft.attributes.map((a, i) => <div inert={dimensionDialog} key={a.key} className="grid min-w-0 gap-2 py-2">
             <div className="flex min-w-0 items-end gap-2"><div className="min-w-0 flex-1">{familyId && a.id && user.role === "ADMIN" ? <AuditedValueControl label={`Nombre del atributo ${i+1}`} value={a.name} action="Renombrar atributo" data-rename-attribute={a.id} disabled={locked||conflict} help={dirty ? "Guarda o descarta los cambios pendientes antes de renombrar." : "Solo cambia el nombre descriptivo; conserva opciones e identificadores."} onClick={()=>{if(dirty){toast.warning("Guarda o descarta los cambios pendientes antes de renombrar. Tu borrador se conserva.");return;}setRenameTarget({id:a.id,name:a.name});}}/>
               : <label>Nombre del atributo {i+1}<input data-bundle-field="attributeName" data-bundle-attribute={a.key} {...fieldFeedback("attributeName", undefined, a.key)} required maxLength={60} disabled={definitionLocked} value={a.name} placeholder="Color, medida, presentación…" onChange={e => change({ attributes: draft.attributes.map((at, j) => j === i ? { ...at, name: e.target.value } : at) })} /></label>}</div>
             {!definitionLocked && draft.attributes.length > 1 && <button type="button" className={`${secondaryButtonClass} mr-0! min-h-11 shrink-0`} aria-label={`Quitar atributo ${i+1}`} onClick={() => change({ attributes: draft.attributes.filter((_,j)=>j!==i),rows:draft.rows.map(r=>({...r,selections:r.selections.filter((_,j)=>j!==i),optionTexts:r.optionTexts?.filter((_,j)=>j!==i)})) })}><Trash2 size={16}/></button>}</div>
+            <AttributeMeasurementFields attribute={a} label={`atributo ${i+1}`} disabled={locked||definitionLocked} hasValues={a.draftOptions.length>0||draft.rows.some(r=>r.optionTexts?.[i]?.trim())} onChange={measurement=>change({attributes:draft.attributes.map((at,j)=>j===i?{...at,...measurement}:at)})}/>
+            {legacyMeasurementCandidate(a)&&<p className="m-0 text-xs text-slate-500">Estas etiquetas podrían revisarse para una futura unidad estructurada ({legacyMeasurementCandidate(a)}). Solo diagnóstico: no se convierten ni se retiran sufijos.</p>}
             <p className="m-0 text-xs text-slate-500">Indica el valor de {a.name || "este atributo"} en cada variante. Solo se guardan las combinaciones que completes.</p>
           </div>)}
+          <div ref={setDimensionAttributeSlot}/>
           </div>
         </section>
         <section className={box} aria-label="Variantes concretas">
           <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="m-0 text-base font-bold">{familyId ? <button type="button" className="variant-section-toggle" aria-expanded={variantsOpen} aria-controls="bundle-variant-rows" onClick={()=>setVariantsOpen(v=>!v)}><ChevronDown size={17} className={variantsOpen ? "rotate-180" : ""}/>Variantes ({draft.rows.length})</button> : <>Variantes ({draft.rows.length})</>}</h3>
-          {draft.rows.length<100 && <button type="button" className={`${secondaryButtonClass} ml-auto! mr-0! min-h-11 text-xs`} onClick={addVariant}><Plus size={16}/>Agregar otra variante</button>}</div>
+          {draft.rows.length<100 && <button type="button" disabled={locked} className={`${secondaryButtonClass} ml-auto! mr-0! min-h-11 text-xs`} onClick={addVariant}><Plus size={16}/>Agregar otra variante</button>}</div>
           {contextualError && errorTarget.section === "variants" && errorNotice}
           <p className="m-0 text-xs text-slate-500">Configura solo las combinaciones que venderás. Cada artículo conserva su precio y stock.</p>
           <div id="bundle-variant-rows" hidden={!variantsOpen} className={variantsOpen ? "grid min-w-0 gap-3" : "hidden"}>
@@ -319,8 +384,13 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
             {error && errorTarget?.variantKeys.includes(row.key) && <span className="text-xs font-semibold text-critical-600">Revisar variante {index+1}</span>}
             <div id={`variant-fields-${row.key}`} hidden={!expandedRows.has(row.key)} className={expandedRows.has(row.key) ? "grid min-w-0 gap-3" : "hidden"}>
             {row.isOriginal && <p className="m-0 text-sm font-bold text-rust-700">Original conservado — sin entrada de stock</p>}
-            <div className="grid min-w-0 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">{draft.attributes.map((a, i) => <label key={a.key}>Opción de {a.name || `atributo ${i + 1}`}<input data-bundle-field="selections" {...fieldFeedback("selections", row.key)} required maxLength={100} disabled={row.hasHistory && !row.isOriginal} value={row.optionTexts?.[i] ?? bundleRowLabels(draft,row)[i]} placeholder="Ej.: 400 ml" list={`options-${a.key}-${row.key}`} onChange={e => setDraft(d => setBundleRowOption(d,row.key,i,e.target.value))} /><datalist id={`options-${a.key}-${row.key}`}>{a.draftOptions.map(o => <option key={o.key} value={o.label} />)}</datalist></label>)}
+            <div className="grid min-w-0 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">{draft.attributes.map((a, i) => {const selected=a.draftOptions.find(o=>o.key===row.selections[i]);const canCorrect=familyId&&selected?.id&&user.role==="ADMIN"&&!a.unitCode;return <div key={a.key} className="grid min-w-0 content-start gap-1"><label htmlFor={`option-input-${a.key}-${row.key}`}>Opción de {a.name || `atributo ${i + 1}`}{a.unitCode?` (${a.unitCode})`:""}</label><div className="bundle-option-control relative min-w-0"><input id={`option-input-${a.key}-${row.key}`} data-bundle-field="selections" {...fieldFeedback("selections", row.key)} className={canCorrect?"pr-12!":""} required maxLength={100} inputMode={a.measurementKind?"decimal":undefined} disabled={locked||!validAttributeMeasurement(a)||(row.hasHistory && !row.isOriginal)} value={row.optionTexts?.[i] ?? bundleRowValues(draft,row)[i]} placeholder={a.measurementKind?"Ej.: 100 (sin unidad)":"Ej.: 400 ml"} list={`options-${a.key}-${row.key}`} onChange={e => setDraft(d => setBundleRowOption(d,row.key,i,e.target.value))} /><datalist id={`options-${a.key}-${row.key}`}>{a.draftOptions.map(o => <option key={o.key} value={o.label} />)}</datalist>
+              {canCorrect&&<button type="button" title="Editar" data-option-label={selected.id} aria-haspopup="dialog" aria-label={`Corregir etiqueta compartida ${selected.label} de ${a.name}, producto #${row.id}`} className="bundle-option-pencil inventory-pencil-button" disabled={locked||conflict} onClick={event=>{if(dirty){toast.warning("Guarda o descarta explícitamente el borrador antes de corregir la etiqueta. Tus datos se conservan.");return;}optionLabelReturn.current=event.currentTarget;setOptionLabelTarget({attributeId:a.id,optionId:selected.id,attributeName:a.name,label:selected.label});}}><Pencil size={16} aria-hidden="true"/><span className="sr-only">Corregir etiqueta compartida</span></button>}</div>
+              {a.measurementKind&&<p className="m-0 break-words text-xs text-slate-500">Vista previa: {attributeOptionLabel(row.optionTexts?.[i]??bundleRowValues(draft,row)[i],a.unitCode)||"Ingresa un valor positivo sin unidad"}{a.id?". Los valores guardados no se corrigen como etiquetas de texto.":""}</p>}
+            </div>;})}
             </div>
+            <div ref={dimensionRowRef(row.id)}/>
+            <fieldset disabled={locked} className="m-0 grid min-w-0 gap-3 border-0 p-0">
             {row.hasHistory && !row.isOriginal && <p className="m-0 text-xs text-slate-500">Esta combinación tiene historial. Para otro valor, agrega una variante con una opción nueva; no cambies el significado de la opción utilizada.</p>}
             <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,.7fr)_minmax(0,1.4fr)]">
               <div className="min-w-0">{row.id && !row.isOriginal && user.role === "ADMIN" ? <ProductNameCorrectionAction asField key={`${row.id}-${draft.revision}`} product={row} dirty={dirty} busy={locked||conflict} onOpenChange={setNameCorrectionOpen} onConflict={()=>setConflict(true)} onRenamed={async()=>{await load(familyId);await onSaved();}}/>
@@ -329,7 +399,8 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
               <label>Código de barras (opcional)<span className="relative block"><ScanBarcode aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-500" size={18}/><input data-bundle-field="barcode" {...fieldFeedback("barcode", row.key)} className="pl-10! text-xs" inputMode="numeric" autoComplete="off" pattern="[0-9]{1,64}" maxLength={64} data-bundle-barcode={row.key} value={row.barcode || ""} onChange={e=>rowChange(row.key,{barcode:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")e.preventDefault();}} placeholder="Haz clic aquí y escanea, o escribe el código" title="Lector tipo teclado o ingreso manual; Enter no guarda el formulario"/></span></label>
             </div>
             <label>Descripción individual (opcional)<textarea className={area} value={row.description ?? (row.id ? "" : draft.description)} onChange={e=>rowChange(row.key,{description:e.target.value})}/></label>
-            <div className="variant-inventory-fields grid min-w-0 items-start gap-3 sm:grid-cols-2">
+            <div className="variant-inventory-fields grid min-w-0 items-start gap-3 lg:grid-cols-3">
+              <div className="relative grid min-w-0 content-start gap-1"><ProductUnitField label="Unidad individual" editIcon={!(row.hasHistory||row.isOriginal)} disabled={locked||row.hasHistory||row.isOriginal} value={row.unitMeasure??draft.unitMeasure} inputProps={{"data-bundle-field":"unitMeasure",...fieldFeedback("unitMeasure",row.key)}} onChange={unitMeasure=>rowChange(row.key,{unitMeasure})}/>{(row.hasHistory||row.isOriginal)&&<span className="text-xs text-slate-500">{row.isOriginal?"La conversión conserva la unidad original.":"Unidad protegida por ventas, pedidos o movimientos de inventario, incluidas entradas."}</span>}{row.id&&!row.hasHistory&&!row.isOriginal&&<span className="text-xs text-slate-500">Se verifican compromisos pendientes al guardar. Si existe un bloqueo, no se guarda ningún cambio del conjunto.</span>}</div>
               <label className="content-start">Stock mínimo<input data-bundle-field="minimumStock" {...fieldFeedback("minimumStock", row.key)} className="min-h-10.25" type="number" required min="0" step="1" max="2147483647" value={row.minimumStock} onChange={e => rowChange(row.key, { minimumStock: e.target.value })} /></label>
               {row.id ? <VariantStockSummary product={savedStock.current.get(row.id)} draftMinimumStock={row.minimumStock}/> : <label className="content-start" htmlFor={`initial-stock-${row.key}`}>Stock inicial
                 <input data-bundle-field="initialStock" {...fieldFeedback("initialStock", row.key)} className="min-h-10.25" id={`initial-stock-${row.key}`} required type="number" min="0" max="2147483647" step="1" value={row.initialStock} onChange={e => rowChange(row.key, { initialStock: e.target.value })} aria-describedby={[fieldFeedback("initialStock", row.key)["aria-describedby"],`initial-stock-help-${row.key}`].filter(Boolean).join(" ")}/>
@@ -346,10 +417,6 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
               {commonFiles.length>0 && <label className="variant-online-control"><input type="checkbox" checked={row.useCommon} onChange={e=>rowChange(row.key,{useCommon:e.target.checked})}/>La imagen común representa esta variante</label>}
             </div>
             {row.id && (dirty || draft.conversion) && <p className="m-0 text-xs text-slate-500">Guarda los cambios pendientes antes de activar o desactivar este artículo. No se perderá el borrador.</p>}
-            <details data-individual-settings open={individualRows.has(row.key)} className="min-w-0 rounded border border-slate-200 p-3" onToggle={event=>{const open=event.currentTarget.open;setIndividualRows(current=>{if(current.has(row.key)===open)return current;const next=new Set(current);if(open)next.add(row.key);else next.delete(row.key);return next;});}}>
-              <summary className="cursor-pointer break-words text-sm font-semibold">Configuración individual · Unidad: {row.unitMeasure ?? draft.unitMeasure}</summary>
-              <div className="grid min-w-0 gap-1 pt-3"><ProductUnitField label="Unidad de este artículo" disabled={row.hasHistory || row.isOriginal} value={row.unitMeasure ?? draft.unitMeasure} inputProps={{"data-bundle-field":"unitMeasure",...fieldFeedback("unitMeasure", row.key)}} onChange={unitMeasure=>rowChange(row.key,{unitMeasure})}/>{(row.hasHistory || row.isOriginal) && <span className="text-xs text-slate-500">{row.isOriginal ? "La conversión conserva la unidad del producto original." : "Unidad protegida por el historial del artículo."}</span>}</div>
-            </details>
             <div className="grid min-w-0 gap-2"><span className="text-sm font-semibold">Fotografías específicas (opcional)</span>
               <p className="m-0 text-xs text-slate-500">Agregar, quitar, ordenar y elegir la principal son cambios del borrador. Solo se aplicarán a este artículo al guardar el conjunto.</p>
               <ProductImagesManager compact disabled={locked} images={row.images || []} pendingFiles={row.files}
@@ -359,21 +426,21 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
                 onMove={(index,direction)=>rowChange(row.key,{images:editBundleImages(row.images,{type:"move",index,direction})})}
                 onSetPrimary={id=>rowChange(row.key,{images:editBundleImages(row.images,{type:"primary",id})})}/>
             </div>
+            </fieldset>
             </div>
           </section>)}
           </div>
         </section>
-        <button ref={previewTrigger} type="button" className={`${secondaryButtonClass} w-fit max-w-full`} onClick={() => setPreview(true)}><Eye size={16} />Vista previa del catálogo</button>
         {files.length > 0 && <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={authorized} onChange={e => setAuthorized(e.target.checked)} />Confirmo la autorización de uso de estas imágenes y que corresponden a las variantes seleccionadas.</label>}
-        <div className="variant-editor-actions"><button type="button" className={`${secondaryButtonClass} mr-auto!`} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button><button type="submit" className="product-positive-action"><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : inline ? "Guardar producto" : embedded ? "Confirmar configuración" : "Guardar cambios"}</button></div>
+        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}<button type="submit" className="product-positive-action"><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : inline ? "Guardar producto" : embedded ? "Confirmar configuración" : "Guardar cambios"}</button></div>
         </div>
       </fieldset>
     </form>
   ;
   const focusDimensionTrigger=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>formRef.current?.querySelector('[data-add-dimension]')?.focus()));
   const closeDimension=()=>{setDimensionDialog(false);focusDimensionTrigger();};
-  const editorContent=<><div hidden={dimensionDialog}>{content}</div>
-    {dimensionDialog&&draft.familyId&&<FamilyDimensionDialog inline draft={draft} userId={user.id} onClose={closeDimension} onReviewChange={setDimensionReview} onBusyChange={setDimensionLocked} onConflict={()=>setConflict(true)} onSaved={async()=>{setDimensionDialog(false);await load(familyId);await onSaved();focusDimensionTrigger();}}/>}
+  const editorContent=<>{content}<div ref={setDimensionActionSlot}/>
+    {dimensionDialog&&draft.familyId&&<FamilyDimensionDialog inline slots={{attribute:dimensionAttributeSlot,actions:dimensionActionSlot,rows:dimensionRowSlots}} previewAction={previewAction} initialName={dimensionName} onInvalidAttribute={()=>setAttributesOpen(true)} onInvalidRow={key=>{setVariantsOpen(true);openRow(key);}} draft={draft} userId={user.id} onClose={closeDimension} onReviewChange={setDimensionReview} onBusyChange={setDimensionLocked} onConflict={()=>setConflict(true)} onSaved={async()=>{setDimensionDialog(false);await load(familyId);await onSaved();focusDimensionTrigger();}}/>}
   </>;
   return <>
     {inline && !modalOpen && <div className="grid gap-3">
@@ -381,9 +448,15 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
       {simpleModeEnabled && pendingFiles.length > 0 && <label className="variant-online-control"><input type="checkbox" checked={authorized} onChange={event=>setAuthorized(event.target.checked)}/>Confirmo la autorización de uso de las imágenes de este producto.</label>}
       {uncertain && <div role="status" className={box}><p className="m-0 text-sm">Consulta el resultado del guardado pendiente antes de crear otro artículo.</p><button type="button" disabled={busy} onClick={recover}>Consultar resultado</button>{canRetry && <button type="button" disabled={busy} onClick={()=>save()}>Reintentar mismo guardado</button>}</div>}
     </div>}
-    {inline ? <div hidden={!modalOpen || preview} className={modalOpen && !preview ? "min-w-0" : "hidden"}>{editorContent}</div> : <AppModal suspended={nameCorrectionOpen || categoryDialog || dimensionReview} open={modalOpen && !preview && !singleVariant && !confirmSave && !statusTarget && !reloadConfirm && !renameTarget} title={draft.conversion ? "Convertir producto en variantes" : embedded ? "Agregar variantes" : "Editar producto con variantes"}
+    {inline ? <div hidden={!modalOpen || preview} className={modalOpen && !preview ? "min-w-0" : "hidden"}>{editorContent}</div> : <AppModal panelClassName="bundle-editor-modal" suspended={nameCorrectionOpen || categoryDialog || brandDialog || Boolean(optionLabelTarget) || dimensionReview || attributePicker || Boolean(unitPreview)} open={modalOpen && !preview && !singleVariant && !confirmSave && !statusTarget && !reloadConfirm && !renameTarget} title={<span className="flex min-w-0 items-start gap-3"><span className="min-w-0 break-words">{draft.conversion ? "Convertir producto en variantes" : embedded ? "Agregar variantes" : "Editar producto con variantes"}</span>{draft.familyId&&!draft.conversion&&!embedded&&<span className="mt-0.5 shrink-0 rounded border border-slate-300 px-2 py-0.5 font-mono text-xs font-semibold text-slate-500">Familia #{draft.familyId}</span>}</span>}
       description="Cada opción mantiene su identificación, precio e inventario." size="xlarge" onClose={() => { if(dimensionDialog){if(!dimensionLocked)closeDimension();return;}if (!busy) { if(embedded) onBack();else onClose(); } }}>{editorContent}</AppModal>}
+    {attributePicker&&<AttributeSuggestionDialog existing={draft.attributes.map(a=>a.name)} limit={definitionLocked?1:8-draft.attributes.length} audited={definitionLocked} onClose={()=>{setAttributePicker(false);focusDimensionTrigger();}} onConfirm={addAttributes}/>}
+    {unitPreview&&<ProductUnitApplicationDialog plan={unitPreview} onClose={closeUnitPreview} onConfirm={applyGeneralUnit}/>}
     {categoryDialog&&draft.familyId&&<FamilyCategoryDialog draft={draft} categories={categories} userId={user.id} onClose={()=>setCategoryDialog(false)} onConflict={()=>setConflict(true)} onSaved={async()=>{setCategoryDialog(false);await load(familyId);await onSaved();}}/>}
+    {brandDialog&&draft.familyId&&<FamilyBrandDialog draft={draft} userId={user.id} onClose={()=>setBrandDialog(false)} onConflict={()=>setConflict(true)} onSaved={async()=>{setBrandDialog(false);await load(familyId);await onSaved();requestAnimationFrame(()=>requestAnimationFrame(()=>formRef.current?.querySelector('[data-brand-correction]')?.focus()));}}/>}
+    {optionLabelTarget&&draft.familyId&&<OptionLabelCorrectionDialog draft={draft} target={optionLabelTarget} userId={user.id}
+      onClose={()=>{setOptionLabelTarget(null);requestAnimationFrame(()=>requestAnimationFrame(()=>optionLabelReturn.current?.focus()));}}
+      onConflict={()=>setConflict(true)} onSaved={async()=>{const id=optionLabelTarget.optionId,rowKey=optionLabelReturn.current?.closest('[data-variant-key]')?.dataset.variantKey;setOptionLabelTarget(null);await load(familyId);setVariantsOpen(true);if(rowKey)openRow(rowKey);await onSaved();requestAnimationFrame(()=>requestAnimationFrame(()=>{const control=formRef.current?.querySelector(`${rowKey?`[data-variant-key="${rowKey}"] `:""}[data-option-label="${id}"]`);control?.scrollIntoView({block:"center"});control?.focus();}));}}/>}
     {renameTarget && <ProductAttributeRenameDialog familyId={familyId} target={renameTarget} revision={draft.revision} userId={user.id}
       onClose={()=>{const id=renameTarget.id;setRenameTarget(null);requestAnimationFrame(()=>requestAnimationFrame(()=>formRef.current?.querySelector(`[data-rename-attribute="${id}"]`)?.focus()));}}
       onConflict={()=>setConflict(true)} onRenamed={async()=>{const id=renameTarget.id;await load(familyId);setAttributesOpen(true);setRenameTarget(null);try{await onSaved();}catch{toast.warning("Renombrado confirmado. Actualiza Inventario para renovar sus etiquetas.");}requestAnimationFrame(()=>formRef.current?.querySelector(`[data-rename-attribute="${id}"]`)?.focus());}}/>}

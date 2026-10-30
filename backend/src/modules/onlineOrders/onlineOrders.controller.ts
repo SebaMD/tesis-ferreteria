@@ -56,15 +56,12 @@ export async function quoteOnlineOrderController(req: Request, res: Response) {
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["items", "deliveryType", "deliveryCommune"].includes(k))) {
       return handleErrorClient(res, 400, "La cotización contiene campos no permitidos");
     }
-    // A preview does not validate/verify a delivery destination. New DELIVERY previews
-    // are rejected by the manual-quotation gate, regardless of the commune supplied.
-    const validation = validateCreateCheckoutBody({ ...input, deliveryType: input.deliveryType === "DELIVERY" ? "PICKUP" : input.deliveryType,
-      deliveryCommune: null, checkoutKey: "quote-preview-0000000",
+    // Preview validates the structured commune, not the physical street address.
+    const validation = validateCreateCheckoutBody({ ...input, checkoutKey: "quote-preview-0000000",
       deliveryRecipientName: "Cotización", deliveryPhone: "123456789", deliveryAddress: "Por confirmar" });
     if (!validation.success) return handleErrorClient(res, 400, validation.error);
     res.setHeader("Cache-Control", "no-store");
-    return handleSuccess(res, 200, "Cotización calculada", await quoteOnlineOrderService({ ...validation.value,
-      deliveryType: input.deliveryType === "DELIVERY" ? "DELIVERY" : validation.value.deliveryType }));
+    return handleSuccess(res, 200, "Resumen calculado", await quoteOnlineOrderService(validation.value));
   } catch (e) {
     if (e instanceof DeliveryPolicyError) return res.status(e.statusCode).json({ status: "error", message: e.message, code: e.code });
     if (e instanceof OnlineOrderError) return handleErrorClient(res, e.statusCode, e.message);

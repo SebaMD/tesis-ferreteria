@@ -80,7 +80,7 @@ test("mobile list controls keep global queries visible and secondary filters gro
   assert.match(dashboard, /auto-rows-fr/);
 });
 
-test("mobile table counts, exclusive quick filters and compact commerce layouts stay wired", async () => {
+test("mobile table counts, composable quick filters and compact commerce layouts stay wired", async () => {
   const [count, products, sales, orderCard, cart] = await Promise.all([
     read("src/components/TableRecordCount.jsx"), read("src/pages/ProductsPage.jsx"),
     read("src/pages/SalesPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
@@ -88,8 +88,8 @@ test("mobile table counts, exclusive quick filters and compact commerce layouts 
   ]);
   assert.match(count, /max-\[720px\]:hidden/);
   assert.match(count, /Mostrando \{mobileVisibleCount\} de \{mobileTotalCount\}/);
-  assert.match(products, /setLowStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setOutOfStockOnly\(false\)/);
-  assert.match(products, /setOutOfStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setLowStockOnly\(false\)/);
+  assert.match(products, /filterInventoryProducts\(products/);
+  assert.match(products, /setEnabled\(value => !value\)/);
   assert.doesNotMatch(sales, /disabled=\{salesFilter === "cancelled"\} aria-pressed=\{salesFilter === "partial"\}>\{salesFilter/);
   assert.match(orderCard, /max-\[680px\]:size-20/);
   assert.match(orderCard, /max-\[430px\]:size-\[68px\]/);

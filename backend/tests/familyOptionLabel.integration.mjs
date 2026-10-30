@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';import{randomUUID}from'node:crypto';
+export async function testFamilyOptionLabel({pool,call,body,users}){
+ const client=(await pool.query("insert into users(role_id,rut,names,surnames,correo,password,status,email_verified_at) select role_id,'19888666-0','Opción','Cliente','option-client@example.test',password,'ACTIVE',now() from users where id=$1 returning id",[users.CLIENT])).rows[0].id;
+ for(const shared of [false,true]){
+  const b=body();b.family.attributes[0].options[0].label='Rjo';b.family.attributes[0].options[1].label='Azlu';b.variants.forEach(v=>v.barcode=null);
+  if(shared)b.variants.push({...b.variants[0],name:'Rojo compartido '+randomUUID(),selections:[0,1],status:false,initialStock:5});
+  const saved=await call('POST','/product-families/bundle',b,'ADMIN',200,true),fid=saved.familyId;
+  const sale=await call('POST','/sales',{paymentMethod:'efectivo',details:[{productId:saved.productIds[0],quantity:1}]},'CASHIER',201);
+  const draft=await call('GET',`/product-families/${fid}/bundle`,null,'ADMIN'),a=draft.family.attributes[0],o=a.options[0];
+  const endpoint=`/product-families/${fid}/attributes/${a.id}/options/${o.id}/label-corrections`;
+  const input={label:' Rojo ',reason:'Corrección de una errata de la misma opción',confirmed:true,expectedRevision:draft.revision,operationKey:randomUUID()};
+  const raw=async()=>(await pool.query('select fyf_dimension_state($1) s',[fid])).rows[0].s;
+  const captures=async()=>(await pool.query('select * from commercial_identity_snapshots where product_id=any($1) order by id',[saved.productIds])).rows;
+  const before=await raw();
+  for(const role of [undefined,'CLIENT','WAREHOUSE','CASHIER','MANAGER'])for(const method of ['POST','GET'])await call(method,method==='POST'?endpoint:`${endpoint}/${input.operationKey}`,method==='POST'?input:null,role,role?403:401);
+  const {optionLabelOperation}=await import('../dist/modules/productFamilies/familyOptionLabel.service.js');
+  await assert.rejects(optionLabelOperation(fid,a.id,o.id,users.MANAGER,input),e=>e.statusCode===403);
+  for(const change of [{label:''},{label:'x\ny'},{label:' rJo '},{reason:'x'},{confirmed:false},{stock:1}])await call('POST',endpoint,{...input,...change},'ADMIN',400);
+  await call('POST',endpoint,{...input,label:'  AZLU  '},'ADMIN',409);
+  await call('POST',endpoint,{...input,expectedRevision:'a'.repeat(64)},'ADMIN',409);
+  await call('POST',endpoint.replace(`/options/${o.id}/`,`/options/${draft.family.attributes[1].options[0].id}/`),input,'ADMIN',404);
+  await assert.rejects(pool.query("update family_attribute_options set label='Sin autorización' where id=$1",[o.id]),e=>e.code==='23514');
+  const affected=shared?[saved.productIds[0],saved.productIds[2]]:[saved.productIds[0]];
+  const policy=(await pool.query('select id from delivery_policy_revisions order by id desc limit 1')).rows[0].id;
+  const pending=(await pool.query("insert into delivery_quote_requests(client_id,request_key,request_hash,recipient_name,phone,address,commune,policy_revision_id,commercial_snapshot,evaluation_expires_at) values($1,$2,$3,'Receptor','123456789','Dirección aislada','Concepción',$4,'{}',now()+interval '1 day') returning id",[users.CLIENT,randomUUID(),'d'.repeat(64),policy])).rows[0].id;
+  const blockedId=affected.at(-1),p=draft.variants.find(p=>p.id===blockedId);
+  await pool.query('insert into delivery_quote_items(request_id,product_id,quantity,product_name,unit_measure) values($1,$2,1,$3,$4)',[pending,blockedId,p.name,p.unitMeasure]);
+  await call('POST',endpoint,input,'ADMIN',409);await pool.query("update delivery_quote_requests set status='CANCELLED',version=version+1 where id=$1",[pending]);
+  const order=(await pool.query("insert into online_orders(client_id,checkout_key,status,total,delivery_type,reservation_expires_at) values($1,$2,'PENDING_PAYMENT',1000,'PICKUP',now()+interval '10 minutes') returning id",[client,randomUUID()])).rows[0].id;
+  await pool.query('insert into online_order_items(order_id,product_id,quantity,unit_price,subtotal) values($1,$2,1,1000,1000)',[order,blockedId]);
+  await call('POST',endpoint,input,'ADMIN',409);await pool.query("update online_orders set status='DELIVERED' where id=$1",[order]);
+  const ret=(await pool.query("insert into sale_cancellation_requests(sale_id,requested_by,reason) values($1,$2,'Revisión aislada pendiente') returning id",[sale.id,users.ADMIN])).rows[0].id;
+  await call('POST',endpoint,input,'ADMIN',409);await pool.query("update sale_cancellation_requests set status='REJECTED',reviewed_by=$2,reviewed_at=now() where id=$1",[ret,users.ADMIN]);
+  await pool.query("insert into sale_deliveries(sale_id,recipient_name,recipient_rut,phone,address,commune) values($1,'Receptor','11111111-1','123456789','Dirección aislada','Santa Juana')",[sale.id]);
+  await call('POST',endpoint,input,'ADMIN',409);await pool.query("update sale_deliveries set status='DELIVERED' where sale_id=$1",[sale.id]);
+  const history=await captures(),economics=async()=>Object.fromEntries(await Promise.all(['online_orders','online_payments','promotions','sale_details'].map(async t=>[t,(await pool.query(`select to_jsonb(t) r from ${t} t order by to_jsonb(t)::text`)).rows]))),commercial=await economics();
+  const malicious=await pool.connect();
+  try{
+   await malicious.query('begin');
+   await malicious.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Auditoría incompleta deliberada',jsonb_build_object('state',fyf_dimension_state($1),'revision',$3::text,'transactionId',pg_current_xact_id()::text),jsonb_build_object('operation','OPTION_LABEL_AUTHORIZATION','operationKey',$4::text,'requestHash',$3::text,'attributeId',$5::integer,'optionId',$6::integer,'label','Rojo','productIds',$7::jsonb))",[fid,users.ADMIN,'a'.repeat(64),randomUUID(),a.id,o.id,JSON.stringify(affected)]);
+   await malicious.query("update family_attribute_options set label='Rojo' where id=$1",[o.id]);
+   await assert.rejects(malicious.query('commit'),e=>e.code==='23514');
+   await malicious.query('rollback');assert.deepEqual(await raw(),before);
+   await malicious.query('begin');const k=randomUUID(),r='a'.repeat(64);
+   const auth=(await malicious.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Intento aislado de incluir precio',jsonb_build_object('state',fyf_dimension_state($1),'revision',$3::text,'transactionId',pg_current_xact_id()::text),jsonb_build_object('operation','OPTION_LABEL_AUTHORIZATION','operationKey',$4::text,'requestHash',$3::text,'attributeId',$5::integer,'optionId',$6::integer,'label','Rojo','productIds',$7::jsonb)) returning id",[fid,users.ADMIN,r,k,a.id,o.id,JSON.stringify(affected)])).rows[0].id;
+   await malicious.query("update family_attribute_options set label='Rojo' where id=$1",[o.id]);await malicious.query('update products set price=price+1 where id=$1',[saved.productIds[0]]);
+   await malicious.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Intento aislado de incluir precio',jsonb_build_object('revision',$3::text),jsonb_build_object('operation','OPTION_LABEL_CORRECTION','operationKey',$4::text,'requestHash',$3::text,'attributeId',$5::integer,'optionId',$6::integer,'label','Rojo','previousLabel','Rjo','productIds',$7::jsonb,'authorizationId',$8::integer,'revision',$3::text))",[fid,users.ADMIN,r,k,a.id,o.id,JSON.stringify(affected),auth]);
+   await assert.rejects(malicious.query('commit'),e=>e.code==='23514');
+  }finally{await malicious.query('rollback');malicious.release();}
+  assert.deepEqual(await raw(),before);
+  await pool.query("create function fail_option_label_test() returns trigger language plpgsql as $$ begin if NEW.next->>'operation'='OPTION_LABEL_CORRECTION' then raise exception 'deliberate option label audit failure'; end if; return NEW; end $$;create trigger fail_option_label_test before insert on product_family_events for each row execute function fail_option_label_test()");
+  try{await call('POST',endpoint,input,'ADMIN',500);}finally{await pool.query('drop trigger fail_option_label_test on product_family_events;drop function fail_option_label_test()');}
+  assert.deepEqual(await raw(),before);assert.equal(await call('GET',`${endpoint}/${input.operationKey}`,null,'ADMIN'),null);
+  const [first,replay]=await Promise.all([call('POST',endpoint,input,'ADMIN'),call('POST',endpoint,input,'ADMIN')]);assert.notEqual(first.replayed,replay.replayed);
+  const after=await raw();const strip=s=>({...s,family:{...s.family,updated_at:null},options:s.options.map(v=>v.id===o.id?{...v,label:null}:v)});
+  assert.deepEqual(strip(after),strip(before));assert.deepEqual(await captures(),history);assert.deepEqual(await economics(),commercial);
+  assert.equal(after.options.find(v=>v.id===o.id).label,'Rojo');
+  const result=await call('GET',`${endpoint}/${input.operationKey}`,null,'ADMIN');assert.deepEqual(result.productIds,affected);assert.equal(result.previousLabel,'Rjo');
+  await call('POST',endpoint,{...input,label:'Otro'},'ADMIN',409);await call('POST',endpoint,{...input,operationKey:randomUUID()},'ADMIN',409);
+  assert.equal((await pool.query("select count(*)::int n from product_family_events where next->>'operationKey'=$1",[input.operationKey])).rows[0].n,2);
+  await assert.rejects(pool.query("update product_family_events set reason='alterada' where next->>'operationKey'=$1",[input.operationKey]),/immutable/);
+  await assert.rejects(pool.query("delete from product_family_events where next->>'operationKey'=$1",[input.operationKey]),/immutable/);
+  const publicProduct=await call('GET',`/catalog/products/${saved.productIds[0]}`);assert.equal(publicProduct.variantValues.find(v=>v.optionId===o.id).label,'Rojo');
+  const old=await call('GET',`/sales/${sale.id}`,null,'ADMIN');assert.equal(old.details[0].historicalIdentity.identity.family.attributes[0].label,'Rjo');
+  const freshSale=await call('POST','/sales',{paymentMethod:'efectivo',details:[{productId:saved.productIds[0],quantity:1}]},'CASHIER',201);assert.equal(freshSale.details[0].historicalIdentity.identity.family.attributes[0].label,'Rojo');
+  const current=await call('GET',`/product-families/${fid}/bundle`,null,'ADMIN');
+  const singlePath=`/product-families/${fid}/attributes/${a.id}/options/${a.options[1].id}/label-corrections`;
+  const races=await Promise.all(['Azul','Azul corregido'].map(label=>call('POST',singlePath,{...input,label,expectedRevision:current.revision,operationKey:randomUUID()},'ADMIN',[200,409])));assert.deepEqual(races.map(r=>r.status).sort(),[200,409]);
+ }
+ const empty=body();empty.variants.forEach(v=>{v.initialStock=0;v.barcode=null;});
+ const fresh=await call('POST','/product-families/bundle',empty,'ADMIN',200,true),freshDraft=await call('GET',`/product-families/${fresh.familyId}/bundle`,null,'ADMIN');
+ const attribute=freshDraft.family.attributes[0],option=attribute.options[0],product=freshDraft.variants[0];
+ assert.equal((await pool.query('select count(*)::int n from inventory_movements where product_id=any($1)',[fresh.productIds])).rows[0].n,0);
+ const policy=(await pool.query('select id from delivery_policy_revisions order by id desc limit 1')).rows[0].id;
+ const request=(await pool.query("insert into delivery_quote_requests(client_id,request_key,request_hash,recipient_name,phone,address,commune,policy_revision_id,commercial_snapshot,evaluation_expires_at) values($1,$2,$3,'Receptor','123456789','Dirección aislada','Concepción',$4,'{}',now()+interval '1 day') returning id",[users.CLIENT,randomUUID(),'e'.repeat(64),policy])).rows[0].id;
+ await pool.query('insert into delivery_quote_items(request_id,product_id,quantity,product_name,unit_measure) values($1,$2,1,$3,$4)',[request,product.id,product.name,product.unitMeasure]);
+ const path=`/product-families/${fresh.familyId}/attributes/${attribute.id}/options/${option.id}/label-corrections`,command={label:option.label+' corregido',reason:'Formato de la misma opción sin movimientos',confirmed:true,expectedRevision:freshDraft.revision,operationKey:randomUUID()};
+ await call('POST',path,command,'ADMIN',409);
+ await pool.query("update delivery_quote_requests set status='CANCELLED',version=version+1 where id=$1",[request]);
+ await call('POST',path,command,'ADMIN');
+ assert.equal((await pool.query('select count(*)::int n from inventory_movements where product_id=any($1)',[fresh.productIds])).rows[0].n,0);
+ console.log('PASS etiquetas: opción única/compartida, historial/inactivos, IDs/stock/claves/snapshots, permisos, duplicados, pendientes incluso sin ENTRY, carrera, replay, recuperación, rollback, auditoría diferida y catálogo');
+}

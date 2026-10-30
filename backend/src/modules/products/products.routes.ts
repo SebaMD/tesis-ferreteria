@@ -6,6 +6,7 @@ import { handleSuccess, handleErrorServer } from "../../utils/helpers.js";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { ProductError } from "./products.service.js";
 import { correctProductName, getProductNameCorrection } from "./productNameCorrection.service.js";
+import { productClassificationOperation } from "./productClassification.service.js";
 import {
   createProductController,
   deleteProduct,
@@ -47,6 +48,14 @@ function parseProductImageBody(req: Request, res: Response, next: NextFunction) 
 }
 
 router.use(authenticateJwt);
+router.post("/:id/classification-corrections", verifyRoles(["ADMIN"]), async(req:AuthenticatedRequest,res)=>{
+ try{return handleSuccess(res,200,"Clasificación corregida",await productClassificationOperation(Number(req.params.id),req.user!.id,req.body));}
+ catch(e){if(e instanceof ProductError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"Consulta el resultado antes de reintentar la corrección",e);}
+});
+router.get("/:id/classification-corrections/:key", verifyRoles(["ADMIN"]), async(req:AuthenticatedRequest,res)=>{
+ try{return handleSuccess(res,200,"Resultado de corrección",await productClassificationOperation(Number(req.params.id),req.user!.id,undefined,String(req.params.key)));}
+ catch(e){if(e instanceof ProductError)return handleErrorClient(res,e.statusCode,e.message);return handleErrorServer(res,500,"No se pudo recuperar la corrección",e);}
+});
 
 router.post("/:id/name-corrections", verifyRoles(["ADMIN"]), async (req: AuthenticatedRequest, res) => {
   try { return handleSuccess(res, 200, "Nombre corregido", await correctProductName(Number(req.params.id), req.body, req.user!.id)); }

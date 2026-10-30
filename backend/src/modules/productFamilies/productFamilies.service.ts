@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { acquirePromotionPricingLock } from "../promotions/promotions.repository.js";
+import { validateAttributeMeasurement, normalizeAttributeNumber, attributeOptionLabel, type Measurement } from "./attributeMeasurements.js";
 import { familyAttributesTable as attrs, familyAttributeOptionsTable as opts, productFamiliesTable as families,
   productVariantValuesTable as values, productFamilyEventsTable as events, productsTable as products } from "../../db/schema/index.js";
 
@@ -9,7 +11,7 @@ export class FamilyError extends Error {
 }
 const normalized = (value: string | null | undefined) => (value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 export type FamilyBody = { name: string; description: string | null; categoryId: number; brand: string | null;
-  attributes: Array<{ id?: number; name: string; options: Array<{ id?: number; label: string }> }> };
+  attributes: Array<{ id?: number; name: string; options: Array<{ id?: number; label: string }> } & Measurement> };
 
 export function validateFamilyBody(input: unknown, allowEmptyAttributes = false): FamilyBody {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new FamilyError("Debe enviar una familia válida", 400);
@@ -25,17 +27,19 @@ export function validateFamilyBody(input: unknown, allowEmptyAttributes = false)
   const categoryId = Number(b.categoryId);
   if (!Number.isInteger(categoryId) || categoryId < 1 || !Array.isArray(b.attributes) || b.attributes.length < (allowEmptyAttributes ? 0 : 1) || b.attributes.length > 8) throw new FamilyError("Seleccione categoría y entre 1 y 8 atributos", 400);
   const validId = (id: unknown) => id === undefined || (typeof id === "number" && Number.isInteger(id) && id > 0);
-  const attributes = b.attributes.map((a: { id?: number; name: unknown; options: unknown }) => {
-    if (!a || typeof a !== "object" || Array.isArray(a) || !validId(a.id) || Object.keys(a).some((key) => !["id", "name", "options"].includes(key))
+  const attributes = b.attributes.map((a: { id?: number; name: unknown; options: unknown; measurementKind?: unknown; unitCode?: unknown }) => {
+    if (!a || typeof a !== "object" || Array.isArray(a) || !validId(a.id) || Object.keys(a).some((key) => !["id", "name", "options", "measurementKind", "unitCode"].includes(key))
       || !Array.isArray(a.options) || !a.options.length || a.options.length > 100) throw new FamilyError("Cada atributo necesita identificador y opciones válidas", 400);
+    const measurement = validateAttributeMeasurement(a);
     const options = a.options.map((o: { id?: number; label: unknown }) => {
       if (!o || typeof o !== "object" || Array.isArray(o) || !validId(o.id) || Object.keys(o).some((key) => !["id", "label"].includes(key))) throw new FamilyError("Opción inválida", 400);
-      return { ...(o.id ? { id: o.id } : {}), label: text(o.label, 100) };
+      const label = text(o.label, 100);
+      return { ...(o.id ? { id: o.id } : {}), label: measurement.unitCode ? normalizeAttributeNumber(label) : label };
     });
     if (new Set(options.map((o) => normalized(o.label))).size !== options.length) throw new FamilyError("Hay opciones repetidas", 400);
     const optionIds = options.flatMap((o) => o.id ? [o.id] : []);
     if (new Set(optionIds).size !== optionIds.length) throw new FamilyError("Identificador de opción repetido", 400);
-    return { ...(a.id ? { id: a.id } : {}), name: text(a.name, 60), options };
+    return { ...(a.id ? { id: a.id } : {}), name: text(a.name, 60), ...measurement, options };
   });
   if (new Set(attributes.map((a) => normalized(a.name))).size !== attributes.length) throw new FamilyError("Hay atributos repetidos", 400);
   const attributeIds = attributes.flatMap((a) => a.id ? [a.id] : []);
@@ -136,9 +140,10 @@ export async function detachProductFamily(productId: number, body: DetachFamilyB
         throw new FamilyError("La asociación cambió o el producto ya fue desvinculado. Actualice el formulario antes de continuar.");
       }
       const family = await getFamily(body.expectedFamilyId, tx);
-      const classification = await tx.select({ attributeId: attrs.id, attribute: attrs.name, optionId: opts.id, label: opts.label })
+      const classificationRows = await tx.select({ attributeId: attrs.id, attribute: attrs.name, optionId: opts.id, label: opts.label, unitCode: attrs.unitCode })
         .from(values).innerJoin(attrs, eq(attrs.id, values.attributeId)).innerJoin(opts, eq(opts.id, values.optionId))
         .where(eq(values.productId, productId)).orderBy(asc(attrs.id));
+      const classification = classificationRows.map(({ unitCode, ...v }) => ({ ...v, label: attributeOptionLabel(v.label, unitCode) }));
       // The identity trigger requires this audit in the same transaction. Never update commercial fields here.
       const [{ transactionId }] = (await tx.execute<{ transactionId: string }>(sql`select pg_current_xact_id()::text as "transactionId"`)).rows;
       await tx.insert(events).values({ productId, familyId: family.id, userId, reason: body.reason,
@@ -173,6 +178,7 @@ export async function saveFamily(data: FamilyBody, id?: number, executor?: DbTra
       for (const a of old.attributes) {
         const next = data.attributes.find((n) => n.id === a.id);
         if (!next || (protectedDefinition && normalized(next.name) !== normalized(a.name))) throw new FamilyError("Conserve los identificadores y nombres de los atributos existentes");
+        if ((next.measurementKind ?? null) !== a.measurementKind || (next.unitCode ?? null) !== a.unitCode) throw new FamilyError("El tipo y la unidad de un atributo guardado son inmutables. La conversión de atributos existentes requiere otra operación controlada");
         for (const o of a.options) {
           const n = next.options.find((v) => v.id === o.id);
           if (!n || normalized(n.label) !== normalized(o.label)) throw new FamilyError("Conserve las opciones existentes; agregue una opción nueva para otro valor");
@@ -185,7 +191,7 @@ export async function saveFamily(data: FamilyBody, id?: number, executor?: DbTra
     }
     for (const [position, a] of data.attributes.entries()) {
       if (a.id && !old?.attributes.some((v) => v.id === a.id)) throw new FamilyError("Atributo ajeno a la familia");
-      const attributeId = a.id ?? (await tx.insert(attrs).values({ familyId: familyId!, name: a.name, position }).returning())[0].id;
+      const attributeId = a.id ?? (await tx.insert(attrs).values({ familyId: familyId!, name: a.name, position, measurementKind: a.measurementKind ?? null, unitCode: a.unitCode ?? null }).returning())[0].id;
       if (a.id) await tx.update(attrs).set({ name: a.name, position }).where(eq(attrs.id, a.id));
       for (const [optionPosition, o] of a.options.entries()) {
         if (o.id && !old?.attributes.find((v) => v.id === a.id)?.options.some((v) => v.id === o.id)) throw new FamilyError("Opción ajena al atributo");
@@ -204,6 +210,20 @@ export async function productHasHistory(id: number, executor: Executor = db) {
   return result.rows[0].found;
 }
 
+// Caller holds the product row lock. Commitment creation takes that same lock
+// before capturing identity, so a concurrent create cannot slip past this check.
+export async function assertNoPendingIdentityCommitments(tx: DbTransaction, id: number) {
+  try { await tx.execute(sql`select fyf_assert_product_name_ready(${id})`); }
+  catch (error) {
+    const e = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+    const detail = e.cause || e;
+    if (detail.code === "23514") throw new FamilyError((detail.message || "Existe un compromiso comercial pendiente")
+      .replaceAll("corregir el nombre", "cambiar la identidad del artículo")
+      .replaceAll("corregir este nombre", "cambiar la identidad de este artículo"));
+    throw error;
+  }
+}
+
 export function variantKey(attributes: Array<{ id: number }>, options: Array<{ id: number; attributeId: number }>, selected: number[]) {
   if (new Set(selected).size !== selected.length || selected.length !== attributes.length) throw new FamilyError("Seleccione una opción por atributo", 400);
   const chosen = selected.map((id) => options.find((o) => o.id === id));
@@ -214,6 +234,7 @@ export function variantKey(attributes: Array<{ id: number }>, options: Array<{ i
 
 export async function assignVariant(tx: DbTransaction, productId: number, familyId: number | null,
   optionIds: number[], userId: number | null, reason: string, creating = false) {
+  await acquirePromotionPricingLock(tx);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
   // Same lock order for all assignments within a family; DB UNIQUE resolves races.
   if (familyId) await tx.select({ id: families.id }).from(families).where(eq(families.id, familyId)).for("update");
@@ -229,6 +250,7 @@ export async function assignVariant(tx: DbTransaction, productId: number, family
     if (duplicate[0] && duplicate[0].id !== p.id) throw new FamilyError("Ya existe una variante con esta combinación");
   } else if (optionIds.length) throw new FamilyError("Un producto simple no tiene opciones de familia", 400);
   if (p.familyId === familyId && p.variantKey === key) return;
+  if (!creating) await assertNoPendingIdentityCommitments(tx, productId);
   if (p.familyId !== null && familyId === null) throw new FamilyError("Use la desvinculación con motivo y confirmación; no se permite quitar la familia al guardar otros campos.");
   const history = !creating && await productHasHistory(productId, tx);
   if (history && p.familyId !== null) throw new FamilyError("La variante tiene historial: no cambie su familia o combinación; cree otro producto");
@@ -247,9 +269,12 @@ export async function assignVariant(tx: DbTransaction, productId: number, family
     previous: { familyId: p.familyId, variantKey: p.variantKey }, next: { familyId, variantKey: key }, reason: reason.trim() || "Creación de variante" });
 }
 
-export async function attachVariantValues<T extends { id: number }>(rows: T[]) {
-  if (!rows.length) return rows.map((p) => ({ ...p, variantValues: [], variantOptionIds: [] }));
-  const data = await db.select({ productId: values.productId, attributeId: attrs.id, attribute: attrs.name, optionId: opts.id, label: opts.label })
+export async function attachVariantValues<T extends { id: number; familyId?: number | null }>(rows: T[]) {
+  // A simple SKU cannot have variant assignments. Do not query attribute metadata
+  // for simple-only reads (also keeps pre-upgrade simple-order fixtures valid).
+  if (!rows.length || rows.every(p=>p.familyId === null)) return rows.map((p) => ({ ...p, variantValues: [], variantOptionIds: [] }));
+  const raw = await db.select({ productId: values.productId, attributeId: attrs.id, attribute: attrs.name, optionId: opts.id, label: opts.label, unitCode: attrs.unitCode })
     .from(values).innerJoin(attrs, eq(attrs.id, values.attributeId)).innerJoin(opts, eq(opts.id, values.optionId)).where(inArray(values.productId, rows.map((p) => p.id))).orderBy(asc(attrs.position), asc(attrs.id));
+  const data = raw.map(({ unitCode, ...v }) => ({ ...v, label: attributeOptionLabel(v.label, unitCode) }));
   return rows.map((p) => ({ ...p, variantValues: data.filter((v) => v.productId === p.id), variantOptionIds: data.filter((v) => v.productId === p.id).map((v) => v.optionId) }));
 }

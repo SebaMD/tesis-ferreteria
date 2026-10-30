@@ -8,11 +8,10 @@ const read = file => readFile(new URL(`../src/${file}`, import.meta.url), "utf8"
 test("cotización manual pendiente no es error de productos ni autoriza cobro", async () => {
   assert.equal(checkoutQuoteFailure({response:{status:409,data:{code:"DELIVERY_MANUAL_QUOTE_REQUIRED"}}}).errorKind,"MANUAL_DELIVERY");
   const page=await read("pages/CheckoutPage.jsx");
-  assert.match(page,/const canStartPayment = !loading\s*&& deliveryType === "PICKUP"/);
-  assert.match(page,/if \(deliveryType === "DELIVERY"\) \{\s*toast.error/);
-  assert.match(page,/FYF debe aprobar el flete antes/);
-  assert.match(page,/<DeliveryQuoteRequestForm/);
-  assert.doesNotMatch(page,/Tu compra tiene despacho gratis|para obtener despacho gratis|DELIVERY_COMMUNE/);
+  assert.match(page,/const canStartPayment = !loading\s*&& destinationValid/);
+  assert.match(page,/deliveryCommune:DELIVERY_COMMUNE/);
+  assert.doesNotMatch(page,/FYF debe aprobar el flete antes|<DeliveryQuoteRequestForm/);
+  assert.match(page,/deliveryType==="DELIVERY"\?\{\.\.\.destination/);
   assert.match(page,/quoteFingerprint: quote.quoteFingerprint/);
   assert.equal(receiveCheckoutQuote({},"pickup",{commercialSignature:"A"}).needsAcceptance,false);
 });
@@ -20,15 +19,14 @@ test("condiciones provienen del backend sin inventar fórmula, GPS ni aprobació
   const conditions=await read("pages/DeliveryConditionsPage.jsx");
   const references=await read("helpers/deliveryConditions.js");
   assert.match(references,/information\?\.minimumOutboundKmPriceReference/);
-  assert.match(conditions,/sujeto a confirmar la distancia por ruta/);
-  assert.match(conditions,/No es un precio final garantizado/);
+  assert.match(conditions,/No se ofrece despacho a otras comunas/);
+  assert.match(conditions,/se muestra antes de Webpay/);
   assert.doesNotMatch(conditions,/geolocation|getCurrentPosition|\*.*[Kk]m/);
   const settings=await read("components/DeliverySettingsManager.jsx");
-  assert.doesNotMatch(settings,/value=\{form.flatFee\}|value=\{form.freeShippingFrom\}|flatFee: "3000"/);
-  assert.match(settings,/api.put\("\/delivery-quotes\/settings"/);
-  assert.match(settings,/conditionalFreeFrom/);
-  assert.match(settings,/revisión manual/);
-  assert.doesNotMatch(settings,/flatFee: Number\(current.flatFee\)|freeShippingFrom: current/);
+  assert.match(settings,/value=\{form.flatFee\}/);
+  assert.match(settings,/api.put\('\/delivery-settings'/);
+  assert.match(settings,/freeShippingFrom/);
+  assert.match(settings,/LOCAL_FIXED/);
 });
 test("aviso manual y suspensión sustituyen el aviso automático sin tocar los manuales",()=>{
   const notices=[{id:8,title:"Aviso conservado",message:"Manual"}];

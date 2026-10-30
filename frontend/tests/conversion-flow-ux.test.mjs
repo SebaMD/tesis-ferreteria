@@ -62,7 +62,8 @@ test("one error notification per attempt, native validation focuses only the fir
   assert.match(editor, /scrollIntoView\(\{ block: "center" \}\)/);
   assert.match(editor, /destination\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(editor, /ref=\{errorRef\} tabIndex=\{-1\} role="alert"/);
-  assert.match(editor, /e.response \? \{\} : e/);
+  assert.match(editor, /unitProblem\?\.field === "unitMeasure" && draft.rows.find\(row=>row.id===unitProblem.productId\)/);
+  assert.match(editor, /e.response \? affected \? \{ section:"variants",variantKey:affected.key,field:"unitMeasure" \} : \{\} : e/);
 });
 
 test("confirmation separates original, new rows, reason and summary using the existing draft helpers", async () => {
@@ -90,10 +91,10 @@ test("confirmation separates original, new rows, reason and summary using the ex
 
 test("stock columns are balanced, restrictions remain enforced and recovery still uses the frozen operation", async () => {
   const editor = await read("components/ProductBundleEditor.jsx");
-  assert.match(editor, /variant-inventory-fields grid min-w-0 items-start gap-3 sm:grid-cols-2/);
+  assert.match(editor, /variant-inventory-fields grid min-w-0 items-start gap-3 lg:grid-cols-3/);
   assert.match(editor, /disabled=\{hasExisting\}/);
   assert.match(editor, /disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/);
-  assert.match(editor, /disabled=\{row.hasHistory && !row.isOriginal\}/);
+  assert.match(editor, /disabled=\{locked\|\|!validAttributeMeasurement\(a\)\|\|\(row.hasHistory && !row.isOriginal\)\}/);
   assert.match(editor, /saveProductBundleRequest\(frozen.current\)/);
   assert.match(editor, /getProductBundleOperationRequest\(key\)/);
   assert.match(editor, /setUncertain\(true\); setCanRetry\(true\)/);

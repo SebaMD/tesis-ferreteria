@@ -114,7 +114,7 @@ export default function GuestDeviceOrdersPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[620px]:px-3.5 max-[620px]:py-6">
-      <Link to="/delivery-quotes" className="font-bold text-rust-600">Mis solicitudes de despacho / recuperar acceso</Link>
+      <Link to="/delivery-quotes" className="font-bold text-rust-600">Solicitudes de despacho anteriores / recuperar acceso</Link>
       <LoadingOverlay active={loading} />
       <header>
         <span className="text-xs font-extrabold text-rust-600 uppercase">Compras sin cuenta</span>

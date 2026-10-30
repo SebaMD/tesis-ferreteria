@@ -15,7 +15,7 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
   const legacy = new pg.Pool({ connectionString: isolated.href });
   try {
     const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-    assert.equal(journal.entries.at(-1).tag, "0036_controlled_family_dimension");
+    assert.equal(journal.entries.at(-1).tag, "0041_attribute_measurements");
     await mkdir(path.join(folder, "meta"), { recursive: true });
     await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 33) }));
     for (const entry of journal.entries.slice(0, 33)) await copyFile(`drizzle/${entry.tag}.sql`, path.join(folder, `${entry.tag}.sql`));
@@ -33,6 +33,18 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
     const policy = (await legacy.query("insert into delivery_policy_revisions(version,pickup_enabled,delivery_enabled,flat_fee,is_demo,created_by) values(1,true,false,3000,true,$1) returning id", [user])).rows[0].id;
     const request = (await legacy.query("insert into delivery_quote_requests(client_id,request_key,request_hash,recipient_name,phone,address,commune,policy_revision_id,commercial_snapshot,evaluation_expires_at) values($1,'legacy-history-quote',$2,'Receptor','12345678','Dirección de prueba','Concepción',$3,'{}',now()+interval '72 hours') returning id", [user, "a".repeat(64), policy])).rows[0].id;
     await legacy.query("insert into delivery_quote_items(request_id,product_id,quantity,product_name,unit_measure) values($1,$2,1,'Nombre original comprobado','saco')", [request, product]);
+    // A real pre-snapshot family verifies that brand correction preserves LEGACY_REFERENCE.
+    const legacyBrand=await legacy.connect();let legacyBrandFamily,legacyBrandProduct;
+    try{
+      await legacyBrand.query("begin");
+      legacyBrandFamily=(await legacyBrand.query("insert into product_families(category_id,name,brand) values($1,'Familia marca legado','Marca legdao') returning id",[category])).rows[0].id;
+      const a=(await legacyBrand.query("insert into family_attributes(family_id,name) values($1,'Medida') returning id",[legacyBrandFamily])).rows[0].id;
+      const o=(await legacyBrand.query("insert into family_attribute_options(attribute_id,label) values($1,'400 ml') returning id",[a])).rows[0].id;
+      legacyBrandProduct=(await legacyBrand.query("insert into products(category_id,family_id,variant_key,name,brand,unit_measure,price) values($1,$2,$3,'SKU marca legado','Marca legdao','unidad',1000) returning id",[category,legacyBrandFamily,String(o)])).rows[0].id;
+      await legacyBrand.query("insert into product_variant_values(product_id,family_id,attribute_id,option_id) values($1,$2,$3,$4)",[legacyBrandProduct,legacyBrandFamily,a,o]);
+      await legacyBrand.query("insert into inventory_movements(product_id,user_id,movement_type,quantity,reason) values($1,$2,'ENTRY',1,'Captura referencial de prueba')",[legacyBrandProduct,user]);
+      await legacyBrand.query("commit");
+    }catch(e){await legacyBrand.query("rollback");throw e;}finally{legacyBrand.release();}
     const sources = ["sale_details", "online_order_items", "inventory_movements", "delivery_quote_items", "products", "online_orders"];
     const snapshot = async () => Object.fromEntries(await Promise.all(sources.map(async table => [table, (await legacy.query(`select row_to_json(t) r from ${table} t order by row_to_json(t)::text`)).rows])));
     const before = await snapshot();
@@ -43,7 +55,7 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
     await migrate(drizzle(legacy), { migrationsFolder: folder });
     assert.deepEqual(await snapshot(), before);
     const captures = (await legacy.query("select * from commercial_identity_snapshots order by id")).rows;
-    assert.equal(captures.length, 4); assert.equal(captures.filter(c => c.origin === "LEGACY_REFERENCE").length, 3);
+    assert.equal(captures.length, 5); assert.equal(captures.filter(c => c.origin === "LEGACY_REFERENCE").length, 4);
     const partial = captures.find(c => c.origin === "LEGACY_PARTIAL");
     assert.equal(partial.identity.name, "Nombre original comprobado"); assert.equal(partial.identity.unitMeasure, "saco");
     assert.equal(partial.identity.brand, "Marca de referencia");
@@ -80,16 +92,62 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
     }catch(e){await classification.query("rollback");throw e;}finally{classification.release();}
     const familyTables=["product_families","family_attributes","family_attribute_options","products","product_variant_values","commercial_identity_snapshots","inventory_movements"];
     const familyState=async()=>Object.fromEntries(await Promise.all(familyTables.map(async table=>[table,(await legacy.query(`select to_jsonb(t) r from ${table} t order by to_jsonb(t)::text`)).rows])));
+    await legacy.query("insert into family_attribute_options(attribute_id,label) select id,v.label from family_attributes cross join (values('Duplicada'),('  DUPLICADA  ')) v(label) where family_id=$1",[legacyBrandFamily]);
     const beforeDimensionMigration=await familyState();
-    await migrate(drizzle(legacy),{migrationsFolder:"drizzle"});await migrate(drizzle(legacy),{migrationsFolder:"drizzle"});
-    assert.deepEqual(await familyState(),beforeDimensionMigration);
+    await writeFile(path.join(folder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,37)}));
+    await copyFile("drizzle/0036_controlled_family_dimension.sql",path.join(folder,"0036_controlled_family_dimension.sql"));
+    await migrate(drizzle(legacy),{migrationsFolder:folder});
     assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"37");
+    assert.equal((await legacy.query("select to_regprocedure('fyf_verify_family_brand_audit()') is not null ready")).rows[0].ready,false);
+    assert.deepEqual(await familyState(),beforeDimensionMigration);
+    await writeFile(path.join(folder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,38)}));
+    await copyFile("drizzle/0037_controlled_family_brand.sql",path.join(folder,"0037_controlled_family_brand.sql"));
+    await migrate(drizzle(legacy),{migrationsFolder:folder});
+    assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"38");
+    assert.equal((await legacy.query("select to_regprocedure('fyf_verify_option_label_audit()') is not null ready")).rows[0].ready,false);
+    // Establish a populated 0040 baseline, then exercise only 0041 separately.
+    await writeFile(path.join(folder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,41)}));
+    for(const entry of journal.entries.slice(38,41))await copyFile(`drizzle/${entry.tag}.sql`,path.join(folder,`${entry.tag}.sql`));
+    await migrate(drizzle(legacy),{migrationsFolder:folder});assert.deepEqual(await familyState(),beforeDimensionMigration);
+    const preMeasurement=await familyState();
+    await migrate(drizzle(legacy),{migrationsFolder:"drizzle"});await migrate(drizzle(legacy),{migrationsFolder:"drizzle"});
+    const postMeasurement=await familyState();
+    for(const row of postMeasurement.family_attributes){assert.equal(row.r.measurement_kind,null);assert.equal(row.r.unit_code,null);delete row.r.measurement_kind;delete row.r.unit_code;}
+    assert.deepEqual(postMeasurement,preMeasurement);
+    assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"42");
+    console.log("PASS 0040→0041 PG16.15: legacy definitions stay text, option labels/IDs/keys/stock and all prior snapshots remain byte-equivalent, replay unchanged");
+    assert.equal((await legacy.query("select to_regprocedure('fyf_check_simple_classification(products,products)') is not null ready")).rows[0].ready,true);
+    assert.equal((await legacy.query("select to_regprocedure('fyf_verify_option_label_audit()') is not null ready")).rows[0].ready,true);
+    assert.equal((await legacy.query("select to_regprocedure('fyf_verify_family_brand_audit()') is not null ready")).rows[0].ready,true);
+    const brandCapture=(await legacy.query("select * from commercial_identity_snapshots where product_id=$1",[legacyBrandProduct])).rows;
+    const brandTx=await legacy.connect();
+    try{
+      await brandTx.query("begin");const key=randomUUID(),revision="a".repeat(64);
+      const auth=(await brandTx.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Corrección descriptiva del legado',jsonb_build_object('state',fyf_dimension_state($1),'revision',$3::text,'transactionId',pg_current_xact_id()::text),jsonb_build_object('operation','FAMILY_BRAND_AUTHORIZATION','operationKey',$4::text,'requestHash',$3::text,'brand','Marca legado')) returning id",[legacyBrandFamily,user,revision,key])).rows[0].id;
+      await brandTx.query("update product_families set brand='Marca legado',updated_at=now() where id=$1",[legacyBrandFamily]);
+      await brandTx.query("update products set brand='Marca legado',updated_at=now() where family_id=$1",[legacyBrandFamily]);
+      await brandTx.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Corrección descriptiva del legado',jsonb_build_object('revision',$3::text),jsonb_build_object('operation','FAMILY_BRAND_CORRECTION','operationKey',$4::text,'requestHash',$3::text,'brand','Marca legado','previousBrand','Marca legdao','authorizationId',$5::integer,'productIds',jsonb_build_array($6::integer),'revision',$3::text))",[legacyBrandFamily,user,revision,key,auth,legacyBrandProduct]);
+      await brandTx.query("commit");
+    }catch(e){await brandTx.query("rollback");throw e;}finally{brandTx.release();}
+    assert.deepEqual((await legacy.query("select * from commercial_identity_snapshots where product_id=$1",[legacyBrandProduct])).rows,brandCapture);
+    assert.equal(brandCapture[0].origin,"LEGACY_REFERENCE");assert.equal(brandCapture[0].identity.brand,"Marca legdao");
+    const oldOption=brandCapture[0].identity.family.attributes[0],labelTx=await legacy.connect();
+    try{
+      await labelTx.query("begin");const key=randomUUID(),r="b".repeat(64);
+      const auth=(await labelTx.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Corrección de formato del legado',jsonb_build_object('state',fyf_dimension_state($1),'revision',$3::text,'transactionId',pg_current_xact_id()::text),jsonb_build_object('operation','OPTION_LABEL_AUTHORIZATION','operationKey',$4::text,'requestHash',$3::text,'attributeId',$5::integer,'optionId',$6::integer,'label','400ml','productIds',jsonb_build_array($7::integer))) returning id",[legacyBrandFamily,user,r,key,oldOption.attributeId,oldOption.optionId,legacyBrandProduct])).rows[0].id;
+      await labelTx.query("update family_attribute_options set label='400ml' where id=$1",[oldOption.optionId]);
+      await labelTx.query("insert into product_family_events(family_id,user_id,reason,previous,next) values($1,$2,'Corrección de formato del legado',jsonb_build_object('revision',$3::text),jsonb_build_object('operation','OPTION_LABEL_CORRECTION','operationKey',$4::text,'requestHash',$3::text,'attributeId',$5::integer,'optionId',$6::integer,'label','400ml','previousLabel','400 ml','productIds',jsonb_build_array($7::integer),'authorizationId',$8::integer,'revision',$3::text))",[legacyBrandFamily,user,r,key,oldOption.attributeId,oldOption.optionId,legacyBrandProduct,auth]);
+      await labelTx.query("commit");
+    }catch(e){await labelTx.query("rollback");throw e;}finally{labelTx.release();}
+    assert.deepEqual((await legacy.query("select * from commercial_identity_snapshots where product_id=$1",[legacyBrandProduct])).rows,brandCapture);
+    console.log("PASS 0037→0039 sin modificar etiquetas legadas duplicadas por espacios; corrección auditada conserva LEGACY_REFERENCE, IDs y combinaciones");
+    console.log("PASS 0037: marca corregida en familia histórica pre-0033, captura LEGACY_REFERENCE intacta sin fingir ORIGINAL");
     console.log("PASS historial: migración 0032→0033, legado referencial explícito, nombre/unidad comprobados de cotización preservados, replay, filas/importes/fechas intactos y bloqueo de nombre vigente");
     console.log("PASS migración 0035→0036 con familia, atributo, opción, SKU, ENTRY y captura preexistentes intactos; replay sin backfill");
   } finally {
     await legacy.end(); await pool.query(`drop database "${name}"`);
     assert.equal(path.resolve(path.dirname(folder)), path.resolve(path.dirname(dataDirectory)));
-    await rm(folder, { recursive: true });
+    await rm(folder, { recursive: true, force: true });
   }
 }
 
@@ -117,7 +175,28 @@ export async function testCommercialHistory({ pool, call, body, users, transacti
   const current = await call("GET", `/product-families/${created.familyId}/bundle`, null, "ADMIN");
   await call("POST", `/product-families/${created.familyId}/attributes/${current.family.attributes[0].id}/rename`, {
     name: "Tono descriptivo", reason: "Corrección descriptiva posterior a la venta", confirmed: true, expectedRevision: current.revision, operationKey: randomUUID() }, "ADMIN");
+  // The purpose is to test immutable identity after a permitted catalog edit,
+  // not to bypass an operational/retryable order created by this same fixture.
+  assert.equal(stored.status, "PENDING_PAYMENT");
+  const pendingState = async () => Object.fromEntries(await Promise.all([
+    "products", "product_family_events", "commercial_identity_snapshots", "inventory_movements", "online_orders", "online_order_items", "online_payments",
+  ].map(async table => [table, (await pool.query(`select to_jsonb(t) r from ${table} t order by to_jsonb(t)::text`)).rows])));
+  const beforeBlocked = await pendingState();
+  await call("PATCH", `/products/${productId}`, { barcode: "997755332211", description: "No debe aplicarse parcialmente", price: 3456 }, "ADMIN", 409);
+  assert.deepEqual(await pendingState(), beforeBlocked);
+  const callback = await fetch(`${base}/online-orders/payments/webpay/return`, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token_ws: order.token }) });
+  assert.equal(callback.status, 303);
+  assert.equal(transactions.get(order.token).amount, Number(economic.rows[0].total));
+  // A paid but undelivered order remains operational. Complete the simulated
+  // pickup through normal APIs, without rewriting SQL states or snapshots.
+  await call("PATCH", `/products/${productId}`, { barcode: "997755332211" }, "ADMIN", 409);
+  for (const action of ["start-preparation", "finish-preparation"]) await call("POST", `/order-logistics/online/${order.orderId}/${action}`, {}, "WAREHOUSE");
+  await call("POST", `/order-logistics/online/${order.orderId}/complete-delivery`, { receiverName: "Receptor de prueba", receiverRut: "11111111-1" }, "WAREHOUSE");
+  assert.equal((await call("GET", `/online-orders/${order.orderId}`, null, "HISTORY_CLIENT")).status, "DELIVERED");
+  const identityBeforeEdit = (await pool.query("select * from commercial_identity_snapshots where product_id=$1 order by id", [productId])).rows;
   await call("PATCH", `/products/${productId}`, { barcode: "997755332211", description: "Información actualizada del catálogo", price: 3456 }, "ADMIN");
+  assert.equal((await pool.query("select barcode from products where id=$1", [productId])).rows[0].barcode, "997755332211");
+  assert.deepEqual((await pool.query("select * from commercial_identity_snapshots where product_id=$1 order by id", [productId])).rows, identityBeforeEdit);
   const oldSale = await call("GET", `/sales/${sale.id}`, null, "ADMIN");
   assert.equal(oldSale.details[0].productBarcode, null);
   assert.equal(oldSale.details[0].historicalIdentity.identity.family.attributes[0].name, request.family.attributes[0].name);
@@ -127,9 +206,6 @@ export async function testCommercialHistory({ pool, call, body, users, transacti
   assert.ok(returnResult);
   assert.equal((await call("GET", `/sales/${sale.id}`, null, "ADMIN")).details[0].returnedQuantity, 1);
   for (const field of [{ name: "Otro nombre" }, { unitMeasure: "caja" }, { brand: "Otro fabricante" }]) await call("PATCH", `/products/${productId}`, field, "ADMIN", 409);
-  const callback = await fetch(`${base}/online-orders/payments/webpay/return`, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token_ws: order.token }) });
-  assert.equal(callback.status, 303);
-  assert.equal(transactions.get(order.token).amount, Number(economic.rows[0].total));
   stored = await call("GET", `/online-orders/${order.orderId}`, null, "HISTORY_CLIENT");
   assert.equal(stored.items[0].productName, rawProduct.name); assert.equal(stored.items[0].historicalIdentity.identity.barcode, null);
   const { getClientOrderReceiptService } = await import("../dist/modules/onlineOrders/onlineOrders.service.js");

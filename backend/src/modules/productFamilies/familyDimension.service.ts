@@ -4,19 +4,21 @@ import {db} from "../../db/index.js";
 import {familyAttributesTable as attrs,familyAttributeOptionsTable as options,productVariantValuesTable as values,productFamilyEventsTable as events,productFamiliesTable as families,productsTable as products,usersTable as users,rolesTable as roles} from "../../db/schema/index.js";
 import {bundleSnapshot} from "./productBundle.service.js";
 import {FamilyError} from "./productFamilies.service.js";
+import {validateAttributeMeasurement,normalizeAttributeNumber} from "./attributeMeasurements.js";
 
 const text=(v:unknown,max:number)=>{if(typeof v!=="string"||/[\u0000-\u001f\u007f]/.test(v))throw new FamilyError("Texto inválido",400);const s=v.trim().replace(/\s+/g," ");if(!s||s.length>max)throw new FamilyError("Nombre u opción inválidos",400);return s;};
 export function validateFamilyDimension(input:unknown){
  const b=input as Record<string,unknown>;
- if(!b||typeof b!=="object"||Array.isArray(b)||Object.keys(b).some(k=>!["name","options","assignments","reason","confirmed","expectedRevision","operationKey"].includes(k)))throw new FamilyError("Operación inválida",400);
+ if(!b||typeof b!=="object"||Array.isArray(b)||Object.keys(b).some(k=>!["name","options","assignments","reason","confirmed","expectedRevision","operationKey","measurementKind","unitCode"].includes(k)))throw new FamilyError("Operación inválida",400);
  const name=text(b.name,60);
+ const measurement=validateAttributeMeasurement(b);
  if(!Array.isArray(b.options)||b.options.length<1||b.options.length>100)throw new FamilyError("Indique entre 1 y 100 opciones",400);
- const labels=b.options.map(v=>text(v,100));if(new Set(labels.map(s=>s.toLocaleLowerCase("es"))).size!==labels.length)throw new FamilyError("Opciones duplicadas",400);
+ const labels=b.options.map(v=>{const label=text(v,100);return measurement.unitCode?normalizeAttributeNumber(label):label;});if(new Set(labels.map(s=>s.toLocaleLowerCase("es"))).size!==labels.length)throw new FamilyError("Opciones duplicadas",400);
  if(!Array.isArray(b.assignments)||!b.assignments.length||b.assignments.length>1000)throw new FamilyError("Asigne cada variante explícitamente",400);
  const assignments=b.assignments.map((v:unknown)=>{const a=v as Record<string,unknown>;if(!a||typeof a!=="object"||Object.keys(a).some(k=>!["productId","optionIndex"].includes(k))||!Number.isSafeInteger(a.productId)||Number(a.productId)<1||!Number.isSafeInteger(a.optionIndex)||Number(a.optionIndex)<0||Number(a.optionIndex)>=labels.length)throw new FamilyError("Asignación inválida",400);return{productId:Number(a.productId),optionIndex:Number(a.optionIndex)};}).sort((a,b)=>a.productId-b.productId);
  if(new Set(assignments.map(a=>a.productId)).size!==assignments.length)throw new FamilyError("Artículo repetido en asignaciones",400);
  if(typeof b.reason!=="string"||b.reason.trim().length<8||b.reason.trim().length>500||b.confirmed!==true||typeof b.expectedRevision!=="string"||!/^[a-f0-9]{64}$/.test(b.expectedRevision)||typeof b.operationKey!=="string"||!/^[a-zA-Z0-9-]{20,80}$/.test(b.operationKey))throw new FamilyError("Confirme motivo de 8–500 caracteres, revisión y clave de operación",400);
- return{name,options:labels,assignments,reason:b.reason.trim(),confirmed:true,expectedRevision:b.expectedRevision,operationKey:b.operationKey};
+ return{name,...measurement,options:labels,assignments,reason:b.reason.trim(),confirmed:true,expectedRevision:b.expectedRevision,operationKey:b.operationKey};
 }
 export async function familyDimensionOperation(id:number,actorId:number,input?:unknown,key?:string){
  if(!Number.isSafeInteger(id)||id<1)throw new FamilyError("Familia inválida",400);
@@ -41,7 +43,7 @@ export async function familyDimensionOperation(id:number,actorId:number,input?:u
   const detached=await tx.execute<{blocked:boolean}>(sql`select fyf_dimension_has_detached_history(${id}) blocked`);if(detached.rows[0].blocked)throw new FamilyError("Hay artículos históricos desvinculados de esta familia. Deben recuperar su clasificación antes de ampliarla");
   for(const p of members){await tx.execute(sql`select fyf_assert_product_name_ready(${p.id})`);await tx.execute(sql`select fyf_verify_variant(${p.id})`);}
   const state=(await tx.execute<{state:unknown}>(sql`select fyf_dimension_state(${id}) state`)).rows[0].state;
-  const [attribute]=await tx.insert(attrs).values({familyId:id,name:b.name,position:Math.max(-1,...snapshot.family.attributes.map(a=>a.position))+1}).returning();
+  const [attribute]=await tx.insert(attrs).values({familyId:id,name:b.name,measurementKind:b.measurementKind??null,unitCode:b.unitCode??null,position:Math.max(-1,...snapshot.family.attributes.map(a=>a.position))+1}).returning();
   const createdOptions=await tx.insert(options).values(b.options.map((label,position)=>({attributeId:attribute.id,label,position}))).returning();
   const assignments=[];
   for(const a of b.assignments){const p=members.find(p=>p.id===a.productId)!;const optionId=createdOptions.find(o=>o.position===a.optionIndex)!.id;
@@ -49,7 +51,7 @@ export async function familyDimensionOperation(id:number,actorId:number,input?:u
    const variantKey=[...selected,{attributeId:attribute.id,optionId}].sort((a,b)=>a.attributeId-b.attributeId).map(v=>v.optionId).join(",");assignments.push({productId:p.id,optionId,variantKey});}
   const [authorization]=await tx.insert(events).values({familyId:id,productId:null,userId:actorId,reason:b.reason,
    previous:{state,revision:snapshot.revision,transactionId:(await tx.execute<{id:string}>(sql`select pg_current_xact_id()::text id`)).rows[0].id},
-   next:{operation:"DIMENSION_ADD_AUTHORIZATION",operationKey,requestHash,attribute:{id:attribute.id,family_id:attribute.familyId,name:attribute.name,position:attribute.position},options:createdOptions.map(o=>({id:o.id,attribute_id:o.attributeId,label:o.label,position:o.position})),assignments}}).returning();
+   next:{operation:"DIMENSION_ADD_AUTHORIZATION",operationKey,requestHash,attribute:{id:attribute.id,family_id:attribute.familyId,name:attribute.name,position:attribute.position,...(attribute.unitCode?{measurement_kind:attribute.measurementKind,unit_code:attribute.unitCode}:{})},options:createdOptions.map(o=>({id:o.id,attribute_id:o.attributeId,label:o.label,position:o.position})),assignments}}).returning();
   for(const a of assignments){await tx.insert(values).values({productId:a.productId,familyId:id,attributeId:attribute.id,optionId:a.optionId});await tx.update(products).set({variantKey:a.variantKey,updatedAt:new Date()}).where(eq(products.id,a.productId));}
   await tx.update(families).set({updatedAt:new Date()}).where(eq(families.id,id));
   const {revision}=await bundleSnapshot(id,tx);

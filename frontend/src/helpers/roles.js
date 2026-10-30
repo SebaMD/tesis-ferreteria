@@ -9,6 +9,7 @@ export const ROLE_NAMES = {
 export const ROUTE_PERMISSIONS = {
   dashboard: ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"],
   products: ["ADMIN", "MANAGER", "CASHIER", "WAREHOUSE"],
+  productAudits: ["ADMIN"],
   sales: ["ADMIN", "MANAGER", "CASHIER"],
   inventory: ["ADMIN", "MANAGER", "WAREHOUSE"],
   reports: ["ADMIN", "MANAGER"],

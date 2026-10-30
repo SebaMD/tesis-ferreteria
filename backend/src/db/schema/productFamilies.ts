@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { check, integer, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { categoriesTable } from "./categories.js";
 
@@ -17,8 +17,11 @@ export const familyAttributesTable = pgTable("family_attributes", {
   id: integer().primaryKey().generatedByDefaultAsIdentity(),
   familyId: integer("family_id").notNull().references(() => productFamiliesTable.id, { onDelete: "restrict" }),
   name: varchar({ length: 60 }).notNull(),
+  measurementKind: varchar("measurement_kind", { length: 12 }),
+  unitCode: varchar("unit_code", { length: 4 }),
   position: integer().notNull().default(0),
 }, (t) => [
+  check("family_attribute_measurement_check", sql`coalesce((${t.measurementKind} is null and ${t.unitCode} is null) or (${t.measurementKind}='length' and ${t.unitCode} in ('mm','cm','m')) or (${t.measurementKind}='mass' and ${t.unitCode} in ('g','kg')) or (${t.measurementKind}='volume' and ${t.unitCode} in ('mL','L')),false)`),
   uniqueIndex("family_attributes_name_unique").on(t.familyId, sql`lower(${t.name})`),
   uniqueIndex("family_attributes_id_family_unique").on(t.id, t.familyId),
 ]);

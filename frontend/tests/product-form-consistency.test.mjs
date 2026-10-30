@@ -47,10 +47,10 @@ test("explicit draft conversion retains initial stock, unit, individual details 
 
 test("description is full width; inventory fields share a row and the secondary unit stays protected", async () => {
   const editor = await read("components/ProductBundleEditor.jsx");
-  assert.match(editor, /<label>Descripción individual[^\n]*<\/label>\s*<div className="variant-inventory-fields grid min-w-0 items-start gap-3 sm:grid-cols-2">/);
-  assert.match(editor, /<details data-individual-settings/);
-  assert.match(editor, /Configuración individual · Unidad:/);
-  assert.match(editor, /disabled=\{row.hasHistory \|\| row.isOriginal\}/);
+  assert.match(editor, /<label>Descripción individual[^\n]*<\/label>\s*<div className="variant-inventory-fields grid min-w-0 items-start gap-3 lg:grid-cols-3">/);
+  assert.match(editor, /label="Unidad individual"/);
+  assert.doesNotMatch(editor, /<details data-individual-settings/);
+  assert.match(editor, /disabled=\{locked\|\|row.hasHistory\|\|row.isOriginal\}/);
   assert.match(editor, /row.id \? <VariantStockSummary product=\{savedStock.current.get\(row.id\)\}/);
   assert.match(editor, /Al guardar se registra una entrada si es mayor que cero/);
 });

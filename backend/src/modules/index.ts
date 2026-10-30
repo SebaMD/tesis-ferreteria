@@ -14,6 +14,7 @@ import emailVerificationRoutes from "./emailVerification/emailVerification.route
 import customerNoticeRoutes from "./customerNotice/customerNotice.routes.js";
 import promotionsRoutes from "./promotions/promotions.routes.js";
 import productFamiliesRoutes from "./productFamilies/productFamilies.routes.js";
+import productAuditsRoutes from "./productAudits/productAudits.routes.js";
 import deliveryQuotesRoutes, { guestDeliveryQuotesRouter } from "./deliveryQuotes/deliveryQuotes.routes.js";
 
 const router = Router();
@@ -38,6 +39,7 @@ router.use("/online-orders", onlineOrdersRoutes);
 router.use("/order-logistics", orderLogisticsRoutes);
 router.use("/products", productsRoutes);
 router.use("/product-families", productFamiliesRoutes);
+router.use("/product-audits", productAuditsRoutes);
 router.use("/reports", reportsRoutes);
 router.use("/sales", salesRoutes);
 router.use("/users", usersRoutes);

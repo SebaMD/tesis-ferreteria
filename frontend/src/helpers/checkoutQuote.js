@@ -19,5 +19,5 @@ export function checkoutQuoteFailure(error, { connection = false, message = "No 
     : connection || (!code && status >= 500) ? "RETRY"
       : code === "POLICY_UNAVAILABLE" || code === "PICKUP_UNAVAILABLE" ? "POLICY"
         : "PRODUCTS";
-  return { error: message, errorKind };
+  return { error: errorKind === "MANUAL_DELIVERY" ? "La tarifa local aún no está activada. Puedes elegir retiro en tienda; no se iniciará un pago de despacho sin tarifa definitiva." : message, errorKind };
 }

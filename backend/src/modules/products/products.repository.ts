@@ -24,6 +24,7 @@ const productColumns = {
     status: productsTable.status,
     createdAt: productsTable.createdAt,
     updatedAt: productsTable.updatedAt,
+    hasHistory: sql<boolean>`(exists(select 1 from sale_details where product_id=${productsTable.id}) or exists(select 1 from online_order_items where product_id=${productsTable.id}) or exists(select 1 from inventory_movements where product_id=${productsTable.id}))`,
 };
 
 async function attachProductImages<T extends { id: number }>(products: T[]) {

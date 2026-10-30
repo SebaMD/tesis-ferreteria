@@ -29,6 +29,13 @@ function imageUrl(imagePath: string | null | undefined) {
   return imagePath ? `/uploads/${imagePath.replaceAll("\\", "/")}` : null;
 }
 
+function presentDelivery(announcement: ReturnType<typeof deliveryAnnouncement>, presentation: Awaited<ReturnType<typeof findCatalogPresentation>>, admin = false) {
+  if (!announcement) return null;
+  const savedImageUrl = imageUrl(presentation?.deliveryImagePath);
+  const imageVisible = announcement.kind === "LOCAL_FIXED";
+  return {...announcement,imageUrl:imageVisible?savedImageUrl:null,...(admin?{savedImageUrl,imageSuppressed:!imageVisible,revision:presentation?.deliveryImageRevision??0}: {})};
+}
+
 function presentPresentation<T extends {
   id: number;
   title: string;
@@ -62,19 +69,21 @@ export async function getPublicCustomerNoticeService() {
   return {
     presentation: presentPresentation(presentation ?? DEFAULT_PRESENTATION),
     notices: notices.map(presentNotice),
-    deliveryAnnouncement: delivery.announcement,
+    deliveryAnnouncement: presentDelivery(delivery.announcement, presentation),
     deliveryInformation: delivery.information,
   };
 }
 
 export async function getCustomerNoticeConfigurationService() {
-  const [presentation, notices] = await Promise.all([
+  const [presentation, notices, policy] = await Promise.all([
     findCatalogPresentation(),
     findCustomerNotices(),
+    db.transaction(tx => currentDeliveryPolicy(tx)),
   ]);
   return {
     presentation: presentPresentation(presentation ?? DEFAULT_PRESENTATION),
     notices: notices.map(presentNotice),
+    deliveryAnnouncement: presentDelivery(deliveryAnnouncement(policy), presentation, true),
   };
 }
 

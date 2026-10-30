@@ -20,7 +20,7 @@ export function buildCatalogSlides(presentation, notices, deliveryAnnouncement =
   return [
     institutional,
     ...(deliveryAnnouncement ? [{ id: "delivery-policy", title: deliveryAnnouncement.title, message: deliveryAnnouncement.message,
-      eyebrow: deliveryAnnouncement.isDemo ? "Despacho · DEMO" : "Información de despacho", displaySeconds: 9, institutional: false, imageUrl: null }] : []),
+      eyebrow: deliveryAnnouncement.isDemo ? "Despacho · DEMO" : "Información de despacho", displaySeconds: 9, institutional: false, imageUrl: deliveryAnnouncement.kind === "LOCAL_FIXED" ? deliveryAnnouncement.imageUrl || null : null }] : []),
     ...publicNotices.map((notice) => ({
       id: `notice-${notice.id}`,
       title: notice.title,

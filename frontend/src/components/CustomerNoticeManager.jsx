@@ -36,6 +36,7 @@ import {
   uploadCustomerNoticeImageRequest,
 } from "../services/customerNotice.service.js";
 import AppModal from "./AppModal.jsx";
+import DeliveryNoticeImage from "./DeliveryNoticeImage.jsx";
 
 const EMPTY_FORM = {
   title: "",
@@ -166,6 +167,7 @@ function ImageField({ currentUrl, file, onFile, removeImage, onRemove }) {
 const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedded = false }, ref) {
   const { refreshNotices } = useCustomerNotice();
   const [presentation, setPresentation] = useState(null);
+  const [deliveryAnnouncement, setDeliveryAnnouncement] = useState(null);
   const [notices, setNotices] = useState([]);
   const noticesRef = useRef([]);
   const noticeNodesRef = useRef(new Map());
@@ -224,6 +226,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     try {
       const configuration = await getCustomerNoticeConfigurationRequest();
       setPresentation(configuration.presentation);
+      setDeliveryAnnouncement(configuration.deliveryAnnouncement);
       updateNotices(configuration.notices);
     } catch (error) {
       toast.error(getApiError(error, "No se pudieron cargar los avisos"));
@@ -486,6 +489,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     <section className={embedded ? "grid gap-4" : "rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.05)] max-[720px]:p-4"}>
       {loading ? <p className="m-0 text-sm text-slate-500">Cargando avisos…</p> : (
         <div className="grid gap-3">
+          <DeliveryNoticeImage announcement={deliveryAnnouncement} onSaved={async()=>{await loadConfiguration();await refreshNotices();}} />
           <div>
             <article className="customer-notice-presentation relative grid gap-3 rounded-md border-2 border-rust-500/70 bg-rust-50/30 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -511,7 +515,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
           {editingId === "new" && renderEditor("notice")}
 
           {notices.length === 0 && editingId !== "new" && (
-            <p className="m-0 rounded-md border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">Aún no existen avisos.</p>
+            <p className="m-0 rounded-md border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">Aún no existen avisos manuales.</p>
           )}
           {notices.map((notice, index) => {
             const phase = scheduleStatus(notice);

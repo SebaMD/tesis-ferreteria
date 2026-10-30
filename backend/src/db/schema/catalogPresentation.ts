@@ -10,6 +10,8 @@ export const catalogPresentationTable = pgTable(
     mainText: varchar("main_text", { length: 220 }).notNull(),
     secondaryText: varchar("secondary_text", { length: 600 }).notNull(),
     imagePath: varchar("image_path", { length: 500 }),
+    deliveryImagePath: varchar("delivery_image_path", { length: 500 }),
+    deliveryImageRevision: integer("delivery_image_revision").notNull().default(0),
     updatedByUserId: integer("updated_by_user_id")
       .references(() => usersTable.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

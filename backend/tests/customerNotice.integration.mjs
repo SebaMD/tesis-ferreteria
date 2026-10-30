@@ -68,6 +68,7 @@ function payload(overrides = {}) {
 }
 
 await admin.connect();
+console.log('PostgreSQL real:',(await admin.query('show server_version')).rows[0].server_version);
 try {
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
   const historicalEntries = journal.entries.filter((entry) => entry.idx <= 22);
@@ -123,12 +124,13 @@ try {
   });
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const token = (role) => jwt.sign({ id: users[role].id }, process.env.SESSION_SECRET);
-  const request = async (method, route, { role, body, rawBody, contentType } = {}, expected = 200) => {
+  const request = async (method, route, { role, body, rawBody, contentType, revision } = {}, expected = 200) => {
     const response = await fetch(base + route, {
       method,
       headers: {
         ...(rawBody ? { "Content-Type": contentType } : { "Content-Type": "application/json" }),
         ...(role ? { Authorization: `Bearer ${token(role)}` } : {}),
+        ...(revision !== undefined ? {"If-Match":`"${revision}"`} : {}),
       },
       ...(rawBody ? { body: rawBody } : body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
@@ -239,6 +241,41 @@ try {
   await request("DELETE", `/customer-notice/configuration/${finite.data.id}`, { role: "MANAGER" });
   assert.deepEqual((await request("GET", "/customer-notice")).data.notices.map((notice) => notice.title), ["Vigente indefinido"]);
   console.log("PASS ADMIN/MANAGER presentation, CRUD, reorder and secure images; other roles denied; public DTO is minimal");
+  const localPolicy={pricingMode:'LOCAL_FIXED',pickupEnabled:true,deliveryEnabled:true,flatFee:3000,freeShippingFrom:500000,minimumProductsTotal:null,isDemo:false};
+  let policy=(await request('PUT','/delivery-settings',{role:'ADMIN',body:{...localPolicy,expectedRevisionId:null}})).data;
+  const imageRoute='/customer-notice/configuration/delivery-image';
+  const config=()=>request('GET','/customer-notice/configuration',{role:'ADMIN'}).then(r=>r.data);
+  assert.equal((await config()).deliveryAnnouncement.revision,0);
+  for(const role of ['CASHIER','WAREHOUSE','CLIENT']) await request('POST',imageRoute,{role,rawBody:png,contentType:'image/png',revision:0},403);
+  await request('POST',imageRoute,{rawBody:png,contentType:'image/png',revision:0},401);
+  await request('POST',imageRoute,{role:'ADMIN',rawBody:png,contentType:'image/png'},400);
+  await request('POST',imageRoute,{role:'ADMIN',rawBody:Buffer.from('invalid'),contentType:'image/png',revision:0},400);
+  await request('POST',imageRoute,{role:'MANAGER',rawBody:png,contentType:'image/png',revision:0});
+  const saved=(await config()).deliveryAnnouncement;
+  assert.equal(saved.revision,1);assert.ok(saved.savedImageUrl);assert.equal(saved.imageUrl,saved.savedImageUrl);
+  assert.equal((await request('GET','/customer-notice')).data.deliveryAnnouncement.message,saved.message);
+  await request('DELETE',imageRoute,{role:'ADMIN',revision:0},409);
+  await request('DELETE',imageRoute,{role:'ADMIN',revision:1,body:{message:'Gratis siempre'}},400);
+  assert.equal((await config()).deliveryAnnouncement.revision,1);
+  policy=(await request('PUT','/delivery-settings',{role:'MANAGER',body:{...localPolicy,flatFee:4000,freeShippingFrom:600000,expectedRevisionId:policy.id}})).data;
+  let automatic=(await request('GET','/customer-notice')).data.deliveryAnnouncement;
+  assert.match(automatic.message,/4\.000/);assert.match(automatic.message,/600\.000/);assert.equal(automatic.imageUrl,saved.savedImageUrl);
+  policy=(await request('PUT','/delivery-settings',{role:'ADMIN',body:{...localPolicy,deliveryEnabled:false,expectedRevisionId:policy.id}})).data;
+  automatic=(await request('GET','/customer-notice')).data.deliveryAnnouncement;
+  assert.equal(automatic.kind,'SUSPENDED');assert.equal(automatic.imageUrl,null);assert.doesNotMatch(automatic.message,/gratis|500\.000|600\.000/i);
+  assert.equal((await config()).deliveryAnnouncement.savedImageUrl,saved.savedImageUrl);
+  policy=(await request('PUT','/delivery-settings',{role:'ADMIN',body:{...localPolicy,freeShippingFrom:null,expectedRevisionId:policy.id}})).data;
+  automatic=(await request('GET','/customer-notice')).data.deliveryAnnouncement;
+  assert.equal(automatic.imageUrl,saved.savedImageUrl);assert.doesNotMatch(automatic.message,/Gratis si/);
+  await request('POST',imageRoute,{role:'ADMIN',rawBody:png,contentType:'image/png',revision:1});
+  assert.equal((await fetch(new URL(saved.savedImageUrl,new URL(base).origin))).status,200,'Replaced image preserved');
+  await request('DELETE',imageRoute,{role:'MANAGER',revision:2});
+  assert.equal((await config()).deliveryAnnouncement.savedImageUrl,null);
+  assert.equal((await request('GET','/customer-notice')).data.notices.length,1,'Manual notice retained');
+  const race=await Promise.all(['ADMIN','MANAGER'].map(role=>fetch(base+imageRoute,{method:'POST',headers:{Authorization:`Bearer ${token(role)}`,'If-Match':'"3"','Content-Type':'image/png'},body:png})));
+  assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);
+  await request('DELETE',imageRoute,{role:'ADMIN',revision:4});
+  console.log('PASS automatic image: roles, MIME, optimistic concurrency, readonly message, tariff/threshold refresh, suspension suppression, retained files and manual compatibility');
 } finally {
   if (server) await new Promise((resolve) => server.close(resolve));
   if (applicationDb?.$client) await applicationDb.$client.end();

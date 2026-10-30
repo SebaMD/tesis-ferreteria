@@ -18,7 +18,7 @@ try {
   const dataDirectory = (await pool.query("show data_directory")).rows[0].data_directory.replaceAll("\\", "/");
   assert.match(dataDirectory, /\/fyf-delivery-test-[^/]+\/data$/);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-  assert.equal(journal.entries.length, 42);
+  assert.equal(journal.entries.length, 43);
   assert.ok(journal.entries[30].when > journal.entries[29].when);
   await mkdir(path.join(folder, "meta"));
   await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 30) }));
@@ -44,7 +44,7 @@ try {
   const cleanUrl = new URL(url); cleanUrl.pathname = "/fyf_delivery_clean";
   const clean = new pg.Pool({ connectionString: cleanUrl.href });
   try { await migrate(drizzle(clean), { migrationsFolder: "drizzle" }); assert.equal((await clean.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, String(journal.entries.length)); } finally { await clean.end(); }
-  console.log("PASS 39 migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association");
+  console.log(`PASS ${journal.entries.length} migrations clean + upgrade + replay, legacy total untouched and no artificial DEMO association`);
 
   Object.assign(process.env, { DATABASE_URL: url.href, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const sdk = (await import("transbank-sdk")).default;
@@ -144,7 +144,8 @@ try {
     assert.deepEqual((await pool.query("select (select count(*) from online_orders) orders, (select count(*) from online_payments) payments, (select sum(current_stock) from products) stock")).rows[0], before);
     const notice = await announcement();
     assert.equal(notice.kind, "MANUAL_QUOTE"); assert.doesNotMatch(notice.title, /gratis|3\.000/);
-    assert.deepEqual(Object.keys(notice).sort(), ["isDemo", "kind", "message", "title"]);
+    assert.deepEqual(Object.keys(notice).sort(), ["imageUrl", "isDemo", "kind", "message", "title"]);
+    assert.equal(notice.imageUrl, null);
     const info = (await call("GET", "/customer-notice")).data.deliveryInformation;
     assert.equal(info.conditionalFreeThresholdReference, 500000); assert.equal(info.conditionalBenefitEnabled, false);
     assert.equal(info.noChargeRadiusKmReference, 5); assert.equal(info.minimumOutboundKmPriceReference, 1000);

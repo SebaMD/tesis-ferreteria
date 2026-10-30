@@ -1567,12 +1567,9 @@ export default function ProductsPage() {
           <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
             <fieldset disabled={bundleSaving || Boolean(editingProductId && variantsEnabled)} className="m-0 grid min-w-0 gap-3.75 border-0 p-0" aria-label="Datos comerciales del producto">
             <ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>
-            <label>
-              Nombre
-              <input value={form.name} disabled={Boolean(editingProductId)} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
-            </label>
-            {editingProduct && <ProductNameCorrectionAction key={editingProductId} product={editingProduct} dirty={productNameDraftIsDirty(form, unitSearch, editingProduct, pendingProductImages)} busy={bundleSaving || submittingProduct || managingProductImages} onOpenChange={setNameCorrectionOpen}
-              onConflict={()=>toast.warning("Recarga el editor y revisa los datos antes de guardar.")} onRenamed={async result=>{setForm(p=>({...p,name:result.name}));await loadData();}}/>}
+            {editingProduct ? <ProductNameCorrectionAction asField label="Nombre" key={editingProductId} product={editingProduct} dirty={productNameDraftIsDirty(form, unitSearch, editingProduct, pendingProductImages)} busy={bundleSaving || submittingProduct || managingProductImages} onOpenChange={setNameCorrectionOpen}
+              onConflict={()=>toast.warning("Recarga el editor y revisa los datos antes de guardar.")} onRenamed={async result=>{setForm(p=>({...p,name:result.name}));await loadData();}}/>
+              : <label>Nombre<input value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} required/></label>}
             <label>
               Marca (opcional)
               <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />

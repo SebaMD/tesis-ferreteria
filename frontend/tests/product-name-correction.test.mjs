@@ -18,6 +18,6 @@ test("simple and family editors share the independent dialog, preserve drafts an
  const action=await read("components/ProductNameCorrectionAction.jsx"),dialog=await read("components/ProductAttributeRenameDialog.jsx"),bundle=await read("components/ProductBundleEditor.jsx"),page=await read("pages/ProductsPage.jsx");
  assert.match(action,/if \(dirty\)/);assert.match(action,/user.role !== "ADMIN"/);assert.match(action,/revision=\{baseline.updatedAt\}/);
  assert.match(dialog,/event\?\.stopPropagation\(\)/);assert.match(dialog,/getProductNameCorrectionRequest/);assert.match(dialog,/frozen.current/);assert.match(dialog,/same|mismo artículo comercial/);
- assert.match(bundle,/suspended=\{nameCorrectionOpen \|\| categoryDialog \|\| dimensionDialog\}/);assert.match(page,/suspended=\{bundleDialogActive \|\| nameCorrectionOpen\}/);
- assert.match(bundle,/disabled=\{Boolean\(row.id\) \|\| row.isOriginal\}/);assert.match(page,/disabled=\{Boolean\(editingProductId\)\}/);
+ assert.match(bundle,/suspended=\{nameCorrectionOpen \|\| categoryDialog \|\| dimensionReview\}/);assert.match(page,/suspended=\{bundleDialogActive \|\| nameCorrectionOpen\}/);
+ assert.match(bundle,/disabled=\{Boolean\(row.id\) \|\| row.isOriginal\}/);assert.match(page,/<ProductNameCorrectionAction asField/);
 });

@@ -33,7 +33,7 @@ test("attributes preserve drafts, expose restrictions and open for invalid field
  assert.match(s,/\[attributesOpen, setAttributesOpen\] = useState\(!familyId\)/);assert.match(s,/aria-expanded=\{attributesOpen\}/);
  assert.match(s,/hidden=\{!attributesOpen\}/);assert.match(s,/disabled=\{locked \|\| \(definitionLocked && !familyId\)\}/);
  assert.match(s,/Una dimensión nueva se incorpora por separado, asignando una opción a todos los artículos/);
- assert.match(s,/Renombrar este atributo requiere una operación controlada/);
+ assert.match(s,/Solo cambia el nombre descriptivo; conserva opciones e identificadores/);
  assert.match(s,/disabled=\{hasExisting\}/);
 });
 test("barcode uses existing keyboard scanner and never submits on Enter",async()=>{

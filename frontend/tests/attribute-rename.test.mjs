@@ -17,8 +17,8 @@ test("pending rename is scoped to administrator and family and never updates its
 });
 test("independent action blocks dirty drafts, suspends the editor and only reloads after a confirmed rename", async () => {
   const editor = await read("components/ProductBundleEditor.jsx");
-  assert.match(editor, /disabled=\{locked \|\| dirty \|\| conflict\}/);
-  assert.match(editor, /if\(locked \|\| dirty \|\| conflict\)return/);
+  assert.match(editor, /action="Renombrar atributo"/);
+  assert.match(editor, /if\(dirty\)\{toast.warning\("Guarda o descarta los cambios pendientes antes de renombrar/);
   assert.match(editor, /!reloadConfirm && !renameTarget/);
   assert.match(editor, /a.id && user.role === "ADMIN"/);
   const renamedHandler = editor.slice(editor.indexOf("onRenamed={"), editor.indexOf("<AppModal open={singleVariant}"));

@@ -15,7 +15,7 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
   const legacy = new pg.Pool({ connectionString: isolated.href });
   try {
     const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
-    assert.equal(journal.entries.at(-1).tag, "0041_attribute_measurements");
+    assert.equal(journal.entries.at(-1).tag, "0042_delivery_notice_image");
     await mkdir(path.join(folder, "meta"), { recursive: true });
     await writeFile(path.join(folder, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, 33) }));
     for (const entry of journal.entries.slice(0, 33)) await copyFile(`drizzle/${entry.tag}.sql`, path.join(folder, `${entry.tag}.sql`));
@@ -105,7 +105,7 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
     await migrate(drizzle(legacy),{migrationsFolder:folder});
     assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"38");
     assert.equal((await legacy.query("select to_regprocedure('fyf_verify_option_label_audit()') is not null ready")).rows[0].ready,false);
-    // Establish a populated 0040 baseline, then exercise only 0041 separately.
+    // Establish a populated 0040 baseline, then exercise the pending 0041–0042 migrations.
     await writeFile(path.join(folder,"meta/_journal.json"),JSON.stringify({...journal,entries:journal.entries.slice(0,41)}));
     for(const entry of journal.entries.slice(38,41))await copyFile(`drizzle/${entry.tag}.sql`,path.join(folder,`${entry.tag}.sql`));
     await migrate(drizzle(legacy),{migrationsFolder:folder});assert.deepEqual(await familyState(),beforeDimensionMigration);
@@ -114,8 +114,8 @@ export async function testCommercialHistoryMigration(pool, url, dataDirectory) {
     const postMeasurement=await familyState();
     for(const row of postMeasurement.family_attributes){assert.equal(row.r.measurement_kind,null);assert.equal(row.r.unit_code,null);delete row.r.measurement_kind;delete row.r.unit_code;}
     assert.deepEqual(postMeasurement,preMeasurement);
-    assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"42");
-    console.log("PASS 0040→0041 PG16.15: legacy definitions stay text, option labels/IDs/keys/stock and all prior snapshots remain byte-equivalent, replay unchanged");
+    assert.equal((await legacy.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count,"43");
+    console.log("PASS 0040→0042 PG16.15: legacy definitions stay text, option labels/IDs/keys/stock and all prior snapshots remain byte-equivalent, replay unchanged");
     assert.equal((await legacy.query("select to_regprocedure('fyf_check_simple_classification(products,products)') is not null ready")).rows[0].ready,true);
     assert.equal((await legacy.query("select to_regprocedure('fyf_verify_option_label_audit()') is not null ready")).rows[0].ready,true);
     assert.equal((await legacy.query("select to_regprocedure('fyf_verify_family_brand_audit()') is not null ready")).rows[0].ready,true);

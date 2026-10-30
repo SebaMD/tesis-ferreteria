@@ -8,7 +8,7 @@ const pool=new pg.Pool({connectionString:url.href});let server,applicationDb;
 try{
  const dir=(await pool.query('show data_directory')).rows[0].data_directory.replaceAll('\\','/');assert.match(dir,/\/fyf-delivery-test-[^/]+\/data$/);
  console.log('Engine:',(await pool.query('select version() v')).rows[0].v);
- const journal=JSON.parse(await readFile('drizzle/meta/_journal.json','utf8'));assert.equal(journal.entries.at(-1).tag,'0041_attribute_measurements');
+ const journal=JSON.parse(await readFile('drizzle/meta/_journal.json','utf8'));assert.equal(journal.entries.at(-1).tag,'0042_delivery_notice_image');
  const previous=path.join(path.dirname(dir),'pre0040');await mkdir(path.join(previous,'meta'),{recursive:true});await writeFile(path.join(previous,'meta/_journal.json'),JSON.stringify({...journal,entries:journal.entries.filter(e=>e.idx<40)}));
  for(const e of journal.entries.filter(e=>e.idx<40))await copyFile(`drizzle/${e.tag}.sql`,path.join(previous,`${e.tag}.sql`));
  await migrate(drizzle(pool),{migrationsFolder:previous});

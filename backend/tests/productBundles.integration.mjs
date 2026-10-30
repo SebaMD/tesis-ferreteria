@@ -18,7 +18,7 @@ let server, applicationDb;
 try {
   if (process.env.BUNDLE_TEST_SCHEMA_READY !== "1") await (await import("./commercialHistory.integration.mjs")).testCommercialHistoryMigration(pool, url, dataDirectory);
   if (process.env.BUNDLE_TEST_SCHEMA_READY === "1") {
-    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "42");
+    assert.equal((await pool.query("select count(*) from drizzle.__drizzle_migrations")).rows[0].count, "43");
   } else await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
   Object.assign(process.env, { DATABASE_URL: url.href, UPLOADS_ROOT: uploads, SESSION_SECRET: randomBytes(32).toString("hex"), EMAIL_VERIFICATION_SECRET: randomBytes(32).toString("hex"), LOGISTICS_QR_SECRET: randomBytes(32).toString("hex"), MAIL_ENABLED: "false", WEBPAY_ENVIRONMENT: "integration", NODE_ENV: "test" });
   const users = {}, password = await bcrypt.hash("IsolatedBundle2026!", 10);

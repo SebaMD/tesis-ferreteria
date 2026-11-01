@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useAuth from "../hooks/useAuth.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import { getRemainingCartCapacity, validateCartQuantity } from "../helpers/cartQuantity.js";
-import { createCartRemovalUndo } from "../helpers/cartUndo.js";
+import { createCartRemovalUndo, prepareCartRestoration } from "../helpers/cartUndo.js";
 import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import CartContext from "./CartContext.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
@@ -118,23 +118,37 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     return true;
   };
 
-  const removeItem = (productId) => {
-    const item = itemsRef.current.find((entry) => Number(entry.product.id) === Number(productId));
-    if (!item) return null;
+  const removalUndo = (removedItems) => {
     const version = contextVersion.current;
-    saveItems((current) => current.filter((item) => Number(item.product.id) !== Number(productId)));
+    const sessionToken = localStorage.getItem("token");
+    const sessionUser = localStorage.getItem("user");
     return createCartRemovalUndo({
-      item: { product: item.product, quantity: Number(item.quantity) },
-      isCurrentContext: () => active.current && contextVersion.current === version,
+      items: removedItems,
+      // Also catch another tab's write before its storage event is delivered.
+      isCurrentContext: () => active.current && contextVersion.current === version
+        && localStorage.getItem("token") === sessionToken && localStorage.getItem("user") === sessionUser
+        && localStorage.getItem(storageKey) === JSON.stringify(itemsRef.current),
       loadProduct: getCatalogProductByIdRequest,
-      hasProduct: (id) => itemsRef.current.some((entry) => Number(entry.product.id) === Number(id)),
-      addItem,
+      restoreItems: (freshItems) => {
+        const result = prepareCartRestoration(itemsRef.current, freshItems);
+        if (result.success) saveItems(result.items);
+        return result;
+      },
     });
   };
 
+  const removeItem = (productId) => {
+    const item = itemsRef.current.find((entry) => Number(entry.product.id) === Number(productId));
+    if (!item) return null;
+    saveItems((current) => current.filter((item) => Number(item.product.id) !== Number(productId)));
+    return removalUndo([item]);
+  };
+
   const clearCart = () => {
+    const removedItems = itemsRef.current;
     contextVersion.current += 1;
     saveItems([]);
+    return removedItems.length ? removalUndo(removedItems) : null;
   };
 
   const removePurchasedItems = (purchasedItems = []) => {

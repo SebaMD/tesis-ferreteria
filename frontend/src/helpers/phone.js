@@ -8,7 +8,3 @@ export function normalizeChileanMobilePhone(value = "") {
   if (compact.startsWith("56")) return `+${compact}`;
   return `+56${compact}`;
 }
-
-export function isValidChileanMobilePhone(value = "") {
-  return Boolean(normalizeChileanMobilePhone(value));
-}

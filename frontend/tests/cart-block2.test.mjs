@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { getDisplayUnit, formatQuantityWithUnit, UNIT_PLURALS } from "../src/helpers/units.js";
 import { UNIT_OPTIONS } from "../src/helpers/options.js";
 import { getRemainingCartCapacity, validateCartQuantity } from "../src/helpers/cartQuantity.js";
-import { createCartRemovalUndo } from "../src/helpers/cartUndo.js";
+import { createCartRemovalUndo, prepareCartRestoration } from "../src/helpers/cartUndo.js";
 
 test("units: known singular/plural pairs, invariant symbols and custom units", () => {
   for (const [single, plural] of Object.entries(UNIT_PLURALS)) {
@@ -35,11 +35,14 @@ test("additions: available stock minus units already in cart", () => {
 function removalFixture(overrides = {}) {
   const state = { active: true, stock: 10, present: false, calls: 0, additions: [] };
   const undo = createCartRemovalUndo({
-    item: { product: { id: 1 }, quantity: 5 },
+    items: [{ product: { id: 1 }, quantity: 5 }],
     isCurrentContext: () => state.active,
     loadProduct: async () => { state.calls += 1; return { id: 1, availableStock: state.stock, currentStock: 100 }; },
-    hasProduct: () => state.present,
-    addItem: (product, quantity) => { state.additions.push({ product, quantity }); state.present = true; return { success: true }; },
+    restoreItems: (items) => {
+      const result = prepareCartRestoration(state.present ? [{ product: { id: 1 }, quantity: 2 }] : [], items);
+      if (result.success) { state.additions.push(...result.items); state.present = true; }
+      return result;
+    },
     ...overrides,
   });
   return { state, undo };

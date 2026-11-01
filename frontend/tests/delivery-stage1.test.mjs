@@ -12,6 +12,7 @@ test("cotización actualizada requiere aceptación explícita, incluso tras erro
   assert.equal(state.needsAcceptance, false);
   state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "technical-revision", commercialSignature: "A" });
   assert.equal(state.needsAcceptance, false);
+  state = acceptCheckoutQuote(state, "refresh", "A");
   state = receiveCheckoutQuote({ ...state, data: null }, "changed", { quoteFingerprint: "second", commercialSignature: "B" });
   assert.equal(state.needsAcceptance, true);
   state = receiveCheckoutQuote(state, "refresh", { quoteFingerprint: "second", commercialSignature: "B" });
@@ -21,7 +22,7 @@ test("cotización actualizada requiere aceptación explícita, incluso tras erro
   state = acceptCheckoutQuote(state, "refresh", "B");
   assert.equal(state.needsAcceptance, false);
   assert.equal(receiveCheckoutQuote({ ...state, needsAcceptance: true }, "same-after-conflict", { quoteFingerprint: "third", commercialSignature: "B" }).needsAcceptance, false);
-  assert.equal(receiveCheckoutQuote(state, "return-to-A", { quoteFingerprint: "fourth", commercialSignature: "A" }).needsAcceptance, false);
+  assert.equal(receiveCheckoutQuote(state, "return-to-A", { quoteFingerprint: "fourth", commercialSignature: "A" }).needsAcceptance, true);
   assert.equal(receiveCheckoutQuote(state, "change-C", { commercialSignature: "C" }).needsAcceptance, true);
   assert.equal(receiveCheckoutQuote({}, "missing-contract", {}).needsAcceptance, true);
   const checkout = await read("pages/CheckoutPage.jsx");

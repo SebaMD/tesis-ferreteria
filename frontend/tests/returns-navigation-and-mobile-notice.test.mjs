@@ -18,15 +18,17 @@ test("entrada a Cambios y devoluciones reinicia únicamente el scroll de esa pá
   assert.match(layout, /to="\/changes-and-returns"/);
 });
 
-test("cabecera conserva regreso a la derecha en escritorio y lo oculta en móvil sin tocar navegación superior", async () => {
+test("cabecera conserva regreso contextual a la derecha y visible en móvil sin tocar navegación superior", async () => {
   const page = await read("pages/ReturnsInformationPage.jsx");
   const header = page.match(/<header[\s\S]*?<\/header>/)?.[0];
   assert.ok(header);
-  assert.ok(header.indexOf("<h1") < header.indexOf("<Link"));
+  assert.ok(header.indexOf("<h1") < header.indexOf("<InformationBackLink"));
   assert.match(header, /flex flex-wrap items-start justify-between gap-3/);
-  assert.match(header, /<Link className="ml-auto inline-flex min-h-10 shrink-0[^\n]+to="\/catalog"/);
-  assert.match(header, /max-\[720px\]:hidden" to="\/catalog"/);
-  assert.match(header, /<ShoppingCart size=\{17\} aria-hidden="true" \/> Volver al catálogo/);
+  const navigation = await read("components/InformationNavigation.jsx");
+  assert.match(navigation, /className="ml-auto inline-flex min-h-11/);
+  assert.match(navigation, /max-\[620px\]:w-full/);
+  assert.match(navigation, /to=\{back.to\} state=\{back.state\}/);
+  assert.doesNotMatch(navigation, /max-\[720px\]:hidden/);
   const navbar = await read("components/ClientNavbar.jsx");
   assert.match(navbar, /<NavLink className=\{navClass\} to="\/catalog">Catálogo<\/NavLink>/);
 });

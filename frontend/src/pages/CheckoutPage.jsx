@@ -1,7 +1,7 @@
 import { ArrowLeft, CreditCard, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
 import { variantLabel } from "../helpers/productVariants.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigationType } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError, isApiConnectionError } from "../api/httpClient.js";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
@@ -9,7 +9,9 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import DeliveryConditions from "../components/DeliveryConditions.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
-import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure } from "../helpers/checkoutQuote.js";
+import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure, createLatestCheckoutRequest } from "../helpers/checkoutQuote.js";
+import { EMPTY_CHECKOUT_DESTINATION, mergeSavedCheckoutDestination, savedCheckoutDestination } from "../helpers/checkoutDestination.js";
+import CheckoutDraftContext from "../context/CheckoutDraftContext.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { readCheckoutIntent, resolveCheckoutItems } from "../helpers/checkoutIntent.js";
 import { formatClp } from "../helpers/formatters.js";
@@ -26,6 +28,7 @@ import {
   createOnlineOrderCheckoutRequest,
   getGuestPendingOrderRequest,
   getMyOnlineOrdersRequest,
+  getClientDeliveryAddressRequest,
   quoteOnlineOrderRequest,
 } from "../services/onlineOrders.service.js";
 import {
@@ -49,7 +52,13 @@ function createCheckoutKey() {
 }
 
 export default function CheckoutPage() {
+  const draftStore = useContext(CheckoutDraftContext);
+  return <CheckoutForm key={draftStore.owner} draftStore={draftStore} />;
+}
+
+function CheckoutForm({ draftStore }) {
   const location = useLocation();
+  const navigationType = useNavigationType();
   const { isAuthenticated, user, replaceSession } = useAuth();
   const { items } = useCart();
   const directPurchase = useMemo(
@@ -62,7 +71,9 @@ export default function CheckoutPage() {
   );
   const checkoutIntent = useMemo(() => readCheckoutIntent(location.state), [location.state]);
   const isClient = isAuthenticated && user?.role === "CLIENT";
-  const [checkoutKey] = useState(createCheckoutKey);
+  const checkoutScope = JSON.stringify(checkoutItems.map(item => [Number(item.product.id), item.quantity]));
+  const [initialDraft] = useState(() => location.state?.resumeCheckout || navigationType === "POP" ? draftStore.read(checkoutScope) : null);
+  const [checkoutKey] = useState(() => initialDraft?.checkoutKey || createCheckoutKey());
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingOrderLoading, setPendingOrderLoading] = useState(true);
@@ -70,13 +81,15 @@ export default function CheckoutPage() {
   const [pendingOrder, setPendingOrder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [continuingPayment, setContinuingPayment] = useState(false);
-  const [deliveryType, setDeliveryType] = useState("PICKUP");
-  const [destination,setDestination]=useState({deliveryRecipientName:"",deliveryPhone:"",deliveryAddress:"",deliveryReference:""});
-  const destinationField=key=>({value:destination[key],onChange:e=>setDestination(v=>({...v,[key]:e.target.value}))});
+  const [deliveryType, setDeliveryType] = useState(initialDraft?.deliveryType || "PICKUP");
+  const [destination,setDestination]=useState(initialDraft?.destination || EMPTY_CHECKOUT_DESTINATION);
+  const destinationTouched = useRef(initialDraft?.touched || {});
+  const [savedAddressNote, setSavedAddressNote] = useState("");
+  const destinationField=key=>({value:destination[key],onChange:e=>{destinationTouched.current[key]=true;setDestination(v=>({...v,[key]:e.target.value}));}});
   const destinationValid=deliveryType==="PICKUP"||(destination.deliveryRecipientName.trim().length>0&&/^[+0-9()\s-]{7,20}$/.test(destination.deliveryPhone)&&destination.deliveryAddress.trim().length>0);
-  const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "" });
+  const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "", acceptedSignature: initialDraft?.acceptedSignature || null, requireAcceptance: Boolean(initialDraft?.requireAcceptance) });
   const [quoteRefresh, setQuoteRefresh] = useState(0);
-  const [guestData, setGuestData] = useState({
+  const [guestData, setGuestData] = useState(initialDraft?.guestData || {
     name: "",
     email: "",
     emailConfirmation: "",
@@ -85,52 +98,81 @@ export default function CheckoutPage() {
   const [clientEmailVerified, setClientEmailVerified] = useState(
     Boolean(user?.emailVerifiedAt || user?.emailVerified),
   );
-  const [guestEmailVerification, setGuestEmailVerification] = useState(null);
+  const [guestEmailVerification, setGuestEmailVerification] = useState(initialDraft?.guestEmailVerification || null);
   const submittingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const [availabilityRequests] = useState(createLatestCheckoutRequest);
+  const [pendingRequests] = useState(createLatestCheckoutRequest);
+  const [quoteRequests] = useState(createLatestCheckoutRequest);
   const checkoutProductIds = useMemo(
     () => checkoutItems.map((item) => item.product.id),
     [checkoutItems],
   );
 
+  useEffect(() => {
+    draftStore.write(checkoutScope, { checkoutKey, deliveryType, destination, touched: destinationTouched.current,
+      guestData, guestEmailVerification, acceptedSignature: quoteState.acceptedSignature, requireAcceptance: quoteState.requireAcceptance });
+  }, [draftStore, checkoutScope, checkoutKey, deliveryType, destination, guestData, guestEmailVerification, quoteState.acceptedSignature, quoteState.requireAcceptance]);
+
+  useEffect(() => {
+    if (!isClient) return undefined;
+    const controller = new AbortController();
+    getClientDeliveryAddressRequest({ signal: controller.signal }).then(saved => {
+      if (controller.signal.aborted) return;
+      setDestination(current => mergeSavedCheckoutDestination(current, destinationTouched.current, saved));
+      setSavedAddressNote(savedCheckoutDestination(saved).note);
+    }).catch(() => {
+      if (!controller.signal.aborted) setSavedAddressNote("No se pudo cargar la dirección guardada. Puedes ingresar los datos de entrega manualmente.");
+    });
+    return () => controller.abort();
+  }, [isClient, user?.id]);
+
   const loadAvailability = useCallback(async (notifyError = false) => {
+    const isCurrent = availabilityRequests.begin();
     try {
       const products = await getCatalogProductsByIdsRequest(checkoutProductIds);
+      if (!isCurrent()) return false;
       setCatalogProducts(products);
       setCatalogError("");
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       const message = getApiError(error, "No se pudo actualizar la disponibilidad del carrito");
       setCatalogError(message);
       if (notifyError) toast.error(message);
       return false;
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [checkoutProductIds]);
+  }, [checkoutProductIds, availabilityRequests]);
 
   const loadPendingOrder = useCallback(async (notifyError = false) => {
+    const isCurrent = pendingRequests.begin();
     try {
       if (isClient) {
         const orders = await getMyOnlineOrdersRequest();
+        if (!isCurrent()) return;
         setPendingOrder(orders.find((order) => order.status === "PENDING_PAYMENT") || null);
       } else {
-        setPendingOrder(await getGuestPendingOrderRequest());
+        const order = await getGuestPendingOrderRequest();
+        if (isCurrent()) setPendingOrder(order);
       }
     } catch (error) {
-      if (notifyError) toast.error(getApiError(error, "No se pudo consultar si existe un pago pendiente"));
+      if (isCurrent() && notifyError) toast.error(getApiError(error, "No se pudo consultar si existe un pago pendiente"));
     } finally {
-      setPendingOrderLoading(false);
+      if (isCurrent()) setPendingOrderLoading(false);
     }
-  }, [isClient]);
+  }, [isClient, pendingRequests]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAvailability(true);
     loadPendingOrder(true);
     const refreshCheckout = () => {
-      loadAvailability(false);
-      loadPendingOrder(false);
+      if (refreshingRef.current || document.visibilityState === "hidden") return;
+      refreshingRef.current = true;
       setQuoteRefresh(value => value + 1);
+      Promise.all([loadAvailability(false), loadPendingOrder(false)]).finally(() => { refreshingRef.current = false; });
     };
     const refreshTimer = window.setInterval(refreshCheckout, 30_000);
     window.addEventListener("focus", refreshCheckout);
@@ -138,8 +180,10 @@ export default function CheckoutPage() {
     return () => {
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshCheckout);
+      availabilityRequests.invalidate();
+      pendingRequests.invalidate();
     };
-  }, [loadAvailability, loadPendingOrder]);
+  }, [loadAvailability, loadPendingOrder, availabilityRequests, pendingRequests]);
 
   const liveProductById = useMemo(
     () => new Map(catalogProducts.map((product) => [Number(product.id), product])),
@@ -169,19 +213,23 @@ export default function CheckoutPage() {
 
   const quoteItemsKey = JSON.stringify(rows.map(row => ({ productId: Number(row.product.id), quantity: row.quantity })));
   const quoteKey = JSON.stringify([quoteItemsKey, deliveryType, rows.map(row => [row.product.price, row.subtotal]), quoteRefresh]);
-  const quote = quoteState.key === quoteKey ? quoteState.data : null;
+  const quote = quoteState.key === quoteKey && !quoteState.error ? quoteState.data : null;
+  const displayQuote = quoteState.data;
+  const quotePending = rows.length > 0 && quoteState.key !== quoteKey;
   const quoteError = quoteState.key === quoteKey ? quoteState.error : "";
   useEffect(() => {
-    let active = true;
+    const isCurrent = quoteRequests.begin();
+    const controller = new AbortController();
+    if (loading) return () => { quoteRequests.invalidate(); controller.abort(); };
     const timer = window.setTimeout(() => {
       const selectedItems = JSON.parse(quoteItemsKey);
       if (!selectedItems.length) return;
-      quoteOnlineOrderRequest({ items: selectedItems, deliveryType, deliveryCommune:deliveryType==="DELIVERY"?DELIVERY_COMMUNE:null })
-        .then(data => { if (active) setQuoteState(previous => receiveCheckoutQuote(previous, quoteKey, data)); })
-        .catch(error => { if (active) setQuoteState(previous => ({ ...previous, key: quoteKey, data: null, ...checkoutQuoteFailure(error, { connection: isApiConnectionError(error), message: getApiError(error, "No se pudo calcular el pedido. Revisa los productos y cantidades.") }) })); });
+      quoteOnlineOrderRequest({ items: selectedItems, deliveryType, deliveryCommune:deliveryType==="DELIVERY"?DELIVERY_COMMUNE:null }, { signal: controller.signal })
+        .then(data => { if (isCurrent()) setQuoteState(previous => receiveCheckoutQuote(previous, quoteKey, data, deliveryType)); })
+        .catch(error => { if (isCurrent() && !controller.signal.aborted) setQuoteState(previous => ({ ...previous, key: quoteKey, ...checkoutQuoteFailure(error, { connection: isApiConnectionError(error), message: getApiError(error, "No se pudo calcular el pedido. Revisa los productos y cantidades.") }) })); });
     }, 180);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [quoteItemsKey, deliveryType, quoteKey]);
+    return () => { quoteRequests.invalidate(); controller.abort(); window.clearTimeout(timer); };
+  }, [quoteItemsKey, deliveryType, quoteKey, loading, quoteRequests]);
   const hasAvailabilityIssues = Boolean(catalogError) || rows.some((row) => !row.isValid);
   const normalizedGuestEmail = guestData.email.trim().toLowerCase();
   const guestDataIsValid = isClient || (
@@ -209,6 +257,7 @@ export default function CheckoutPage() {
     && guestDataIsValid
     && emailVerifiedForCheckout
     && Boolean(quote)
+    && Boolean(quote.quoteFingerprint && quote.commercialSignature)
     && !quoteState.needsAcceptance;
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
@@ -238,6 +287,7 @@ export default function CheckoutPage() {
 
     submittingRef.current = true;
     setSubmitting(true);
+    setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature));
     let redirectStarted = false;
 
     try {
@@ -278,7 +328,7 @@ export default function CheckoutPage() {
     } catch (error) {
       toast.error(getApiError(error, "No se pudo iniciar el pago con Webpay"));
       if (error?.response?.data?.code === "QUOTE_CHANGED") {
-        setQuoteState(previous => ({ ...previous, data: null, needsAcceptance: true }));
+        setQuoteState(previous => ({ ...previous, requireAcceptance: true, needsAcceptance: true }));
       }
       setQuoteRefresh(value => value + 1);
       await Promise.all([loadAvailability(false), loadPendingOrder(false)]);
@@ -524,8 +574,9 @@ export default function CheckoutPage() {
                     <label>Teléfono de contacto<input required maxLength={20} type="tel" autoComplete="shipping tel" {...destinationField("deliveryPhone")}/></label>
                     <label>Comuna<select value={DELIVERY_COMMUNE} onChange={()=>{}} aria-describedby="local-coverage-help"><option value={DELIVERY_COMMUNE}>{DELIVERY_COMMUNE}</option></select></label>
                     <label>Dirección, numeración o sector<input required maxLength={300} autoComplete="shipping street-address" {...destinationField("deliveryAddress")}/></label>
-                    <label className="sm:col-span-2">Referencia u observaciones de entrega<textarea maxLength={500} placeholder="Para una dirección sin numeración, indica cómo identificar el lugar." {...destinationField("deliveryReference")}/></label>
+                    <label className="sm:col-span-2">Referencia u observaciones de entrega<textarea className="min-h-24 w-full min-w-0 resize-y rounded-[5px] border border-slate-300 bg-white p-3 text-sm text-ink-950" maxLength={500} placeholder="Para una dirección sin numeración, indica cómo identificar el lugar." {...destinationField("deliveryReference")}/></label>
                   </div>
+                  {savedAddressNote && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">{savedAddressNote}</p>}
                   <p id="local-coverage-help" className="m-0 text-xs text-slate-500">Solo se admite Santa Juana. No verificamos físicamente la dirección mediante mapas o geocodificación. Revisa los datos antes de pagar.</p>
                 </div>
               )}
@@ -534,15 +585,16 @@ export default function CheckoutPage() {
 
           <aside className="sticky top-22 grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm max-[900px]:static">
             <h2 className="m-0 text-lg font-bold text-ink-950">Resumen</h2>
-            <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega</span><strong className="text-right text-ink-950">{deliveryType === "DELIVERY" ? "Despacho a domicilio" : "Retiro en tienda"}</strong></div>
-            {quote && <div aria-live="polite"><OrderAmounts order={quote} checkout /></div>}
-            {quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los productos, condiciones e importes y acepta el resumen actualizado antes de iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature))}>Aceptar resumen actualizado</button></div>}
+            <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega{!quote && displayQuote ? " (último resumen)" : ""}</span><strong className="text-right text-ink-950">{(displayQuote ? quoteState.deliveryType : deliveryType) === "DELIVERY" ? "Despacho a domicilio · Santa Juana" : "Retiro en tienda"}</strong></div>
+            {displayQuote && <div aria-live="polite" aria-busy={quotePending}><OrderAmounts order={displayQuote} checkout provisional={!quote} />{quoteState.deliveryType === "DELIVERY" && displayQuote.deliveryBenefit?.active && <p className="mt-2 mb-0 text-xs text-slate-600">Gratuidad solo si los productos después de descuentos superan estrictamente {formatClp(displayQuote.deliveryBenefit.threshold)}.</p>}</div>}
+            {quotePending && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">Actualizando resumen para {deliveryType === "DELIVERY" ? "despacho local" : "retiro en tienda"}…{displayQuote ? " Los importes mostrados son del último resumen validado, no están confirmados para pagar." : " Se validan los importes en el servidor."}</p>}
+            {quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los productos, condiciones e importes y acepta el resumen actualizado antes de iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature))}>Aceptar resumen actualizado · {formatClp(quote.total)}</button></div>}
             {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
               <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
               {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
               {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to="/cart">Revisar productos y cantidades en el carrito</Link>}
             </div>}
-            {!quote && !quoteError && <p role="status" className="text-sm text-slate-500">Actualizando resumen...</p>}
+            {!quote && displayQuote && !quotePending && <p className="m-0 text-xs text-slate-600">El último resumen es solo una referencia. Debes obtener un cálculo válido antes de pagar.</p>}
 
             <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
               <strong className="flex items-center gap-2 text-ink-950"><CreditCard size={17} /> Webpay Plus</strong>
@@ -560,6 +612,7 @@ export default function CheckoutPage() {
               <CreditCard size={18} />
               {submitting ? "Iniciando Webpay..." : "Pagar con Webpay Plus"}
             </button>
+            {quote && !quoteState.needsAcceptance && <p className="m-0 text-xs leading-5 text-slate-600">Al pulsar Pagar aceptas este resumen y su total de {formatClp(quote.total)}. El servidor lo validará nuevamente antes de iniciar Webpay.</p>}
             <Link className="text-center text-sm font-bold text-rust-600" to="/cart">Modificar carrito</Link>
           </aside>
         </div>

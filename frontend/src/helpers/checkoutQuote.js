@@ -1,15 +1,22 @@
-export function receiveCheckoutQuote(previous, key, data) {
+export function receiveCheckoutQuote(previous, key, data, deliveryType) {
   const signature = data.commercialSignature;
-  // A missing commercial contract must never authorize a payment.
-  const reviewedSignatures = previous.reviewedSignatures || [];
-  const first = reviewedSignatures.length === 0 && !previous.hadQuote;
-  const reviewed = first && signature ? [signature] : reviewedSignatures;
-  return { key, data, error: "", errorKind: "", hadQuote: true, reviewedSignatures: reviewed,
-    needsAcceptance: !signature || !reviewed.includes(signature) };
+  // Receiving a preview is not the buyer accepting it. The first acceptance is
+  // the explicit pay action; subsequent material changes require review.
+  return { ...previous, key, data, deliveryType, error: "", errorKind: "",
+    needsAcceptance: !signature || Boolean(
+      (previous.acceptedSignature || previous.requireAcceptance)
+      && signature !== previous.acceptedSignature,
+    ) };
 }
 export function acceptCheckoutQuote(previous, key, signature) {
-  if (!signature || previous.key !== key || previous.data?.commercialSignature !== signature) return previous;
-  return { ...previous, reviewedSignatures: [...new Set([...(previous.reviewedSignatures || []), signature])], needsAcceptance: false };
+  if (!signature || previous.error || previous.key !== key || previous.data?.commercialSignature !== signature) return previous;
+  return { ...previous, acceptedSignature: signature, requireAcceptance: false, needsAcceptance: false };
+}
+
+// A superseded or unmounted request may never publish a quote/address/catalog.
+export function createLatestCheckoutRequest() {
+  let generation = 0;
+  return { begin() { const request = ++generation; return () => request === generation; }, invalidate() { generation++; } };
 }
 export function checkoutQuoteFailure(error, { connection = false, message = "No se pudo calcular el pedido. Revisa los productos y cantidades." } = {}) {
   const code = error?.response?.data?.code;

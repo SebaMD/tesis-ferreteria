@@ -1,6 +1,6 @@
 import api from "../api/httpClient.js";
-export async function quoteOnlineOrderRequest(data) {
-  const response = await api.post("/online-orders/quote", data);
+export async function quoteOnlineOrderRequest(data, { signal } = {}) {
+  const response = await api.post("/online-orders/quote", data, { signal });
   return response.data.data;
 }
 import { getOrCreateGuestSessionId } from "../helpers/guestCheckout.js";
@@ -39,8 +39,8 @@ export async function getMyOnlineOrdersRequest() {
   return resolveOrderListProductAssets(response.data.data);
 }
 
-export async function getClientDeliveryAddressRequest() {
-  const response = await api.get("/online-orders/delivery-address");
+export async function getClientDeliveryAddressRequest({ signal } = {}) {
+  const response = await api.get("/online-orders/delivery-address", { signal });
   return response.data.data || null;
 }
 

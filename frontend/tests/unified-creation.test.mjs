@@ -66,7 +66,7 @@ test("public conditions use FYF references, never the automatic DEMO threshold, 
 
 test("checkout has a short linked local note, definitive server total and keeps final payment guards", async () => {
   const page = await read("pages/CheckoutPage.jsx"), note = await read("components/DeliveryConditions.jsx");
-  assert.match(note, /to="\/delivery-conditions"/); assert.match(page, /<OrderAmounts order=\{quote\}/);
+  assert.match(note, /to="\/delivery-conditions"/); assert.match(page, /<OrderAmounts order=\{displayQuote\} checkout provisional=\{!quote\}/);
   assert.match(page, /&& destinationValid/); assert.match(page, /quoteFingerprint: quote.quoteFingerprint/);
   assert.doesNotMatch(page, /3\.000|500\.000|1\.000|Por cotizar/);
 });

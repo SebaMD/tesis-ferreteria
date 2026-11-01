@@ -1,6 +1,6 @@
-import { Mail, MapPin, MessageCircle, Phone, ShoppingCart } from "lucide-react";
+import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { useLayoutEffect } from "react";
-import { Link } from "react-router-dom";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import { getStoreContactDetails, RETURNS_INFORMATION } from "../helpers/storeInformation.js";
 import { panelClass } from "../helpers/uiClasses.js";
 
@@ -16,9 +16,7 @@ export default function ReturnsInformationPage() {
       <header className="grid gap-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="m-0 text-2xl font-bold text-ink-950 max-[520px]:text-xl">Cambios y devoluciones</h1>
-          <Link className="ml-auto inline-flex min-h-10 shrink-0 items-center gap-2 text-sm font-bold text-rust-600 no-underline max-[720px]:hidden" to="/catalog">
-            <ShoppingCart size={17} aria-hidden="true" /> Volver al catálogo
-          </Link>
+          <InformationBackLink />
         </div>
         <p className="m-0 text-sm leading-6 text-slate-600">Información para distinguir tus derechos legales de las opciones comerciales de la ferretería.</p>
       </header>

@@ -7,16 +7,13 @@ import {
   Power,
   Save,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -37,6 +34,8 @@ import {
 } from "../services/customerNotice.service.js";
 import AppModal from "./AppModal.jsx";
 import DeliveryNoticeImage from "./DeliveryNoticeImage.jsx";
+import ImageField from "./NoticeImageField.jsx";
+import NoticeInlineEditor from "./NoticeInlineEditor.jsx";
 
 const EMPTY_FORM = {
   title: "",
@@ -102,67 +101,6 @@ function formatDateTime(value) {
     : "Sin límite";
 }
 
-function useObjectUrl(file) {
-  const url = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
-  useEffect(() => {
-    if (!url) return undefined;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
-  return url;
-}
-
-function ImageField({ currentUrl, file, onFile, removeImage, onRemove }) {
-  const titleId = useId();
-  const fileInputRef = useRef(null);
-  const previewUrl = useObjectUrl(file);
-  const visibleUrl = previewUrl || (!removeImage ? currentUrl : "");
-  return (
-    <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-3" aria-labelledby={titleId}>
-      <h4 className="m-0 text-xs font-bold text-ink-700" id={titleId}>Imagen opcional</h4>
-      <p className="m-0 text-xs leading-5 text-slate-500">
-        Imagen recomendada: 1920 × 720 px (formato panorámico). Mantén el contenido principal centrado para que se vea correctamente tanto en computador como en celular.
-      </p>
-      <div className="relative aspect-video w-full max-w-96 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-        {visibleUrl ? (
-          <>
-            <img className="h-full w-full object-cover" src={visibleUrl} alt="Previsualización del slide" />
-            <button
-              className="absolute top-2 right-2 size-9 min-h-9 border-white/60 bg-ink-950/85 p-0 text-white hover:bg-ink-950"
-              type="button"
-              onClick={onRemove}
-              aria-label="Quitar imagen"
-              title="Quitar imagen"
-            ><X size={16} /></button>
-          </>
-        ) : (
-          <div className="grid h-full place-items-center text-slate-500" aria-hidden="true">
-            <span className="flex items-center gap-2 text-xs font-semibold"><ImageIcon size={18} /> Sin imagen seleccionada</span>
-          </div>
-        )}
-      </div>
-      <button
-        className="min-h-10 w-fit max-w-full border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white shadow-sm hover:bg-ink-800"
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        aria-label={visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
-      >
-        <ImageIcon size={17} /> {visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
-      </button>
-      <input
-        ref={fileInputRef}
-        className="hidden"
-        type="file"
-        tabIndex={-1}
-        accept="image/jpeg,image/png,image/webp"
-        onChange={(event) => {
-          onFile(event.target.files?.[0] || null);
-          event.target.value = "";
-        }}
-      />
-      <span className="text-[11px] text-slate-500">JPG, PNG o WebP · máximo 5 MB.</span>
-    </section>
-  );
-}
 
 const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedded = false }, ref) {
   const { refreshNotices } = useCustomerNotice();
@@ -236,7 +174,6 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   }, [updateNotices]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadConfiguration();
   }, [loadConfiguration]);
 
@@ -426,7 +363,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const renderEditor = (kind) => {
     const isPresentation = kind === "presentation";
     return (
-      <form className="customer-notice-editor grid scroll-mt-4 gap-3 rounded-md border border-rust-500 bg-rust-50/40 p-4" ref={editorRef} onSubmit={persist}>
+      <NoticeInlineEditor ref={editorRef} onSubmit={persist} onCancel={cancelEdit} busy={saving}>
         <strong className="text-sm text-ink-950">
           {isPresentation ? "Editar presentación del catálogo" : editingId === "new" ? "Crear aviso" : "Editar aviso"}
         </strong>
@@ -477,11 +414,11 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
           removeImage={removeImage}
           onRemove={() => { setImageFile(null); setRemoveImage(true); }}
         />
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="admin-form-actions">
           <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={cancelEdit}>Cancelar</button>
-          <button type="submit" disabled={saving}><Save size={17} /> {saving ? "Guardando…" : "Guardar cambios"}</button>
+          <button className="product-positive-action" type="submit" disabled={saving}><Save size={17} /> {saving ? "Guardando…" : "Guardar cambios"}</button>
         </div>
-      </form>
+      </NoticeInlineEditor>
     );
   };
 
@@ -489,7 +426,6 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     <section className={embedded ? "grid gap-4" : "rounded-md border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,21,31,0.05)] max-[720px]:p-4"}>
       {loading ? <p className="m-0 text-sm text-slate-500">Cargando avisos…</p> : (
         <div className="grid gap-3">
-          <DeliveryNoticeImage announcement={deliveryAnnouncement} onSaved={async()=>{await loadConfiguration();await refreshNotices();}} />
           <div>
             <article className="customer-notice-presentation relative grid gap-3 rounded-md border-2 border-rust-500/70 bg-rust-50/30 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -504,13 +440,15 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                     <p className="mt-1 mb-0 line-clamp-2 text-xs leading-5 text-slate-600">{presentation?.mainText}</p>
                   </div>
                 </div>
-                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0" type="button" onClick={(event) => startPresentationEdit({ focus: event.detail === 0 })} aria-label="Editar presentación del catálogo" title="Editar presentación del catálogo"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
+                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0" type="button" onClick={(event) => startPresentationEdit({ focus: event.detail === 0 })} aria-expanded={editingId === "presentation"} aria-label="Editar presentación del catálogo" title="Editar presentación del catálogo"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
               </div>
               {presentation?.imageUrl && <img className="h-20 w-full rounded-md border border-slate-200 object-cover" src={presentation.imageUrl} alt="" />}
               <span className="text-[11px] text-slate-500">Siempre ocupa la primera posición y no puede desactivarse, moverse ni eliminarse.</span>
             </article>
             {editingId === "presentation" && <div className="mt-3">{renderEditor("presentation")}</div>}
           </div>
+
+          <DeliveryNoticeImage announcement={deliveryAnnouncement} onSaved={async()=>{await loadConfiguration();await refreshNotices();}} />
 
           {editingId === "new" && renderEditor("notice")}
 

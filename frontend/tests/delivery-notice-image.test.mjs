@@ -11,7 +11,9 @@ test('one automatic slide, unchanged fallback, dynamic commercial text and suspe
 });
 test('image-only admin form has preview, cancel, expected revision and no editable commercial text',async()=>{
  const read=p=>readFile(new URL('../src/'+p,import.meta.url),'utf8');const ui=await read('components/DeliveryNoticeImage.jsx');
- assert.match(ui,/Automático/);assert.match(ui,/type="file"/);assert.match(ui,/Vista previa móvil/);assert.match(ui,/Cancelar imagen/);assert.match(ui,/announcement.revision/);assert.match(ui,/URL.revokeObjectURL/);
+ const image=await read('components/NoticeImageField.jsx');
+ assert.match(ui,/Automático/);assert.match(ui,/<NoticeImageField/);assert.match(image,/type="file"/);assert.match(image,/Previsualización del slide/);assert.match(ui,/Cancelar imagen/);assert.match(ui,/announcement.revision/);assert.match(image,/URL.revokeObjectURL/);
+ assert.match(ui,/f.size>5\*1024\*1024/);assert.match(ui,/image\/jpeg.*image\/png.*image\/webp/);
  assert.doesNotMatch(ui,/<textarea|type="text"|type="number"/);
  assert.match(await read('components/CustomerNoticeManager.jsx'),/<DeliveryNoticeImage/);
  assert.match(await read('services/customerNotice.service.js'),/If-Match/);

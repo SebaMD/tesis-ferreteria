@@ -1243,19 +1243,19 @@ export default function ProductsPage() {
   };
 
   return (
-    <section className={pageClass}>
+    <section className={`${pageClass} inventory-compact-page`}>
       <LoadingOverlay active={loading} />
 
-      <div className={pageHeaderClass}>
+      <div className={`${pageHeaderClass} inventory-section-header`}>
         <div>
           <h1>{activeView === "history" ? "Historial de inventario" : "Inventario"}</h1>
-          <p>{activeView === "history" ? "Movimientos de unidades de inventario: entradas, ventas, ajustes y devoluciones. No corresponde a correcciones descriptivas del catálogo." : "Listado y gestión de productos"}</p>
+          <p>{activeView === "history" ? "Movimientos de unidades de inventario: entradas, ventas, ajustes y devoluciones." : "Listado y gestión de productos"}</p>
         </div>
         {canViewHistory && <InventoryNavigation active={activeView} />}
       </div>
 
       <div className="inventory-toolbar flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className="flex min-w-0 flex-none items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-wrap">
+        <div data-scanner={activeView === "inventory"} className="inventory-search-controls flex min-w-0 flex-none items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-wrap">
           <label className="inventory-search relative block min-w-0 max-[720px]:w-full">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
@@ -1378,7 +1378,7 @@ export default function ProductsPage() {
             <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3">
               <div className="flex items-center justify-between gap-3 max-[620px]:items-start max-[620px]:flex-col">
                 <span className="text-[13px] font-[650] text-ink-700">Categorías existentes</span>
-                <span className="text-[11px] font-semibold text-slate-500">
+                <span className="table-result-count text-[11px] font-semibold">
                   {filteredExistingCategories.length} de {categories.length}
                 </span>
               </div>
@@ -1433,7 +1433,7 @@ export default function ProductsPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+            <div className={formActionsClass}>
               {linkedRegistration?.step === "category" ? (
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeLinkedRegistration} disabled={submittingCategory}>
                   Finalizar
@@ -1447,7 +1447,7 @@ export default function ProductsPage() {
                   Cancelar
                 </button>
               )}
-              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+              <>
                 {canSaveCategoryAndContinue && !submittingCategory && (
                   <button
                     className="linked-flow-mobile-action"
@@ -1458,10 +1458,10 @@ export default function ProductsPage() {
                     <ArrowRight size={17} />
                   </button>
                 )}
-                <button className="mr-0" type="submit" disabled={submittingCategory}>
+                <button className="product-positive-action" type="submit" disabled={submittingCategory}>
                   {submittingCategory ? "Guardando..." : editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
                 </button>
-              </div>
+              </>
             </div>
           </form>
         </div>
@@ -1873,10 +1873,10 @@ export default function ProductsPage() {
       </AppModal>
 
       {activeView === "inventory" && (
-      <div className={tablePanelClass}>
+      <div className={`${tablePanelClass} inventory-data-panel`}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="m-0! inventory-result-count" aria-live="polite">Mostrando {productsPagination.paginatedItems.length} de {groupedProducts.length} {groupedProducts.length===1?"grupo":"grupos"} · {filteredProducts.length} {filteredProducts.length===1?"artículo":"artículos"} {hasListFilters ? (filteredProducts.length===1?"filtrado":"filtrados") : (filteredProducts.length===1?"visible":"visibles")}</p>
+            <p className="m-0! inventory-result-count table-result-count" aria-live="polite"><span>Mostrando {productsPagination.paginatedItems.length} de {groupedProducts.length} {groupedProducts.length===1?"grupo":"grupos"}</span><span className="inventory-count-separator" aria-hidden="true"> · </span><span>{filteredProducts.length} {filteredProducts.length===1?"artículo":"artículos"} {hasListFilters ? (filteredProducts.length===1?"filtrado":"filtrados") : (filteredProducts.length===1?"visible":"visibles")}</span></p>
           </div>
           <MobileTableTools
             hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly || variantsOnly}
@@ -1915,7 +1915,7 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
-        {(showInactiveProducts || lowStockOnly || outOfStockOnly) && <p className="m-0 px-4 py-2 text-xs text-slate-600">Se incluyen los artículos que cumplen cualquiera de los estados seleccionados. En familias, el selector muestra solo las variantes coincidentes; esto no cambia el estado de toda la familia.</p>}
+        {(showInactiveProducts || lowStockOnly || outOfStockOnly) && <p className="m-0 px-4 py-2 text-xs text-slate-600">Se incluyen los artículos que cumplen cualquiera de los estados seleccionados. El selector familiar también permite consultar variantes desactivadas a usuarios autorizados; no se suman a los resultados ni a la exportación si no coinciden con los filtros.</p>}
         <GroupedInventoryTable key={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}`}
           groups={productsPagination.paginatedItems} allProducts={products} role={user?.role} canManage={canManage} canViewMinimum={canViewAdministrativeStock}
           search={normalizedSearch}

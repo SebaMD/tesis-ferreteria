@@ -1,4 +1,4 @@
-export const auditEmptyFilters = { operation: "", productId: "", familyId: "", from: "", to: "", limit: "25" };
+export const auditEmptyFilters = { operation: "", productId: "", familyId: "", from: "", to: "", limit: "10" };
 export function auditQueryFromSearch(search) {
   const params = new URLSearchParams(search);
   return { ...Object.fromEntries(Object.entries(auditEmptyFilters).map(([key, value]) => [key, params.get(key) ?? value])), cursor: params.get("cursor") || null };

@@ -188,7 +188,7 @@ export default function PromotionsPage() {
             <label className="grid min-h-10 cursor-pointer grid-cols-[16px_minmax(0,1fr)] items-center gap-2 self-end rounded-[5px] px-2 text-sm font-bold text-ink-950 hover:bg-slate-100"><input className="size-4 min-h-4 w-4 shrink-0 accent-rust-600" type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Activar promoción</span></label>
           </div>
           <PromotionTargetPicker products={targets.products} categories={targets.categories} productIds={form.productIds} categoryIds={form.categoryIds} onChange={(selection) => setForm((current) => ({ ...current, ...selection }))} />
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={close} disabled={saving}>Cancelar</button><button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar promoción"}</button></div>
+          <div className="admin-form-actions border-t border-slate-200 pt-4"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={close} disabled={saving}>Cancelar</button><button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar promoción"}</button></div>
         </form>
       </AppModal>
     </main>

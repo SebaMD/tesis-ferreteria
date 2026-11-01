@@ -37,14 +37,14 @@ function ClassificationDialog({field,product,categories,stored,storageKey,onClos
   }catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(storageKey);frozen.current=null;setUncertain(false);}report(e);}finally{guard.current=false;setBusy(false);}
  }
  async function recover(){if(guard.current||!frozen.current)return;guard.current=true;setBusy(true);try{const r=(await api.get(`${path}/${encodeURIComponent(frozen.current.operationKey)}`)).data.data;if(r)await finish(r);else{sessionStorage.removeItem(storageKey);frozen.current=null;setUncertain(false);setConfirmed(false);setError("No hay una corrección confirmada. Revisa el producto antes de volver a confirmar.");}}catch(e){report(e);}finally{guard.current=false;setBusy(false);}}
- return <AppModal open title={`Corregir ${isBrand?"marca":"categoría"} de producto simple`} onClose={()=>{if(!busy&&!uncertain)onClose();}}>
+ return <AppModal open initialFocusSelector="fieldset input" title={`Corregir ${isBrand?"marca":"categoría"} de producto simple`} onClose={()=>{if(!busy&&!uncertain)onClose();}}>
  <form onSubmit={submit} className="grid min-w-0 gap-3"><strong className="break-words">Producto #{product.id} · {product.name}</strong>
  <p className="m-0 text-sm">Actual: <strong>{display(isBrand?product.brand:product.categoryId)}</strong></p>
  <p className="m-0 text-sm">{isBrand?"Solo corrige la denominación del mismo fabricante, no lo sustituye por otro.":"Reclasifica el mismo artículo. La categoría vigente puede afectar promociones y reportes actuales."} Se conservan ID, existencias y operaciones históricas capturadas, incluida la procedencia del legado.</p>
  {error&&<p role="alert" tabIndex={-1} ref={alert} className="rounded border border-critical-600 bg-critical-50 p-3 text-sm text-critical-600">{error}</p>}
  <fieldset disabled={busy||uncertain} className="m-0 grid min-w-0 gap-3 border-0 p-0">
  {isBrand?<label>Nueva marca<input required maxLength={100} value={value} onChange={e=>{setValue(e.target.value);setConfirmed(false);}}/></label>:<ProductCategoryField categories={categories} value={value} onChange={v=>{setValue(v);setConfirmed(false);}}/>}
- <label>Motivo<textarea required minLength={8} maxLength={500} value={reason} onChange={e=>{setReason(e.target.value);setConfirmed(false);}}/></label>
+ <label>Motivo<textarea className="min-h-24 w-full min-w-0 resize-y rounded border border-slate-300 bg-white p-3" required minLength={8} maxLength={500} value={reason} onChange={e=>{setReason(e.target.value);setConfirmed(false);}}/></label>
  <p className="m-0 break-words text-sm">Propuesto: <strong>{display(value)}</strong></p>
  <label className="variant-online-control"><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Confirmo que es una corrección de datos del mismo artículo físico, sin cambiar unidades ni cantidades.</label></fieldset>
  {uncertain&&<div className="grid gap-2"><p role="status">Resultado incierto: consulta antes de iniciar otra operación.</p><button type="button" disabled={busy} onClick={recover}>Consultar resultado</button><button type="button" disabled={busy} onClick={submit}>Reintentar misma corrección</button></div>}

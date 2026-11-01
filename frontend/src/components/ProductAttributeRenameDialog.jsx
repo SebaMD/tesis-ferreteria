@@ -65,7 +65,7 @@ export default function ProductAttributeRenameDialog({ familyId, productId, targ
     } catch (failure) { report(getApiError(failure, "No se pudo comprobar el resultado. No inicies otra operación todavía.")); }
     finally { guard.current = false; setBusy(false); }
   }
-  return <AppModal open title={productMode ? "Corregir nombre del producto" : "Renombrar atributo"} size="medium" onClose={() => { if (!busy && !uncertain) onClose(); }}>
+  return <AppModal open initialFocusSelector="fieldset input" title={productMode ? "Corregir nombre del producto" : "Renombrar atributo"} size="medium" onClose={() => { if (!busy && !uncertain) onClose(); }}>
     <form className="grid min-w-0 gap-3" onSubmit={submit}>
       <p id={explanationId} className="m-0 text-sm">{productMode ? `Solo se corrige el nombre del producto #${productId}. Conserva su ID; las operaciones históricas capturadas mantienen sus datos y su procedencia, incluidas las referencias posteriores del legado.` : "Este cambio actualizará el nombre del atributo en todas las variantes de la familia, sin modificar sus opciones, identificadores ni existencias."}</p>
       <p className="m-0 text-xs text-slate-500">{productMode ? "Corrección descriptiva del mismo artículo físico. No utilices esta acción para cambiar una presentación de 400 ml por 200 ml ni sustituir el producto. No se guardarán otros datos." : "Solo para correcciones descriptivas: no cambies la característica representada por las opciones existentes."}</p>

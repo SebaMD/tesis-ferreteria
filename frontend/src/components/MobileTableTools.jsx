@@ -15,16 +15,18 @@ export default function MobileTableTools({
 
   return (
     <>
-      <div className="ml-auto hidden shrink-0 items-center gap-2 max-[720px]:flex">
+      <div className="mobile-table-tools ml-auto hidden shrink-0 items-center gap-2 max-[720px]:flex">
         {showFilters && (
           <button
             className={`mr-0 min-h-10 px-3 text-xs ${hasActiveFilters ? "border-rust-500! bg-rust-50! text-ink-950! hover:bg-rust-100!" : "border-slate-300 bg-white text-ink-700"}`}
             type="button"
             onClick={() => setOpen(true)}
             aria-haspopup="dialog"
+            aria-label="Filtros"
+            title="Filtros"
             aria-expanded={open}
           >
-            <SlidersHorizontal size={17} aria-hidden="true" /> Filtros
+            <SlidersHorizontal size={17} aria-hidden="true" /> <span className="mobile-filter-label">Filtros</span>
           </button>
         )}
         {exportAction && (

@@ -28,6 +28,13 @@ export function selectedInventoryProduct(group, selectedId, search = "") {
   return group.products.find(p => p.id === selectedId)
     || group.products.find(p => exact && (String(p.id) === exact || p.barcode === exact)) || group.products[0];
 }
+// Administrative picker only: keep filtered rows/counts/exports unchanged.
+export function inventoryPickerProducts(group, allProducts = [], role) {
+  if (group.kind !== "family" || !["ADMIN", "MANAGER"].includes(role)) return group.products;
+  const familyId = group.representative.familyId;
+  const existing = new Set(group.products.map(p => p.id));
+  return [...group.products, ...allProducts.filter(p => p.familyId === familyId && p.status === false && !existing.has(p.id)).sort(compareByNewest)];
+}
 // Input already passed role visibility and concrete-product filters. Never page SKUs first.
 export function groupInventoryProducts(filtered, visible = filtered) {
   const totals = new Map();

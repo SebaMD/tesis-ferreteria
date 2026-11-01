@@ -24,6 +24,7 @@ export default function AppModal({
   size = "medium",
   panelClassName = "",
   overlayClassName = "",
+  initialFocusSelector,
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -83,7 +84,8 @@ export default function AppModal({
       const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
       if (!active || dialogs[dialogs.length - 1] !== dialogRef.current) return;
       const previous = lastFocusedRef.current;
-      (previous?.isConnected && previous.getClientRects().length ? previous : closeButtonRef.current)?.focus();
+      const initial = initialFocusSelector && dialogRef.current?.querySelector(initialFocusSelector);
+      (previous?.isConnected && previous.getClientRects().length ? previous : initial && !initial.matches(':disabled') ? initial : closeButtonRef.current)?.focus();
     });
 
     return () => {
@@ -91,9 +93,11 @@ export default function AppModal({
       activeModalLocks.delete(lock);
       document.body.style.overflow = activeModalLocks.size ? "hidden" : originalBodyOverflow;
       window.removeEventListener("keydown", handleKeyDown);
-      if (!document.querySelector('[role="dialog"][aria-modal="true"]')) previousActiveElement?.focus?.();
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      const top = dialogs[dialogs.length - 1];
+      if (!top || top.contains(previousActiveElement)) previousActiveElement?.focus?.();
     };
-  }, [open, suspended]);
+  }, [open, suspended, initialFocusSelector]);
 
   if (!open) return null;
 
@@ -134,7 +138,7 @@ export default function AppModal({
           </div>
         </header>
         <div className="min-h-0 overflow-y-auto overscroll-contain p-5 max-[720px]:px-4">{children}</div>
-        {footer && <footer className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}
+        {footer && <footer className="admin-form-actions shrink-0 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}
       </section>
     </div>,
     document.body,

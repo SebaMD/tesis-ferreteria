@@ -22,7 +22,7 @@ export default function OptionLabelCorrectionDialog({draft,target,userId,onClose
   try{if(!frozen.current){const command={label:clean,reason:reason.trim(),expectedRevision:draft.revision,operationKey:crypto.randomUUID(),confirmed:true};sessionStorage.setItem(key,JSON.stringify({target,command}));frozen.current=command;}await finish((await api.post(path,frozen.current)).data.data);}
   catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);}if(e.response?.status===409)onConflict();report(e);}finally{guard.current=false;setBusy(false);}}
  async function recover(){if(guard.current||!frozen.current)return;guard.current=true;setBusy(true);try{const result=(await api.get(`${path}/${encodeURIComponent(frozen.current.operationKey)}`)).data.data;if(result)await finish(result);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);setConfirmed(false);report(new Error("No hay una corrección confirmada. Revisa antes de volver a confirmar."));}}catch(e){report(e);}finally{guard.current=false;setBusy(false);}}
- return <AppModal open title="Corregir etiqueta de opción" size="medium" onClose={()=>{if(!busy&&!uncertain)onClose();}}>
+ return <AppModal open initialFocusSelector="fieldset input" title="Corregir etiqueta de opción" size="medium" onClose={()=>{if(!busy&&!uncertain)onClose();}}>
   <form className="grid min-w-0 gap-3" onSubmit={submit}>
    <strong className="break-words">{draft.name} · {target.attributeName}</strong>
    <p className="m-0 break-words text-sm">Etiqueta actual: <strong>{target.label}</strong> · {affected.length} variantes afectadas, incluidas las inactivas.</p>

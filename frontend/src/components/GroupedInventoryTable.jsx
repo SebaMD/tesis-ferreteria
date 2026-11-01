@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, Pencil, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "./ResponsiveTableView.jsx";
 import AppSelect from "./AppSelect.jsx";
-import { inventoryVariantLabel, selectedInventoryProduct, inventoryGroupIdentity } from "../helpers/inventoryGroups.js";
+import { inventoryVariantLabel, selectedInventoryProduct, inventoryGroupIdentity, inventoryPickerProducts } from "../helpers/inventoryGroups.js";
 import { getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
 import { formatClp } from "../helpers/formatters.js";
 import { badgeClass, secondaryButtonClass, dangerButtonClass, tableScrollClass, tableActionButtonClass } from "../helpers/uiClasses.js";
@@ -23,9 +23,10 @@ function VariantPicker({ group, product, role, onSelect }) {
 
 export default function GroupedInventoryTable({ groups, allProducts = [], role, canManage, canViewMinimum, onEdit, onStatus, onFamilyStatus, search = "" }) {
   const [selectedIds, setSelectedIds] = useState({});
-  const selected = group => selectedInventoryProduct(group, selectedIds[group.key], search);
+  const pickerGroup = group => ({ ...group, products: inventoryPickerProducts(group, allProducts, role) });
+  const selected = group => selectedInventoryProduct(pickerGroup(group), selectedIds[group.key], search);
   const choose = (group, id) => setSelectedIds(current => ({ ...current, [group.key]: id }));
-  const picker = group => <VariantPicker group={group} product={selected(group)} role={role} onSelect={id => choose(group, id)} />;
+  const picker = group => <VariantPicker group={pickerGroup(group)} product={selected(group)} role={role} onSelect={id => choose(group, id)} />;
   const familyCounts = group => {
     const members = allProducts.length ? allProducts.filter(p => p.familyId === group.representative.familyId) : group.products;
     return { active: members.filter(p => p.status !== false).length, inactive: members.filter(p => p.status === false).length };
@@ -42,7 +43,7 @@ export default function GroupedInventoryTable({ groups, allProducts = [], role, 
     <MobileDetailField label="Categoría">{product.categoryName}</MobileDetailField><MobileDetailField label="Marca">{product.brand || "Sin marca"}</MobileDetailField>
     <MobileDetailField label="Unidad">{product.unitMeasure}</MobileDetailField>{canViewMinimum && <MobileDetailField label="Stock mínimo">{product.minimumStock}</MobileDetailField>}
     {group.kind === "family" && <MobileDetailField label="Disponibilidad familiar">{familyCounts(group).active} activas · {familyCounts(group).inactive} inactivas</MobileDetailField>}
-  </MobileDetailGrid>{canManage && <MobileRowActions>{actions(product, group)}</MobileRowActions>}</>;
+  </MobileDetailGrid>{canManage && <div className="inventory-mobile-actions"><MobileRowActions>{actions(product, group)}</MobileRowActions></div>}</>;
   return <ResponsiveTableView rows={groups} getRowKey={g => g.key} getRowLabel={g => selected(g).name} emptyMessage="No se encontraron productos con los filtros seleccionados."
     renderSummary={group => { const product = selected(group); return <div className="grid min-w-0 gap-2">
       {picker(group)}<span className="break-words text-xs text-slate-500">{inventoryGroupIdentity(group)}</span>

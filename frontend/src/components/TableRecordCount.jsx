@@ -15,13 +15,13 @@ export default function TableRecordCount({
   );
 
   return (
-    <>
+    <span className="table-result-count">
       <span className="max-[720px]:hidden">
         {formatTableRecordCount({ visibleCount, totalCount, filteredCount, hasFilters })}
       </span>
       <span className="hidden max-[720px]:inline">
         Mostrando {mobileVisibleCount} de {mobileTotalCount} {mobileTotalCount === 1 ? "registro" : "registros"}
       </span>
-    </>
+    </span>
   );
 }

@@ -7,7 +7,7 @@ import { DEMO_DISCLAIMER, demoCategories, demoProducts } from "./demo/catalog.js
 import { loadDemoCatalog } from "./demo/catalogLoader.js";
 import { loadDemoSales } from "./demo/salesFixtures.js";
 import { associateDemoFamilies } from "./demo/families.js";
-import { authorizeDemoTarget, DEMO_DATABASE_MARKER } from "./demo/seedAuthorization.js";
+import { academicTargetFromEnvironment, authorizeDemoTarget, DEMO_DATABASE_MARKER } from "./demo/seedAuthorization.js";
 
 const marker = DEMO_DATABASE_MARKER;
 
@@ -27,7 +27,7 @@ async function seedDemoData() {
     if (!target) throw new Error("No se pudo verificar la identidad de la base");
     // The database comment is an atomic initialization marker, not a table or
     // migration. A completed dataset is a strict no-op, even after manual sales.
-    if (authorizeDemoTarget(target, process.env.DATABASE_URL, process.env.SEED_LOCAL_ONCE_TOKEN) === "loaded") {
+    if (authorizeDemoTarget(target, process.env.DATABASE_URL, process.env.SEED_LOCAL_ONCE_TOKEN, academicTargetFromEnvironment()) === "loaded") {
       return { alreadyLoaded: true };
     }
     const tables = await tx.execute<{ table_name: string }>(sql`
@@ -56,10 +56,11 @@ async function seedDemoData() {
       updatedAt: new Date(),
     }).where(eq(catalogPresentationTable.id, 1));
     const products = await loadDemoCatalog(tx, adminId);
-    const scenarios = await loadDemoSales(tx, products, adminId, ids.get(emails[1])!, ids.get(emails[2])!);
+    // Establish identities before fixtures create pending returns/commitments.
     await associateDemoFamilies(tx, adminId);
+    const scenarios = await loadDemoSales(tx, products, adminId, ids.get(emails[1])!, ids.get(emails[2])!);
     // Both identifiers below come exclusively from validated internal constants.
-    await tx.execute(sql.raw(`COMMENT ON DATABASE "${target.name}" IS '${marker}'`));
+    await tx.execute(sql`COMMENT ON DATABASE ${sql.identifier(target.name)} IS ${sql.raw(`'${marker}'`)}`);
     return { alreadyLoaded: false, scenarios };
   });
 }

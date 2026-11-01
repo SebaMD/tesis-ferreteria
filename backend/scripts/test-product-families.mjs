@@ -20,6 +20,9 @@ try {
   run(path.join(pgBin, "initdb.exe"), ["-D", path.join(root, "data"), "-U", "postgres", "-A", "trust", "--encoding=UTF8", "--locale=C", "--no-sync"]);
   start(55444);
   const url = "postgresql://postgres@127.0.0.1:55444/postgres";
+  if (process.env.FAMILY_TEST_SCOPE === "seed") {
+    run(process.execPath, ["tests/seed.integration.mjs"], { SEED_TEST_DATABASE_URL: url, DEMO_TEST_PG_VERSION: "16.15" });
+  } else {
   const administrationOnly = ["administration", "deletion"].includes(process.env.FAMILY_TEST_SCOPE);
   run(process.execPath, [administrationOnly ? "tests/productFamilyAdministration.integration.mjs" : "tests/productFamilies.integration.mjs"], { FAMILY_TEST_DATABASE_URL: url });
   if (!administrationOnly && process.env.FAMILY_VISUAL_SERVER !== "1" && process.env.FAMILY_TEST_SCOPE !== "core") {
@@ -35,6 +38,7 @@ try {
   start(55441);
   // SMTP is an in-process fake loopback server; Webpay is stubbed by the suite.
   run(process.execPath, ["tests/emailVerification.integration.mjs"], { EMAIL_VERIFICATION_TEST_DATABASE_URL: "postgresql://postgres@127.0.0.1:55441/postgres" });
+  }
   }
 } finally {
   stop();

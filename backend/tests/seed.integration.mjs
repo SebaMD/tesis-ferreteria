@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
+import path from "node:path";
 
 const rootUrl = new URL(process.env.SEED_TEST_DATABASE_URL || "http://missing");
 assert.equal(rootUrl.protocol, "postgresql:");
@@ -12,7 +13,7 @@ assert.equal(rootUrl.hostname, "127.0.0.1");
 assert.ok(Number(rootUrl.port) >= 1024 && ![5432, 5433].includes(Number(rootUrl.port)));
 const admin = new pg.Client({ connectionString: rootUrl.href });
 await admin.connect();
-const databaseName = `fyf_seed_demo_${randomBytes(8).toString("hex")}`;
+const databaseName = `fyf_academic_test_${randomBytes(8).toString("hex")}`;
 let created = false;
 let pool;
 let server;
@@ -21,13 +22,19 @@ try {
   const directory = (await admin.query("SHOW data_directory")).rows[0].data_directory.replaceAll("\\", "/");
   assert.match(directory, /\/fyf-seed-audit-[a-f0-9]+\/data$/,
     "Use an explicitly disposable cluster, not the normal PostgreSQL instance");
+  const engine = (await admin.query('show server_version')).rows[0].server_version;
+  if (process.env.DEMO_TEST_PG_VERSION) assert.equal(engine.split(' ')[0], process.env.DEMO_TEST_PG_VERSION);
+  console.log('Servidor real de integración:', engine);
   await admin.query(`CREATE DATABASE "${databaseName}"`);
   created = true;
   const target = new URL(rootUrl);
   target.pathname = `/${databaseName}`;
   pool = new pg.Pool({ connectionString: target.href });
   const env = { ...process.env, DATABASE_URL: target.href, SEED_DEMO_DATA: "true", NODE_ENV: "test",
-    WEBPAY_ENVIRONMENT: "integration", MAIL_ENABLED: "false", TZ: "America/Santiago" };
+    WEBPAY_ENVIRONMENT: "integration", MAIL_ENABLED: "false", TZ: "America/Santiago",
+    SEED_ACADEMIC_DATABASE: databaseName, SEED_ACADEMIC_HOST: rootUrl.hostname, SEED_ACADEMIC_PORT: rootUrl.port,
+    SEED_LOCAL_ONCE_TOKEN: randomBytes(32).toString('hex'),
+    UPLOADS_ROOT: path.join(path.dirname(directory), 'demo-uploads') };
   const run = (args, overrides = {}) => execFileSync(process.execPath, args, { env: { ...env, ...overrides }, stdio: "inherit" });
   run(["node_modules/drizzle-kit/bin.cjs", "migrate"]);
   const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
@@ -38,6 +45,8 @@ try {
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM users")).rows[0].n, 0);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM products")).rows[0].n, 0);
   console.log("PASS opt-in obligatorio y rechazo de producción sin escrituras");
+  assert.throws(() => run(["--import", "tsx", "src/db/seed.ts"]));
+  await pool.query(`COMMENT ON DATABASE "${databaseName}" IS 'FYF_ACADEMIC_DEMO_ONCE:${env.SEED_LOCAL_ONCE_TOKEN}'`);
   run(["--import", "tsx", "src/db/seed.ts"]);
 
   const counts = async () => {
@@ -166,6 +175,9 @@ try {
   assert.throws(() => run(["--import", "tsx", "src/db/seed.ts"]));
   assert.deepEqual(await snapshot(), before);
   console.log("PASS rechaza base no vacía sin marca; historial intacto");
+  await pool.query(`COMMENT ON DATABASE "${databaseName}" IS 'FYF_DISPOSABLE_DEMO:supplier-reference-demo-2026-10-v1'`);
+  const { testDemoImages } = await import('./demoImages.integration.mjs');
+  await testDemoImages({ pool, root: directory + '/../', origin: `http://127.0.0.1:${server.address().port}`, env, adminToken });
 } finally {
   if (server) await new Promise((resolve) => server.close(resolve));
   await applicationDb?.$client.end();

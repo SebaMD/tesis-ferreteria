@@ -1,0 +1,9 @@
+{
+  "status": "CANDIDATES_ONLY_NO_DOWNLOAD_OR_PUBLICATION",
+  "checkedAt": "2026-11-01",
+  "candidates": [
+    { "supplierCode": "EPBH01702", "brand": "EMTOP", "model": "EPBH01702", "specification": "Brocha 1 pulgada", "url": "https://www.emtop.com/mg-en/product/Paint%20brush/EPBH01702", "rightsStatus": "PENDING_AUTHORIZATION" },
+    { "supplierCode": "EPLRC0611", "brand": "EMTOP", "model": "EPLRC0611", "specification": "Alicate universal 6 pulgadas", "url": "https://www.emtop.com/cr/product/combination-pliers/EPLRC0611", "rightsStatus": "PENDING_AUTHORIZATION" },
+    { "supplierCode": "35", "brand": "Truper", "model": "WT-400", "specification": "Lubricante 400 ml, fabricante 13471; confirmar envase Chile", "url": "https://www.truper.com/ficha_merca/index.php?codigo=13471%2F1000", "rightsStatus": "PENDING_AUTHORIZATION" }
+  ]
+}

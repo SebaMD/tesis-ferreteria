@@ -3,3 +3,6 @@ node_modules
 .env.*
 !.env.example
 .codex-remote-attachments/
+
+# Configuracion local de demostracion universitaria
+/docker-compose.academic.yml

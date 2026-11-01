@@ -17,3 +17,14 @@ assert.equal(authorizeDemoTarget({ name: "ferreteria", comment: DEMO_DATABASE_MA
 assert.equal(authorizeDemoTarget({ name: "fyf_seed_demo_test", comment: null }, undefined, undefined), "new");
 assert.throws(() => authorizeDemoTarget({ name: "production", comment: DEMO_DATABASE_MARKER }, url, token));
 console.log("PASS excepción local exacta: puerto 5432/remotos/otras bases/reutilización para escribir rechazados; demo existente solo no-op");
+const academic = { name: "tesis_existing", host: "db", port: "5432" };
+const academicUrl = "postgresql://demo@db:5432/tesis_existing";
+const academicTarget = { name: academic.name, comment: "FYF_ACADEMIC_DEMO_ONCE:" + token };
+assert.equal(authorizeDemoTarget(academicTarget, academicUrl, token, academic), "new");
+assert.equal(authorizeDemoTarget({ ...academicTarget, comment: DEMO_DATABASE_MARKER }, academicUrl, undefined, academic), "loaded");
+for (const connection of [academicUrl.replace("@db:", "@other:"), academicUrl.replace("5432", "5433"), academicUrl.replace("tesis_existing", "commercial"), academicUrl + "?host=elsewhere"]) {
+  assert.throws(() => authorizeDemoTarget(academicTarget, connection, token, academic));
+}
+assert.throws(() => authorizeDemoTarget(academicTarget, academicUrl, undefined, academic));
+assert.throws(() => authorizeDemoTarget({ ...academicTarget, comment: null }, academicUrl, token, academic));
+console.log("PASS base universitaria existente: identidad exacta y autorización de un uso obligatorias");

@@ -1,6 +1,6 @@
 # Catálogo de referencia y revisión privada de imágenes
 
-El catálogo demo contiene **96 productos independientes en ocho categorías**. Su
+El catálogo demo contiene **96 SKU en ocho categorías**. Su
 fuente versionada es `backend/src/db/demo/catalog.ts`: registra nombre, marca
 identificada, modelo/referencia, especificación, presentación, código del
 proveedor/catálogo, precio ficticio y documento/página PDF de origen. Las
@@ -66,4 +66,15 @@ python scripts/prepare-demo-images.py --source-dir "C:/ruta/a/documentos-proveed
 - Marcas/modelos no informados y códigos de barras comprobados en envases.
 - Permiso de uso de imágenes y confirmación final de envase/modelo/medida.
 
-No hay familias de variantes, conversión entre presentaciones ni venta fraccionaria.
+La seed actual asocia 71 SKU a 19 familias; 25 siguen siendo productos simples.
+Cada SKU conserva su identidad y sus cantidades enteras; no hay conversión entre
+presentaciones ni venta fraccionaria. `catalog.json` describe los artículos fuente;
+las agrupaciones revisadas se definen en `backend/src/db/demo/families.ts`.
+
+## Asociación automática controlada
+
+El comando `db:demo-images` incorpora imágenes aprobadas después de inicializar la
+demo, sin repetir productos ni movimientos. Las 13 imágenes de este manifiesto
+siguen pendientes y NO se publican. Ver [guía de demostración universitaria](../academic-demo-deployment.md)
+para aprobación, vista previa, importación, reporte y persistencia en el volumen
+existente. `image-candidates.json` es solo una lista de candidatos, no permisos.

@@ -492,7 +492,7 @@ export default function ProductsPage() {
     Boolean(form.inStoreOnly) !== Boolean(linkedRegistration.product.inStoreOnly) ||
     Boolean(form.status) !== Boolean(linkedRegistration.product.status)
   );
-  const showProductContinueAction = linkedRegistration?.step === "product";
+  const showProductContinueAction = linkedRegistration?.step === "product" && Boolean(editingProductId);
   const canSaveProductAndContinue =
     !variantsEnabled &&
     showProductContinueAction &&
@@ -513,8 +513,8 @@ export default function ProductsPage() {
     ? "Actualizar y continuar"
     : "Guardar y agregar producto";
   const productContinueLabel = linkedProductIsSaved
-    ? "Actualizar y registrar entrada"
-    : "Guardar y registrar entrada";
+    ? "Actualizar y revisar entrada"
+    : "Guardar y revisar entrada";
 
   const handleProductImageFiles = (files) => {
     const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -1880,17 +1880,19 @@ export default function ProductsPage() {
           </div>
           <MobileTableTools
             hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly || variantsOnly}
-            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); setVariantsOnly(false); }}
+            value={{ variantsOnly, showInactiveProducts, lowStockOnly, outOfStockOnly }}
+            clearValue={{ variantsOnly: false, showInactiveProducts: false, lowStockOnly: false, outOfStockOnly: false }}
+            onApply={next => { setVariantsOnly(next.variantsOnly); setShowInactiveProducts(next.showInactiveProducts); setLowStockOnly(next.lowStockOnly); setOutOfStockOnly(next.outOfStockOnly); }}
             exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
             showFilters
           >
-            {[
-              [true, variantsOnly, setVariantsOnly, "Mostrar productos con variantes"],
-              [canViewInactiveProducts, showInactiveProducts, setShowInactiveProducts, "Mostrar productos desactivados"],
-              [canViewLowStockFilter, lowStockOnly, setLowStockOnly, "Mostrar productos a reponer"],
-              [canViewLowStockFilter, outOfStockOnly, setOutOfStockOnly, "Mostrar productos sin stock"],
-            ].filter(([visible]) => visible).map(([, enabled, setEnabled, label]) => (
-              <button key={label} type="button" className={`inventory-filter-button ${enabled ? "inventory-filter-button--active" : ""}`} onClick={() => setEnabled(value => !value)} aria-pressed={enabled}>{label}</button>
+            {(draft, setDraft) => [
+              [true, "variantsOnly", "Mostrar productos con variantes"],
+              [canViewInactiveProducts, "showInactiveProducts", "Mostrar productos desactivados"],
+              [canViewLowStockFilter, "lowStockOnly", "Mostrar productos a reponer"],
+              [canViewLowStockFilter, "outOfStockOnly", "Mostrar productos sin stock"],
+            ].filter(([visible]) => visible).map(([, key, label]) => (
+              <button key={key} type="button" className={`inventory-filter-button ${draft[key] ? "inventory-filter-button--active" : ""}`} onClick={() => setDraft(current => ({ ...current, [key]: !current[key] }))} aria-pressed={draft[key]}>{label}</button>
             ))}
           </MobileTableTools>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">

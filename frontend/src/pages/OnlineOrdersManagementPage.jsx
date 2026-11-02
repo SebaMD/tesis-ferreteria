@@ -526,13 +526,15 @@ export default function OnlineOrdersManagementPage() {
           /></span>
           <MobileTableTools
             hasActiveFilters={deliveredView}
-            onClear={() => { setView("ACTIVE"); setStatus("ALL"); }}
+            value={{ delivered: deliveredView, status }}
+            clearValue={{ delivered: false, status: "ALL" }}
+            onApply={next => { setView(next.delivered ? "DELIVERED" : "ACTIVE"); setStatus(next.status); }}
             showFilters={scope === "ALL"}
             title="Vista de pedidos"
           >
-            <button type="button" onClick={toggleDeliveredView} aria-pressed={deliveredView}>
-              {deliveredView ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
-            </button>
+            {(draft, setDraft) => <button type="button" onClick={() => setDraft(current => ({ delivered: !current.delivered, status: "ALL" }))} aria-pressed={draft.delivered}>
+              {draft.delivered ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
+            </button>}
           </MobileTableTools>
           {scope === "ALL" && (
             <button

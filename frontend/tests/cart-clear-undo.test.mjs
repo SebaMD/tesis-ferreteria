@@ -143,8 +143,9 @@ test("single removal and full clear share Sonner, duration and owner-scoped pers
 
 test("information return links are borderless and transparent with orange hover and visible focus", async () => {
   const source = await readFile(new URL("../src/components/InformationNavigation.jsx", import.meta.url), "utf8");
-  assert.match(source, /text-rust-600 no-underline hover:text-rust-500/);
-  assert.match(source, /focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500/);
-  assert.doesNotMatch(source, /border-slate|bg-white|hover:bg/);
-  assert.match(source, /to=\{back.to\} state=\{back.state\}/);
+  assert.match(source, /<CompactBackLink \{\.\.\.back\}/);
+  const styles = await readFile(new URL("../src/styles/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.compact-back-link \{[^}]*color: var\(--color-rust-600\)[^}]*text-decoration: none/s);
+  assert.match(styles, /\.compact-back-link:focus-visible/);
+  assert.doesNotMatch(styles.match(/\.compact-back-link \{[^}]*\}/s)[0], /border:|background:/);
 });

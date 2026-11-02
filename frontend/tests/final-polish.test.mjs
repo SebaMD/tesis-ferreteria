@@ -51,7 +51,7 @@ test("checkout, success navigation, clean catalog and warehouse shortcut are wir
   assert.match(dashboard, /Pedidos y repartos/);
   assert.match(dashboard, /operationalOrders\.length/);
   assert.match(favorites, /font-bold text-rust-600/);
-  assert.match(controls, /state: \{ directPurchase \}/);
+  assert.match(controls, /checkoutIntent: createCheckoutIntent\("DIRECT", \[directPurchase\]\)/);
   assert.match(cartActions, /if \(showSuccessToast\) toast\.success/);
   assert.match(card, /max-\[600px\]:hidden/);
   assert.match(favorites, /products\.length > 0/);

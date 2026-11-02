@@ -1,6 +1,7 @@
 import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { createCheckoutIntent } from "../helpers/checkoutIntent.js";
 import { getProductCartAvailability } from "../helpers/cartQuantity.js";
 import { createDirectPurchaseItem } from "../helpers/directPurchase.js";
 import useAuth from "../hooks/useAuth.js";
@@ -13,9 +14,11 @@ export default function ProductPurchaseControls({ product, compact = false, show
   const { addProduct } = useCartActions();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [quantity, setQuantity] = useState(1);
   const [validDraft, setValidDraft] = useState(true);
-  const { remaining } = getProductCartAvailability(product, items);
+  const { remaining, availableStock } = getProductCartAvailability(product, items);
+  const quantityLimit = showBuyNow ? availableStock : remaining;
 
   if (product.inStoreOnly) {
     return (
@@ -30,7 +33,8 @@ export default function ProductPurchaseControls({ product, compact = false, show
     const directPurchase = createDirectPurchaseItem(product, quantity);
     if (!directPurchase) return;
     navigate(user?.role === "CLIENT" ? "/checkout" : "/checkout-options", {
-      state: { directPurchase },
+      state: { checkoutIntent: createCheckoutIntent("DIRECT", [directPurchase]),
+        checkoutReturn: { to: { pathname: location.pathname, search: location.search }, state: location.state } },
     });
   };
 
@@ -41,8 +45,8 @@ export default function ProductPurchaseControls({ product, compact = false, show
         <CartQuantityControl
           className={`${compact ? "max-[600px]:mx-auto max-[600px]:justify-self-center" : ""} ${showBuyNow ? "mx-auto" : ""}`}
           quantity={quantity}
-          availableStock={remaining}
-          disabled={remaining < 1}
+          availableStock={quantityLimit}
+          disabled={quantityLimit < 1}
           productName={product.name}
           onQuantityChange={(value) => { setQuantity(value); return true; }}
           onValidationChange={setValidDraft}
@@ -52,7 +56,7 @@ export default function ProductPurchaseControls({ product, compact = false, show
         <button className="min-h-10 px-3 text-xs" type="button" onClick={() => addSelectedQuantity()} disabled={!validDraft || remaining < 1 || quantity > remaining}>
           <ShoppingCart size={16} /> <span className={compact ? "max-[600px]:hidden" : ""}>Agregar al carrito</span><span className={compact ? "min-[601px]:hidden" : "hidden"}>Agregar</span>
         </button>
-        {showBuyNow && <button className="min-h-10 border-rust-600 bg-rust-600 px-3 text-xs hover:bg-rust-700" type="button" onClick={buyNow} disabled={!validDraft || remaining < 1 || quantity > remaining}>Comprar ahora</button>}
+        {showBuyNow && <button className="min-h-10 border-rust-600 bg-rust-600 px-3 text-xs hover:bg-rust-700" type="button" onClick={buyNow} disabled={!validDraft || availableStock < 1 || quantity > availableStock}>Comprar ahora</button>}
       </div>
     </div>
   );

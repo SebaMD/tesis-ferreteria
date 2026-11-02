@@ -1,4 +1,6 @@
-import { ArrowLeft, CreditCard, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
+import { CreditCard, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
+import CompactBackLink from "../components/CompactBackLink.jsx";
+import AppModal from "../components/AppModal.jsx";
 import { variantLabel } from "../helpers/productVariants.js";
 import { createId } from "../helpers/createId.js";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +16,7 @@ import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure, create
 import { EMPTY_CHECKOUT_DESTINATION, mergeSavedCheckoutDestination, savedCheckoutDestination } from "../helpers/checkoutDestination.js";
 import CheckoutDraftContext from "../context/CheckoutDraftContext.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
-import { readCheckoutIntent, resolveCheckoutItems } from "../helpers/checkoutIntent.js";
+import { readCheckoutIntent, resolveCheckoutItems, checkoutReturn } from "../helpers/checkoutIntent.js";
 import { formatClp } from "../helpers/formatters.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
@@ -68,9 +70,10 @@ function CheckoutForm({ draftStore }) {
   );
   const checkoutIntent = useMemo(() => readCheckoutIntent(location.state), [location.state]);
   const isClient = isAuthenticated && user?.role === "CLIENT";
-  const checkoutScope = JSON.stringify(checkoutItems.map(item => [Number(item.product.id), item.quantity]));
+  const back = checkoutReturn(location.state);
+  const checkoutScope = JSON.stringify([checkoutIntent?.source || (directPurchase ? "DIRECT" : "CART"), checkoutIntent?.checkoutKey || checkoutIntent?.createdAt, checkoutItems.map(item => [Number(item.product.id), item.quantity])]);
   const [initialDraft] = useState(() => location.state?.resumeCheckout || navigationType === "POP" ? draftStore.read(checkoutScope) : null);
-  const [checkoutKey] = useState(() => initialDraft?.checkoutKey || createCheckoutKey());
+  const [checkoutKey] = useState(() => initialDraft?.checkoutKey || checkoutIntent?.checkoutKey || createCheckoutKey());
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pendingOrderLoading, setPendingOrderLoading] = useState(true);
@@ -82,7 +85,20 @@ function CheckoutForm({ draftStore }) {
   const [destination,setDestination]=useState(initialDraft?.destination || EMPTY_CHECKOUT_DESTINATION);
   const destinationTouched = useRef(initialDraft?.touched || {});
   const [savedAddressNote, setSavedAddressNote] = useState("");
-  const destinationField=key=>({value:destination[key],onChange:e=>{destinationTouched.current[key]=true;setDestination(v=>({...v,[key]:e.target.value}));}});
+  const [savedAddress, setSavedAddress] = useState(null);
+  const [savedAddressLoading, setSavedAddressLoading] = useState(isClient);
+  const [saveAddress, setSaveAddress] = useState(false);
+  const [confirmAddressReplacement, setConfirmAddressReplacement] = useState(false);
+  const destinationField=key=>({value:destination[key],onChange:e=>{destinationTouched.current[key]=true;setDestination(v=>({...v,[key]:e.target.value}));if(savedAddress)setSaveAddress(false);}});
+  const useAnotherAddress = () => {
+    destinationTouched.current = Object.fromEntries(Object.keys(EMPTY_CHECKOUT_DESTINATION).map(key => [key, true]));
+    setDestination({ ...EMPTY_CHECKOUT_DESTINATION }); setSaveAddress(false); setSavedAddressNote("");
+  };
+  const useSavedAddress = () => {
+    const saved = savedCheckoutDestination(savedAddress);
+    destinationTouched.current = Object.fromEntries(Object.keys(EMPTY_CHECKOUT_DESTINATION).map(key => [key, true]));
+    setDestination({ ...EMPTY_CHECKOUT_DESTINATION, ...saved.values }); setSaveAddress(false); setSavedAddressNote(saved.note);
+  };
   const destinationValid=deliveryType==="PICKUP"||(destination.deliveryRecipientName.trim().length>0&&/^[+0-9()\s-]{7,20}$/.test(destination.deliveryPhone)&&destination.deliveryAddress.trim().length>0);
   const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "", acceptedSignature: initialDraft?.acceptedSignature || null, requireAcceptance: Boolean(initialDraft?.requireAcceptance) });
   const [quoteRefresh, setQuoteRefresh] = useState(0);
@@ -116,10 +132,12 @@ function CheckoutForm({ draftStore }) {
     const controller = new AbortController();
     getClientDeliveryAddressRequest({ signal: controller.signal }).then(saved => {
       if (controller.signal.aborted) return;
+      setSavedAddress(saved);
+      setSavedAddressLoading(false);
       setDestination(current => mergeSavedCheckoutDestination(current, destinationTouched.current, saved));
       setSavedAddressNote(savedCheckoutDestination(saved).note);
     }).catch(() => {
-      if (!controller.signal.aborted) setSavedAddressNote("No se pudo cargar la dirección guardada. Puedes ingresar los datos de entrega manualmente.");
+      if (!controller.signal.aborted) { setSavedAddressLoading(false); setSavedAddressNote("No se pudo cargar la dirección guardada. Puedes ingresar los datos de entrega manualmente. Para guardar una dirección, vuelve a consultar Mi cuenta."); }
     });
     return () => controller.abort();
   }, [isClient, user?.id]);
@@ -297,7 +315,7 @@ function CheckoutForm({ draftStore }) {
         })),
         deliveryType,
         ...(deliveryType==="DELIVERY"?{...destination,deliveryCommune:DELIVERY_COMMUNE}:{}),
-        saveDeliveryAddress: false,
+        saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveAddress,
       };
       const payment = isClient
         ? await createOnlineOrderCheckoutRequest(checkoutData)
@@ -341,14 +359,12 @@ function CheckoutForm({ draftStore }) {
     <main className="mx-auto grid w-full max-w-300 gap-5 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="public-page-header">
         <div>
           <h1 className="m-0 text-2xl font-bold text-ink-950">Finalizar compra</h1>
           <p className="mt-1.5 mb-0 text-sm text-slate-500">Revisa tu pedido antes de continuar al pago seguro.</p>
         </div>
-        <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-ink-700 no-underline hover:text-rust-600" to="/cart">
-          <ArrowLeft size={17} /> Volver al carrito
-        </Link>
+        <CompactBackLink {...back} />
       </div>
 
       {!pendingOrderLoading && pendingOrder && (
@@ -438,7 +454,7 @@ function CheckoutForm({ draftStore }) {
                 })}
               </div>
               <footer className="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">
-                Para cambiar cantidades o eliminar productos, vuelve al carrito antes de pagar.
+                {checkoutIntent?.source === "DIRECT" || directPurchase ? "Para cambiar esta selección, vuelve al producto antes de pagar. Tu carrito habitual no se modifica." : "Para cambiar cantidades o eliminar productos, vuelve al carrito antes de pagar."}
               </footer>
             </section>
 
@@ -566,6 +582,17 @@ function CheckoutForm({ draftStore }) {
               {deliveryType === "DELIVERY" && (
                 <div className="grid gap-3">
                   <DeliveryConditions />
+                  {isClient && savedAddress && <section className="grid gap-2 rounded-[5px] border border-slate-300 bg-slate-50 p-3 text-sm" aria-label="Dirección guardada">
+                    <strong>Dirección guardada en Mi cuenta</strong>
+                    <span>{savedAddress.recipientName} · {savedAddress.phone}</span>
+                    <span>{savedAddress.address} · {savedAddress.commune}</span>
+                    {savedAddress.reference && <span>{savedAddress.reference}</span>}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={useSavedAddress} disabled={submitting}>Usar dirección guardada</button>
+                      <button type="button" onClick={useAnotherAddress} disabled={submitting}>Usar otra dirección</button>
+                    </div>
+                    <p className="m-0 text-xs">Puedes usar otra dirección solo para este pedido, sin reemplazar la guardada.</p>
+                  </section>}
                   <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <label>Destinatario<input required maxLength={240} autoComplete="shipping name" {...destinationField("deliveryRecipientName")}/></label>
                     <label>Teléfono de contacto<input required maxLength={20} type="tel" autoComplete="shipping tel" {...destinationField("deliveryPhone")}/></label>
@@ -573,6 +600,10 @@ function CheckoutForm({ draftStore }) {
                     <label>Dirección, numeración o sector<input required maxLength={300} autoComplete="shipping street-address" {...destinationField("deliveryAddress")}/></label>
                     <label className="sm:col-span-2">Referencia u observaciones de entrega<textarea className="min-h-24 w-full min-w-0 resize-y rounded-[5px] border border-slate-300 bg-white p-3 text-sm text-ink-950" maxLength={500} placeholder="Para una dirección sin numeración, indica cómo identificar el lugar." {...destinationField("deliveryReference")}/></label>
                   </div>
+                  {isClient && <label className="delivery-settings-checkbox text-sm">
+                    <input className="mt-1 size-4 shrink-0" type="checkbox" checked={saveAddress} disabled={savedAddressLoading || submitting || !destinationValid || Boolean(savedAddressNote && !savedAddress)} onChange={event => { if (event.target.checked && savedAddress) setConfirmAddressReplacement(true); else setSaveAddress(event.target.checked); }} />
+                    <span>{savedAddress ? "Guardar esta dirección y reemplazar la de Mi cuenta" : "Guardar dirección en Mi cuenta"}<small className="mt-1 block">Se guardará al crear el pedido al iniciar el pago, no al marcar esta casilla.</small></span>
+                  </label>}
                   {savedAddressNote && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">{savedAddressNote}</p>}
                   <p id="local-coverage-help" className="m-0 text-xs text-slate-500">Solo se admite Santa Juana. No verificamos físicamente la dirección mediante mapas o geocodificación. Revisa los datos antes de pagar.</p>
                 </div>
@@ -589,7 +620,7 @@ function CheckoutForm({ draftStore }) {
             {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
               <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
               {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
-              {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to="/cart">Revisar productos y cantidades en el carrito</Link>}
+              {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to={back.to} state={back.state}>{checkoutIntent?.source === "DIRECT" || directPurchase ? "Revisar producto y cantidad" : "Revisar productos y cantidades en el carrito"}</Link>}
             </div>}
             {!quote && displayQuote && !quotePending && <p className="m-0 text-xs text-slate-600">El último resumen es solo una referencia. Debes obtener un cálculo válido antes de pagar.</p>}
 
@@ -601,7 +632,7 @@ function CheckoutForm({ draftStore }) {
 
             {hasAvailabilityIssues && !loading && (
               <p className="m-0 rounded-[5px] bg-critical-50 px-3 py-3 text-xs leading-5 text-critical-600">
-                {catalogError || "Uno o más productos ya no están disponibles para compra online. Ajusta el carrito antes de continuar."}
+                {catalogError || "Uno o más productos ya no están disponibles para compra online. Revisa tu selección antes de continuar."}
               </p>
             )}
 
@@ -610,10 +641,17 @@ function CheckoutForm({ draftStore }) {
               {submitting ? "Iniciando Webpay..." : "Pagar con Webpay Plus"}
             </button>
             {quote && !quoteState.needsAcceptance && <p className="m-0 text-xs leading-5 text-slate-600">Al pulsar Pagar aceptas este resumen y su total de {formatClp(quote.total)}. El servidor lo validará nuevamente antes de iniciar Webpay.</p>}
-            <Link className="text-center text-sm font-bold text-rust-600" to="/cart">Modificar carrito</Link>
+            <Link className="text-center text-sm font-bold text-rust-600" to={back.to} state={back.state}>{checkoutIntent?.source === "DIRECT" || directPurchase ? "Modificar selección en el producto" : "Modificar carrito"}</Link>
           </aside>
         </div>
       )}
+      <AppModal open={confirmAddressReplacement} title="Reemplazar dirección guardada" onClose={() => setConfirmAddressReplacement(false)} size="small" footer={<>
+        <button type="button" onClick={() => setConfirmAddressReplacement(false)}>Cancelar</button>
+        <button className="product-positive-action" type="button" onClick={() => { setSaveAddress(true); setConfirmAddressReplacement(false); }}>Confirmar reemplazo al crear el pedido</button>
+      </>}>
+        <p>Tu cuenta admite una dirección. La anterior se reemplazará por estos datos únicamente al crear el pedido. Los pedidos anteriores no cambian.</p>
+        <p className="break-words">{destination.deliveryRecipientName} · {destination.deliveryPhone}<br />{destination.deliveryAddress} · {DELIVERY_COMMUNE}<br />{destination.deliveryReference}</p>
+      </AppModal>
     </main>
   );
 }

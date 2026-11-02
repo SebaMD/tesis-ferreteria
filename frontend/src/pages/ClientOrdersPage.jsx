@@ -1,4 +1,5 @@
-import { AlertTriangle, CreditCard, EyeOff, PackageSearch, RefreshCw, ShoppingCart } from "lucide-react";
+import { AlertTriangle, CreditCard, EyeOff, PackageSearch, RefreshCw } from "lucide-react";
+import CompactBackLink from "../components/CompactBackLink.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -194,15 +195,13 @@ export default function ClientOrdersPage() {
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="public-page-header">
         <div>
           <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis compras</h1>
           <p className="mt-1.5 mb-0 text-sm text-slate-500">Sigue tus pedidos en curso y consulta tus compras anteriores.</p>
         </div>
         {!loading && !loadError && orders.length > 0 && (
-          <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-rust-600 no-underline" to="/catalog">
-            <ShoppingCart size={17} /> Volver al catálogo
-          </Link>
+          <CompactBackLink to="/catalog" label="Volver al catálogo" />
         )}
       </header>
 

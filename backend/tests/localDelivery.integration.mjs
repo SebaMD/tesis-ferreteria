@@ -106,6 +106,31 @@ try{
  await assert.rejects(()=>pool.query('update online_orders set delivery_fee=1 where id=$1',[p.orderId]));await assert.rejects(()=>pool.query('update delivery_policy_revisions set flat_fee=1 where id=$1',[policy.id]));
  await assert.rejects(()=>pool.query("insert into online_orders(client_id,checkout_key,status,total,delivery_type,delivery_recipient_name,delivery_phone,delivery_address,delivery_commune,reservation_expires_at,products_subtotal,products_discount_total,delivery_fee,delivery_policy_revision_id,delivery_fee_reason) values($1,$2,'PENDING_PAYMENT',48000,'DELIVERY','Receptor','123456789','Calle de prueba','Concepción',now()+interval '10 min',45000,0,3000,$3,'FLAT')",[users.CLIENT11,randomUUID(),policy.id]),e=>e.code==='23514');
  await save({flatFee:3000,freeShippingFrom:500000});
+ // Checkout address selection uses the existing account address and transaction.
+ const originalAddress={recipientName:'Dirección de cuenta',phone:'123456789',address:'Calle original 123',commune:'Santa Juana',reference:'Referencia original'};
+ const accountAddress=key=>call('GET','/online-orders/delivery-address',null,key);
+ assert.equal(await accountAddress('CLIENT14'),null);
+ await call('PUT','/online-orders/delivery-address',originalAddress,'CLIENT14');
+ const orderOnly={...makeBody(pid,await quote()),deliveryAddress:'Dirección solo de este pedido',saveDeliveryAddress:false};
+ await call('POST','/online-orders/checkout',orderOnly,'CLIENT14',201);
+ assert.equal((await accountAddress('CLIENT14')).address,originalAddress.address);
+ assert.equal(await accountAddress('CLIENT16'),null);
+ const firstSaved={...makeBody(pid,await quote()),saveDeliveryAddress:true};
+ await call('POST','/online-orders/checkout',firstSaved,'CLIENT16',201);
+ assert.equal((await accountAddress('CLIENT16')).address,firstSaved.deliveryAddress);
+ await call('PUT','/online-orders/delivery-address',originalAddress,'CLIENT15');
+ const replacement={...makeBody(pid,await quote()),deliveryAddress:'Nueva dirección confirmada 456',saveDeliveryAddress:true};
+ const replacementPayment=await call('POST','/online-orders/checkout',replacement,'CLIENT15',201);
+ assert.equal((await accountAddress('CLIENT15')).address,replacement.deliveryAddress);
+ const editedLater={...originalAddress,reference:'Edición posterior al pedido'};
+ await call('PUT','/online-orders/delivery-address',editedLater,'CLIENT15');
+ assert.equal((await call('POST','/online-orders/checkout',replacement,'CLIENT15',201)).orderId,replacementPayment.orderId);
+ assert.equal((await accountAddress('CLIENT15')).reference,editedLater.reference,'idempotent replay must not overwrite a later account edit');
+ assert.equal((await pool.query('select delivery_address from online_orders where id=$1',[replacementPayment.orderId])).rows[0].delivery_address,replacement.deliveryAddress);
+ await call('PUT','/online-orders/delivery-address',{...originalAddress,commune:'Concepción'},'CLIENT15',400);
+ assert.equal((await accountAddress('CLIENT15')).reference,editedLater.reference);
+ await call('GET','/online-orders/delivery-address',null,'MANAGER',403);
+ console.log('PASS ADDRESS: account reuse; order-only destination; first save; confirmed replacement contract; replay preserves later account edits and order snapshot; coverage and role guards');
  console.log('PASS LOCAL: PG16 migration/replay/no data rewrite; net threshold/discounts/pickup; geographic and money tampering; old requests/approvals/checkout; snapshots/amounts immutable; admin/revision; payment replay/retry/mismatch; concurrent reservation');
  if(process.env.LOCAL_DELIVERY_VISUAL==='1'){console.log('VISUAL READY isolated API :5195; CLIENT20 / ADMIN @local.example.test; test-only password DemoLocal123!');await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});}
 }finally{if(server)await new Promise(r=>server.close(r));if(applicationDb)await applicationDb.$client.end();await pool.end();}

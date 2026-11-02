@@ -2159,10 +2159,14 @@ export default function SalesPage() {
               </div>
               <MobileTableTools
                 hasActiveFilters={hasSalesFilters}
-                onClear={() => { setSearch(""); setScannedSalesProduct(null); applySalesFilter("current"); }}
+                value={{ filter: salesFilter, clear: false }}
+                clearValue={{ filter: "current", clear: true }}
+                onApply={next => { if (next.clear) { setSearch(""); setScannedSalesProduct(null); } if (next.clear || next.filter !== salesFilter) applySalesFilter(next.filter); }}
               >
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                {(draft, setDraft) => <>
+                  <button type="button" onClick={() => setDraft(current => ({ ...current, filter: current.filter === "partial" ? "current" : "partial" }))} aria-pressed={draft.filter === "partial"}>{draft.filter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                  <button type="button" onClick={() => setDraft(current => ({ ...current, filter: current.filter === "cancelled" ? "current" : "cancelled" }))} aria-pressed={draft.filter === "cancelled"}>{draft.filter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                </>}
               </MobileTableTools>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
                 <button

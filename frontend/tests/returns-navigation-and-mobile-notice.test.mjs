@@ -23,11 +23,12 @@ test("cabecera conserva regreso contextual a la derecha y visible en móvil sin 
   const header = page.match(/<header[\s\S]*?<\/header>/)?.[0];
   assert.ok(header);
   assert.ok(header.indexOf("<h1") < header.indexOf("<InformationBackLink"));
-  assert.match(header, /flex flex-wrap items-start justify-between gap-3/);
+  assert.match(header, /public-page-header/);
   const navigation = await read("components/InformationNavigation.jsx");
-  assert.match(navigation, /className="ml-auto inline-flex min-h-11/);
-  assert.match(navigation, /max-\[620px\]:w-full/);
-  assert.match(navigation, /to=\{back.to\} state=\{back.state\}/);
+  assert.match(navigation, /<CompactBackLink \{\.\.\.back\}/);
+  const compact = await read("components/CompactBackLink.jsx");
+  assert.match(compact, /aria-label=\{label\}/);
+  assert.match(compact, /to=\{to\} state=\{state\}/);
   assert.doesNotMatch(navigation, /max-\[720px\]:hidden/);
   const navbar = await read("components/ClientNavbar.jsx");
   assert.match(navbar, /<NavLink className=\{navClass\} to="\/catalog">Catálogo<\/NavLink>/);

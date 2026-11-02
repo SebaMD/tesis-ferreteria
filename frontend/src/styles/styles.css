@@ -1139,3 +1139,37 @@
     opacity: 1;
   }
 }
+
+.public-page-header, .variant-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.public-page-header > :first-child { min-width: 0; }
+.compact-back-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--color-rust-600);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+}
+.compact-back-link:hover { color: var(--color-rust-500); }
+.compact-back-link:focus-visible, .catalog-notice-carousel:focus-visible {
+  outline: 2px solid var(--color-rust-500);
+  outline-offset: 3px;
+}
+.variant-section-add { flex-shrink: 0; }
+@media (max-width: 620px) {
+  .compact-back-link { width: 44px; padding: 10px; }
+  .compact-back-link > span, .variant-section-add > span { display: none; }
+  .variant-section-add { width: 44px !important; height: 44px; padding: 0 !important; }
+  .public-page-header > :first-child { flex: 1; }
+}

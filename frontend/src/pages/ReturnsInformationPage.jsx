@@ -14,7 +14,7 @@ export default function ReturnsInformationPage() {
   return (
     <main className="mx-auto grid w-full max-w-4xl gap-5 px-6 py-8 max-[720px]:px-4">
       <header className="grid gap-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="public-page-header">
           <h1 className="m-0 text-2xl font-bold text-ink-950 max-[520px]:text-xl">Cambios y devoluciones</h1>
           <InformationBackLink />
         </div>

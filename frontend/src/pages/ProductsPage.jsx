@@ -148,6 +148,8 @@ export default function ProductsPage() {
   const [variantsSeen, setVariantsSeen] = useState(false);
   const [bundleSaving, setBundleSaving] = useState(false);
   const bundleReviewRef = useRef(null);
+  const simpleProductFormRef = useRef(null);
+  const [bundleAction, setBundleAction] = useState({ label: "Revisar variantes", disabled: true });
   const [creationReview, setCreationReview] = useState(null);
   const simpleModeRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
@@ -1364,18 +1366,8 @@ export default function ProductsPage() {
         description="Organiza los productos dentro del catálogo."
         onClose={closeCategoryForm}
         size="medium"
+        flowActions={canSaveCategoryAndContinue ? { right: <button className="product-positive-action creation-continue-action" type="button" onClick={handleCategoryContinue} disabled={submittingCategory}><span>{categoryContinueLabel}</span><ArrowRight size={18} aria-hidden="true" /></button> } : undefined}
       >
-        {canSaveCategoryAndContinue && !submittingCategory && (
-          <button
-            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--medium"
-            type="button"
-            onClick={handleCategoryContinue}
-            aria-label={categoryContinueLabel}
-          >
-            <span>{categoryContinueLabel}</span>
-            <ArrowRight size={22} />
-          </button>
-        )}
         <div
           className={linkedRegistration?.step === "category" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
@@ -1465,16 +1457,6 @@ export default function ProductsPage() {
                 </button>
               )}
               <>
-                {canSaveCategoryAndContinue && !submittingCategory && (
-                  <button
-                    className="linked-flow-mobile-action"
-                    type="button"
-                    onClick={handleCategoryContinue}
-                  >
-                    {categoryContinueLabel}
-                    <ArrowRight size={17} />
-                  </button>
-                )}
                 <button className="product-positive-action" type="submit" disabled={submittingCategory}>
                   {submittingCategory ? "Guardando..." : editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
                 </button>
@@ -1510,19 +1492,15 @@ export default function ProductsPage() {
         description="Completa la información comercial y de inventario."
         onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
         size={variantsEnabled ? "xlarge" : "large"}
+        flowActions={linkedRegistration?.step === "product" ? {
+          left: <button className="product-positive-action creation-continue-action" type="button" onClick={goToLinkedCategory} disabled={submittingProduct || bundleSaving}><ArrowLeft size={18} aria-hidden="true" /><span>Volver a categoría</span></button>,
+          right: <button className="product-positive-action creation-continue-action" type="button"
+            disabled={submittingProduct || managingProductImages || bundleSaving || (variantsEnabled ? bundleAction.disabled : editingProductId ? !canSaveProductAndContinue : !canAddVariants || !newProductAction.valid)}
+            onClick={event => { if (variantsEnabled) bundleReviewRef.current?.review(); else if (editingProductId && canSaveProductAndContinue) handleProductContinue(event); else simpleProductFormRef.current?.requestSubmit(); }}>
+            <span>{submittingProduct || bundleSaving ? "Guardando…" : variantsEnabled ? bundleAction.label : editingProductId ? productContinueLabel : newProductAction.label}</span><ArrowRight size={18} aria-hidden="true" />
+          </button>,
+        } : undefined}
       >
-        {linkedRegistration?.step === "product" && (
-          <button
-            className="linked-flow-back"
-            type="button"
-            onClick={goToLinkedCategory}
-            disabled={submittingProduct || bundleSaving}
-            aria-label="Volver a categoría"
-          >
-            <ArrowLeft size={22} />
-            <span>Volver a categoría</span>
-          </button>
-        )}
         <div
           className={linkedRegistration?.step === "product" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
@@ -1531,7 +1509,7 @@ export default function ProductsPage() {
             <button type="button" className={variantsEnabled ? "product-positive-action" : secondaryButtonClass} aria-pressed={variantsEnabled} disabled={bundleSaving} onClick={()=>{if(!variantsEnabled)selectVariantMode();}}>Producto con variantes</button>
           </div>}
           <div hidden={variantsEnabled} className={variantsEnabled ? "hidden" : ""}>
-          <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
+          <form ref={simpleProductFormRef} className="grid gap-3.75" onSubmit={handleCreateProduct}>
             <fieldset disabled={bundleSaving || Boolean(editingProductId && variantsEnabled)} className="m-0 grid min-w-0 gap-3.75 border-0 p-0" aria-label="Datos comerciales del producto">
             {editingProduct?.hasHistory&&!editingProduct.familyId?<ProductClassificationAction field="category" key={`category-${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} categories={categories} dirty={productNameDraftIsDirty(form,unitSearch,editingProduct,pendingProductImages)} busy={bundleSaving||submittingProduct||managingProductImages} onOpenChange={setNameCorrectionOpen} onSaved={async r=>{setForm(p=>({...p,categoryId:String(r.value)}));await loadData();}}/>
               :<ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>}
@@ -1621,7 +1599,7 @@ export default function ProductsPage() {
             />
             {variantsEnabled && <p className="m-0 text-xs text-slate-500">La configuración de variantes se conserva. Guardar registrará el conjunto completo, sin crear un producto general adicional.</p>}
             {!editingProductId && variantsSeen && <p className="m-0 text-xs text-slate-500">Se guardará solo este artículo. Los atributos y otras variantes no se guardarán; su borrador se conserva si vuelves al modo con variantes.</p>}
-            <div className="product-footer-actions">
+            <div className={`product-footer-actions ${linkedRegistration?.step === "product" ? "min-[721px]:grid-cols-2!" : ""}`}>
               {linkedRegistration?.step === "product" ? (
                 <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct || bundleSaving}>
                   Finalizar
@@ -1637,25 +1615,19 @@ export default function ProductsPage() {
                 disabled={Boolean(editingProduct?.familyId) || bundleSaving || (!canAddVariants && !variantsEnabled)} onClick={openVariants}>
                 {editingProductId ? "Convertir en producto con variantes" : "Agregar variantes"}
               </button>
-              <div className="flex min-w-0 items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-                {canSaveProductAndContinue && !submittingProduct && (
-                  <button className="product-positive-action creation-continue-action" type="button" onClick={handleProductContinue}>
-                    <span>{productContinueLabel}</span>
-                    <ArrowRight size={17} />
-                  </button>
-                )}
+              {linkedRegistration?.step !== "product" && <div className="flex min-w-0 items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
                 <button type="submit" className="product-positive-action creation-continue-action" disabled={submittingProduct || managingProductImages || bundleSaving || (!editingProductId && (!canAddVariants || !newProductAction.valid))}>
                   <span>{submittingProduct || bundleSaving ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : newProductAction.label}</span>{!editingProductId && <ArrowRight size={18} aria-hidden="true" />}
                 </button>
-              </div>
+              </div>}
             </div>
             {!canAddVariants && !variantsEnabled && !editingProduct?.familyId && <p id="variants-base-requirements" className="m-0 text-xs text-slate-500">Para agregar variantes, completa nombre, categoría, unidad, precio y stock mínimo. Si ingresas un código de barras, debe ser válido y no estar repetido.</p>}
           </form>
           </div>
           {!editingProductId && activeForm === "product" && <ProductBundleEditor inline initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled} simpleModeEnabled commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
-            reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
+            reviewRef={bundleReviewRef} externalActions={linkedRegistration?.step === "product"} onActionChange={setBundleAction} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
           {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled}
-            commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
+            commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} externalActions={linkedRegistration?.step === "product"} onActionChange={setBundleAction} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
             categories={categories} onSaved={loadData} onBack={returnFromConversion} onClose={cancelEditing} onCreated={finishNewBundle} />}
         </div>
       </AppModal>

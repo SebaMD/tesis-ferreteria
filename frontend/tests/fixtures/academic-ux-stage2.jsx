@@ -42,7 +42,7 @@ const auth = { isAuthenticated: !guest, user: guest ? null : { id: 1, role: ["bu
 const forbiddenMutation = () => { throw new Error("Compra directa modificó el carrito"); };
 const notice = { deliveryInformation: { mode: "LOCAL_FIXED", flatFee: 3000, freeShippingFrom: 500000 }, presentation: { title: "Catálogo", mainText: "Presentación", secondaryText: "Prueba" }, notices: [{ id: 1, title: "Segundo aviso", message: "Contenido de prueba" }] };
 const store = createCheckoutDraftStore("TEST");
-const favorites = { enabled: true, products: [], busy: [], loading: false, error: "", reload() {}, toggle() {} };
+const favorites = { enabled: true, products: params.has("with-favorites") ? [product] : [], busy: [], loading: false, error: "", reload() {}, toggle() {} };
 
 function ScrollFixture() {
   return <><nav className="sticky top-0 z-30 bg-white" aria-label="Pruebas de navegación"><Link to="/catalog">Catálogo</Link> <InformationLink to="/favorites">Favoritos</InformationLink> <InformationLink to="/account">Mi cuenta</InformationLink> <InformationLink to="/orders">Mis compras</InformationLink> <InformationLink to="/changes-and-returns">Devoluciones</InformationLink> <InformationLink to="/delivery-conditions">Condiciones</InformationLink></nav><Routes>

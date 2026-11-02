@@ -47,7 +47,7 @@ function encodeImage(file) {
     reader.readAsDataURL(file);
   });
 }
-export default function ProductBundleEditor({ familyId, conversionId, initialData, initialSnapshot, categories, onClose, onSaved, embedded = false, commonData, pendingFiles = [], enabled = true, reviewRef, onCreated, onBusyChange, modalOpen = true, onBack, onReviewOpen, inline = false, onSimple, simpleModeEnabled = false, onDialogChange }) {
+export default function ProductBundleEditor({ familyId, conversionId, initialData, initialSnapshot, categories, onClose, onSaved, embedded = false, commonData, pendingFiles = [], enabled = true, reviewRef, onCreated, onBusyChange, modalOpen = true, onBack, onReviewOpen, inline = false, onSimple, simpleModeEnabled = false, onDialogChange, externalActions = false, onActionChange }) {
   const { user } = useAuth();
   const pendingKey = `fyf-product-bundle-pending-${user.id}`;
   const [draftState, setDraft] = useState(() => initialSnapshot?.draft || bundleDraft(null, initialData || commonData));
@@ -116,6 +116,8 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   const definitionLocked = hasExisting && !draft.conversion;
   const files = [...new Set([...draft.rows.flatMap(row => row.files), ...(draft.rows.some(row => row.useCommon) ? commonFiles : [])])];
   const locked = busy || uncertain || dimensionDialog || !enabled || Boolean(familyId && !draft.familyId) || Boolean(conversionId && !draft.conversion);
+  const actionLabel = draft.conversion ? conversionStep === "prepare" ? "Continuar conversión" : "Revisar conversión" : creationStockAction(draft.rows.map(row => row.initialStock)).label;
+  useEffect(() => { onActionChange?.({ label: actionLabel, disabled: Boolean(locked) }); }, [onActionChange, actionLabel, locked]);
   const dirty = !baseline || bundleDraftSignature(draft) !== baseline || files.length > 0 || commonFiles.length > 0;
   const unitPlan = unitApplicationPlan(draft);
   const closeUnitPreview = () => { unitPreviewRequest.current++;setUnitPreview(null);setUnitInput(null); requestAnimationFrame(()=>requestAnimationFrame(()=>formRef.current?.querySelector('[data-bundle-field="generalUnit"]')?.focus())); };
@@ -325,7 +327,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
           <ul className="m-0 grid gap-1 pl-5 text-sm"><li>Conserva su ID, stock, imágenes e historial.</li><li>No se registrará otra entrada inicial para el original.</li><li>En el siguiente paso deberás asignarle una combinación de atributos.</li></ul>
           {contextualError && errorTarget.section === "prepare" && errorNotice}
           <label>Motivo de conversión<textarea ref={reasonRef} data-bundle-field="reason" {...fieldFeedback("reason")} required minLength={8} maxLength={500} className={area} value={draft.conversion.reason} onChange={e => change({ conversion:{...draft.conversion,reason:e.target.value} })} /></label>
-          <div className="variant-editor-actions"><button type="button" className={`${secondaryButtonClass} mr-auto!`} onClick={backToProduct}>Volver al producto</button><button type="button" className="product-positive-action" onClick={continueConversion}>Continuar</button></div>
+          <div className="variant-editor-actions"><button type="button" className={`${secondaryButtonClass} mr-auto!`} onClick={backToProduct}>Volver al producto</button>{!externalActions && <button type="button" className="product-positive-action" onClick={continueConversion}>Continuar</button>}</div>
         </section>}
         <div hidden={Boolean(conversionId && conversionStep === "prepare")} className={conversionId && conversionStep === "prepare" ? "hidden" : "grid min-w-0 gap-4"}>
         {draft.conversion && <h3 ref={configurationRef} tabIndex={-1} className="m-0 text-base font-bold">2. Configurar variantes</h3>}
@@ -437,7 +439,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
           </div>
         </section>
         {files.length > 0 && <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={authorized} onChange={e => setAuthorized(e.target.checked)} />Confirmo la autorización de uso de estas imágenes y que corresponden a las variantes seleccionadas.</label>}
-        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}<button type="submit" className="product-positive-action creation-continue-action">{inline && !draft.conversion ? <><span>{busy ? "Guardando…" : creationStockAction(draft.rows.map(row => row.initialStock)).label}</span><ArrowRight size={18} aria-hidden="true" /></> : <><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : embedded ? "Confirmar configuración" : "Guardar cambios"}</>}</button></div>
+        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}{!externalActions && <button type="submit" className="product-positive-action creation-continue-action">{inline && !draft.conversion ? <><span>{busy ? "Guardando…" : actionLabel}</span><ArrowRight size={18} aria-hidden="true" /></> : <><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : embedded ? "Confirmar configuración" : "Guardar cambios"}</>}</button>}</div>
         </div>
       </fieldset>
     </form>

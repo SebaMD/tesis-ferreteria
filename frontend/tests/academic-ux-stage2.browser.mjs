@@ -52,7 +52,10 @@ try {
           data = { familyId, productIds: ids, replayed: false };
         }
         else if (endpoint.endsWith("/online-orders/guest/device-orders")) data = extra.includes("with-orders") ? [{ id: 1, status: "CANCELLED", createdAt: "2026-11-02T12:00:00Z", total: 5990, deliveryType: "PICKUP", items: [] }] : [];
-        else if (endpoint.endsWith("/online-orders/delivery-address")) data = extra.includes("no-address") ? null : saved;
+        else if (endpoint.endsWith("/online-orders/delivery-address")) {
+          assert.equal(route.request().method(), "GET", "editing checkout must not write account address early");
+          data = extra.includes("no-address") ? null : extra.includes("outside-address") ? { ...saved, commune: "Concepción" } : extra.includes("incomplete-address") ? { ...saved, phone: "" } : saved;
+        }
         else if (endpoint.endsWith("/online-orders/guest/pending")) data = null;
         else if (endpoint.endsWith("/online-orders")) data = [];
         else if (endpoint.endsWith("/online-orders/quote")) {
@@ -76,6 +79,28 @@ try {
     return page;
   }
   const noOverflow = async page => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "horizontal overflow");
+  const checkFlowPlacement = async (page, placement) => {
+    await page.waitForFunction(expected => document.querySelector('.modal-flow-actions')?.dataset.placement === expected, placement);
+    const geometry = await page.locator('.modal-flow-actions').evaluate(footer => {
+      const panel = footer.closest('[role="dialog"]').getBoundingClientRect();
+      const body = footer.closest('[role="dialog"]').querySelector('.overflow-y-auto').getBoundingClientRect();
+      return [...footer.querySelectorAll('button')].map(button => {
+        const b = button.getBoundingClientRect();
+        return { x: b.x, right: b.right, top: b.top, bottom: b.bottom, height: b.height, panelLeft: panel.left, panelRight: panel.right, bodyBottom: body.bottom, side: button.parentElement.classList.contains('modal-flow-action--left') ? 'left' : 'right' };
+      });
+    });
+    for (const b of geometry) {
+      assert.ok(b.x >= 0 && b.right <= page.viewportSize().width, "flow action stays inside viewport");
+      assert.ok(b.height >= 44, "flow action has a comfortable target");
+      if (placement === "side") assert.ok(b.side === "left" ? b.right < b.panelLeft : b.x > b.panelRight, "lateral action stays outside panel");
+      else assert.ok(b.top >= b.bodyBottom - 1, "footer is outside scrollable form");
+    }
+    const before = await page.locator('.modal-flow-actions button').first().boundingBox();
+    await page.getByRole('dialog').locator('.overflow-y-auto').evaluate(body => { body.scrollTop = body.scrollHeight; });
+    const after = await page.locator('.modal-flow-actions button').first().boundingBox();
+    assert.equal(after.y, before.y, "flow actions do not move when fields scroll");
+    await noOverflow(page);
+  };
   for (const theme of ["light", "dark"]) {
     for (const width of [320, 360, 375, 400, 1280]) {
       if (width < 720) {
@@ -128,13 +153,40 @@ try {
       if (width <= 620) assert.equal((await back.boundingBox()).width, 44);
       await checkout.getByRole("radio", { name: /Despacho local/ }).check();
       await checkout.getByRole("button", { name: "Usar otra dirección" }).waitFor();
+      assert.equal(await checkout.getByLabel("Destinatario", { exact: true }).count(), 0);
+      assert.equal(await checkout.getByRole("checkbox", { name: /Guardar.*dirección/ }).count(), 0);
       await noOverflow(checkout);
+      if ([320, 1280].includes(width)) await checkout.screenshot({ path: fileURLToPath(new URL(`saved-address4-${width}-${theme}.png`, shots)), fullPage: true });
+      await checkout.getByRole("button", { name: "Usar otra dirección" }).click();
+      const recipient = checkout.getByLabel("Destinatario", { exact: true });
+      await recipient.fill("Otra persona");
+      await checkout.getByLabel("Dirección, numeración o sector").fill("Otra dirección 456");
+      await checkout.getByRole("button", { name: "Volver a usar dirección guardada" }).click();
       await checkout.getByRole("link", { name: "Condiciones de despacho", exact: true }).click();
       await checkout.getByRole("heading", { name: "Condiciones de despacho local" }).waitFor();
       if (width <= 620) assert.equal((await checkout.getByRole("link", { name: "Volver a finalizar compra" }).boundingBox()).width, 44);
       await noOverflow(checkout);
       if ([320, 1280].includes(width)) await checkout.screenshot({ path: fileURLToPath(new URL(`conditions-${width}-${theme}.png`, shots)), fullPage: true });
+      await checkout.getByRole("link", { name: "Volver a finalizar compra" }).click();
+      await checkout.getByRole("button", { name: "Usar otra dirección" }).click();
+      assert.equal(await recipient.inputValue(), "Otra persona");
+      assert.equal(await checkout.getByLabel("Dirección, numeración o sector").inputValue(), "Otra dirección 456");
+      await noOverflow(checkout);
       await checkout.context().close();
+      const choice = await pageFor("purchase", width, theme, "guest");
+      await choice.getByRole("button", { name: "Comprar ahora" }).click();
+      const choiceBack = choice.locator(".public-page-header").getByRole("link", { name: "Volver al producto", exact: true });
+      const backBox = await choiceBack.boundingBox();
+      const firstCard = await choice.locator("main article").first().boundingBox();
+      assert.ok(backBox.y + backBox.height <= firstCard.y, "choice return belongs above both cards");
+      if (width < 620) assert.ok(backBox.width >= 44 && backBox.height >= 44);
+      await choice.keyboard.press("Tab"); await choiceBack.focus(); assert.equal(await choiceBack.evaluate(e => getComputedStyle(e).outlineStyle), "solid");
+      await noOverflow(choice);
+      if ([320, 1280].includes(width)) await choice.screenshot({ path: fileURLToPath(new URL(`choice4-${width}-${theme}.png`, shots)), fullPage: true });
+      await choiceBack.click();
+      assert.equal(await choice.getByTestId("route").textContent(), "/catalog/families/18?variant=99");
+      assert.equal(await choice.getByTestId("cart").textContent(), "[[5,4]]");
+      await choice.context().close();
     }
   }
   for (const guest of [false, true]) {
@@ -162,11 +214,16 @@ try {
     await page.getByRole("button", { name: "Comprar ahora" }).click();
     await page.getByRole("radio", { name: /Despacho local/ }).check();
     if (hasAddress) {
+      assert.equal(await page.getByLabel("Destinatario", { exact: true }).count(), 0);
+      assert.equal(await page.getByRole("checkbox", { name: /Guardar.*dirección/ }).count(), 0);
       await page.getByRole("button", { name: "Usar otra dirección" }).click();
       assert.equal(await page.getByLabel("Destinatario", { exact: true }).inputValue(), "");
-      await page.getByRole("button", { name: "Usar dirección guardada" }).click();
-      assert.equal(await page.getByLabel("Destinatario", { exact: true }).inputValue(), saved.recipientName);
+      await page.getByLabel("Destinatario", { exact: true }).fill("Borrador alternativo");
+      await page.getByRole("button", { name: "Volver a usar dirección guardada" }).click();
+      assert.equal(await page.getByLabel("Destinatario", { exact: true }).count(), 0);
+      await page.getByRole("region", { name: "Dirección guardada", exact: true }).getByText(saved.recipientName, { exact: false }).waitFor();
       await page.getByRole("button", { name: "Usar otra dirección" }).click();
+      assert.equal(await page.getByLabel("Destinatario", { exact: true }).inputValue(), "Borrador alternativo");
     }
     await page.getByLabel("Destinatario", { exact: true }).fill("Otro destinatario");
     await page.getByLabel("Teléfono de contacto").fill("+56987654321");
@@ -189,9 +246,29 @@ try {
     assert.equal(requests.at(-1).deliveryRecipientName, "Otro destinatario");
     await noOverflow(page); await page.context().close();
   }
+  for (const mode of ["saved", "alternative", "outside-address", "incomplete-address"]) {
+    const page = await pageFor("purchase", 375, "dark", mode);
+    await page.getByRole("button", { name: "Comprar ahora" }).click();
+    await page.getByRole("radio", { name: /Despacho local/ }).check();
+    if (mode === "alternative") await page.getByRole("button", { name: "Usar otra dirección", exact: true }).click();
+    if (mode !== "saved") {
+      const recipient = page.getByLabel("Destinatario", { exact: true }); await recipient.waitFor();
+      assert.equal(await page.getByRole("region", { name: "Dirección guardada", exact: true }).count(), 0);
+      if (mode === "outside-address") assert.equal(await page.getByLabel("Dirección, numeración o sector").inputValue(), "");
+      await recipient.fill("Destino de este pedido");
+      await page.getByLabel("Teléfono de contacto").fill("+56987654321");
+      await page.getByLabel("Dirección, numeración o sector").fill("Calle del pedido 456");
+    } else await page.getByRole("button", { name: "Usar otra dirección", exact: true }).waitFor();
+    await Promise.all([page.waitForResponse(response => response.url().endsWith("/online-orders/checkout")), page.getByRole("button", { name: "Pagar con Webpay Plus" }).click()]);
+    assert.equal(requests.at(-1).saveDeliveryAddress, false, "neither reuse nor a one-order alternative replaces account data");
+    assert.equal(requests.at(-1).deliveryAddress, mode === "saved" ? saved.address : "Calle del pedido 456");
+    await noOverflow(page); await page.context().close();
+  }
   for (const theme of ["light", "dark"]) for (const width of [320, 360, 375, 400, 1280]) {
     const page = await pageFor("guest-orders", width, theme, "guest");
     await page.getByRole("link", { name: "Explorar catálogo", exact: true }).waitFor();
+    assert.equal(await page.getByRole("link", { name: "Volver al catálogo", exact: true }).count(), 0);
+    if ([320, 1280].includes(width)) await page.screenshot({ path: fileURLToPath(new URL(`guest-empty4-${width}-${theme}.png`, shots)), fullPage: true });
     await noOverflow(page); await page.context().close();
     const guestOrders = await pageFor("guest-orders", width, theme, "guest&with-orders");
     const back = guestOrders.getByRole("link", { name: "Volver al catálogo", exact: true }); await back.waitFor();
@@ -201,6 +278,49 @@ try {
       assert.ok(Math.abs(heading.x + heading.width / 2 - width / 2) < 2, "title must be centered independently of arrow");
     }
     await noOverflow(guestOrders); await guestOrders.context().close();
+    for (const hasFavorites of [false, true]) {
+      const favorites = await pageFor("scroll", width, theme, hasFavorites ? "with-favorites" : "");
+      await favorites.getByRole("navigation", { name: "Pruebas de navegación" }).getByRole("link", { name: "Favoritos", exact: true }).click();
+      if (!hasFavorites) {
+        await favorites.getByRole("link", { name: "Explorar catálogo", exact: true }).waitFor();
+        assert.equal(await favorites.locator('.public-page-header .compact-back-link').count(), 0);
+      } else {
+        const back = favorites.locator('.public-page-header .compact-back-link');
+        await back.waitFor(); await back.click();
+        await favorites.getByRole("link", { name: "Artículo 1", exact: true }).waitFor();
+      }
+      await noOverflow(favorites); await favorites.context().close();
+    }
+  }
+  for (const theme of ["light", "dark"]) {
+    const lateral = await pageFor("inventory", 1280, theme);
+    await lateral.getByRole("button", { name: "Gestionar categorías", exact: true }).click();
+    await lateral.getByRole("dialog").getByLabel("Nombre", { exact: true }).fill("Categoría lateral UX");
+    await checkFlowPlacement(lateral, "side");
+    await lateral.getByRole("button", { name: "Guardar y agregar producto", exact: true }).click();
+    await lateral.getByRole("dialog").getByLabel("Nombre", { exact: true }).fill("Producto lateral UX");
+    await lateral.getByRole("dialog").getByLabel("Precio", { exact: true }).fill("1000");
+    for (const width of [320, 360, 375, 400, 1280]) {
+      await lateral.setViewportSize({ width, height: 900 });
+      await checkFlowPlacement(lateral, width === 1280 ? "side" : "footer");
+      for (const [stock, label] of [["", "Guardar y registrar entrada"], ["0", "Guardar y revisar existencias"], ["5", "Guardar y revisar entrada"]]) {
+        await lateral.getByRole("spinbutton", { name: /^Stock inicial/ }).fill(stock);
+        assert.equal(await lateral.locator('.modal-flow-actions').getByRole("button", { name: label, exact: true }).isEnabled(), true);
+      }
+      const last = lateral.locator('.modal-flow-actions button').last();
+      await last.focus(); await lateral.keyboard.press("Tab");
+      assert.equal(await lateral.getByRole("button", { name: "Cerrar diálogo" }).evaluate(element => element === document.activeElement), true);
+      await lateral.keyboard.press("Shift+Tab");
+      assert.equal(await last.evaluate(element => element === document.activeElement), true);
+      if ([320, 1280].includes(width)) await lateral.screenshot({ path: fileURLToPath(new URL(`product-actions4-${width}-${theme}.png`, shots)), fullPage: true });
+    }
+    await lateral.getByRole("button", { name: "Producto con variantes", exact: true }).click();
+    await checkFlowPlacement(lateral, "footer");
+    await lateral.setViewportSize({ width: 1800, height: 900 });
+    await checkFlowPlacement(lateral, "side");
+    assert.equal(lateral.uxRecords.bundleWrites.length, 0); assert.equal(lateral.uxRecords.movementWrites, 0);
+    await lateral.keyboard.press("Escape"); assert.equal(await lateral.getByRole("dialog").count(), 0);
+    await lateral.context().close();
   }
   for (const stock of ["", "0", "5"]) {
     const page = await pageFor("inventory", 375, "light");
@@ -223,9 +343,10 @@ try {
         await page.setViewportSize({ width, height: 900 });
         const back = page.getByRole("button", { name: "Volver a categoría", exact: true });
         await back.scrollIntoViewIfNeeded();
-        assert.equal(await back.evaluate(element => getComputedStyle(element).position), "static");
-        const b = await back.boundingBox(); const heading = await page.getByRole("heading", { name: "1. Preparar conversión" }).boundingBox();
-        assert.ok(b.y + b.height <= heading.y, "back button must not cover conversion fields");
+        const actions = page.locator('.modal-flow-actions');
+        assert.equal(await actions.getAttribute("data-placement"), "footer", "wide conversion panel uses footer when side space is insufficient");
+        const b = await back.boundingBox(); const body = await back.evaluate(element => { const body = element.closest('[role="dialog"]').querySelector('.overflow-y-auto'); return { bottom: body.getBoundingClientRect().bottom }; });
+        assert.ok(b.y >= body.bottom - 1, "back button must be below scrollable fields");
         await noOverflow(page);
       }
     }
@@ -265,7 +386,7 @@ try {
   assert.equal(await quick.getByRole("dialog").getByLabel("Nombre", { exact: true }).inputValue(), "");
   assert.equal(quick.uxRecords.bundleWrites.length, 1);
   await quick.context().close();
-  const scroll = await pageFor("scroll", 1280, "light");
+  const scroll = await pageFor("scroll", 1280, "light", "with-favorites");
   await scroll.getByRole("link", { name: "Artículo 7", exact: true }).waitFor();
   await scroll.getByRole("combobox", { name: "Ordenar catálogo" }).click();
   await scroll.getByRole("option", { name: "Precio: mayor a menor", exact: true }).click();
@@ -323,6 +444,7 @@ try {
   assert.deepEqual(errors, []);
   console.log("PASS browser: filters (draft/apply/cancel/Escape/focus), family headings, direct guest/client purchase, address reuse/replacement, information return, swipe/keyboard/dots; light/dark 320/360/375/400/1280. APIs simulated; no persistence claimed.");
   console.log("PASS UX3: empty/zero/positive stock continuation, category draft roundtrip, inline back/conversion title, family per-SKU stock, no automatic extra movement, guest empty/history actions, centered client headers, async catalog POP/reload/context/filter restoration.");
+  console.log("PASS UX4: shared empty states/no duplicate return, compact accessible header arrows, guest choice header return, saved-address summary/form exclusivity and preserved alternative draft, optional confirmed replacement, external modal actions or pinned footer based on real space, keyboard/focus/Escape. APIs simulated.");
   console.log("Screenshots:", fileURLToPath(shots));
 } catch (error) {
   console.error("Browser runtime errors:", errors);

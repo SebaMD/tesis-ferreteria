@@ -1167,6 +1167,26 @@
   outline-offset: 3px;
 }
 .variant-section-add { flex-shrink: 0; }
+.modal-flow-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-slate-200);
+}
+.modal-flow-action { flex: 1; min-width: 0; }
+.modal-flow-action > button { width: 100%; min-height: 44px; margin: 0; white-space: normal; }
+.modal-flow-action > button > span { min-width: 0; overflow-wrap: anywhere; }
+.modal-flow-action > button > svg { flex-shrink: 0; }
+.modal-flow-actions[data-placement="side"] { padding: 0; border: 0; }
+.modal-flow-actions[data-placement="side"] > .modal-flow-action { position: absolute; top: 50%; width: 210px; transform: translateY(-50%); }
+.modal-flow-actions[data-placement="side"] > .modal-flow-action--left { right: calc(100% + 12px); }
+.modal-flow-actions[data-placement="side"] > .modal-flow-action--right { left: calc(100% + 12px); }
+@media (max-width: 400px) {
+  .modal-flow-actions { gap: 8px; padding: 10px; }
+  .modal-flow-action > button { padding: 10px 8px; font-size: 12px; }
+}
+
 .linked-flow-back {
   position: static;
   display: inline-flex;
@@ -1187,8 +1207,12 @@
   .public-page-header > :first-child { grid-column: 2; text-align: center; }
   .public-page-header > :first-child:last-child { grid-column: 1 / -1; }
   .public-page-header > .compact-back-link { grid-column: 3; grid-row: 1; }
-  .compact-back-link { width: 44px; padding: 10px; border-radius: 8px; background: var(--color-rust-500); color: white; }
-  .compact-back-link:hover { background: var(--color-rust-600); color: white; }
+  .compact-back-link { position: relative; isolation: isolate; width: 44px; height: 44px; padding: 12px; border-radius: 50%; background: transparent; color: var(--color-rust-600); }
+  .compact-back-link::before { content: ""; position: absolute; inset: 6px; z-index: -1; border: 1px solid var(--color-rust-500); border-radius: 50%; }
+  .compact-back-link:hover { color: white; }
+  .compact-back-link:hover::before { background: var(--color-rust-600); }
+  .dark .compact-back-link { color: var(--color-rust-500); }
+  .dark .compact-back-link:hover { color: white; }
   .compact-back-link > span, .variant-section-add > span { display: none; }
   .variant-section-add { width: 44px !important; height: 44px; padding: 0 !important; }
   .public-page-header > :first-child { flex: 1; }

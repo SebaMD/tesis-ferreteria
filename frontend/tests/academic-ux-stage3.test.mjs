@@ -70,10 +70,11 @@ test("scroll persistence is bounded and excludes search/hash/token data; storage
   assert.equal(readCatalogEntry("ux3-test").snapshot.page, 3);
 });
 
-test("category return stays in normal layout and captures draft; conversion title takes priority", async () => {
+test("category return stays outside fields and captures draft; conversion title takes priority", async () => {
   const [page, editor, styles] = await Promise.all([read("pages/ProductsPage.jsx"), read("components/ProductBundleEditor.jsx"), read("styles/styles.css")]);
   assert.match(page, /className="linked-flow-back"/);
   assert.match(styles, /\.linked-flow-back \{\s*position: static/);
+  assert.match(page, /flowActions=\{linkedRegistration\?\.step === "product"/);
   assert.match(page, /title=\{editingProductId && variantsEnabled \? "Convertir producto en variantes"/);
   assert.match(page, /productDraft = \{ form, unitSearch, files: pendingProductImages/);
   assert.match(editor, /saved\?\.conversion\?\.expectedRevision===data.revision/);
@@ -83,10 +84,11 @@ test("category return stays in normal layout and captures draft; conversion titl
 });
 
 test("guest empty state has catalog action, real headers preserve contextual return and symmetric mobile centering", async () => {
-  const [guest, styles, navbar] = await Promise.all([read("pages/GuestDeviceOrdersPage.jsx"), read("styles/styles.css"), read("components/ClientNavbar.jsx")]);
-  assert.match(guest, /Explorar catálogo<\/Link>/);
+  const [guest, styles, navbar, empty] = await Promise.all([read("pages/GuestDeviceOrdersPage.jsx"), read("styles/styles.css"), read("components/ClientNavbar.jsx"), read("components/CatalogEmptyState.jsx")]);
+  assert.match(guest, /<CatalogEmptyState icon=\{ClipboardList\}/);
+  assert.match(empty, /Explorar catálogo<\/Link>/);
   assert.match(guest, /orders.length > 0 && <InformationBackLink/);
   assert.match(styles, /grid-template-columns: 44px minmax\(0, 1fr\) 44px/);
-  assert.match(styles, /\.compact-back-link \{ width: 44px;[^}]*background: var\(--color-rust-500\); color: white/s);
+  assert.match(styles, /\.compact-back-link \{[^}]*width: 44px;[^}]*background: transparent; color: var\(--color-rust-600\)/s);
   assert.match(navbar, /to="\/account" state=\{informationNavigationState\(location, "\/account"\)\}/);
 });

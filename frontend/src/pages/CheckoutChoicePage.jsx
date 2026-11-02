@@ -26,12 +26,12 @@ export default function CheckoutChoicePage() {
 
   return (
     <main className="mx-auto grid w-full max-w-220 gap-5 px-6 py-10 max-[720px]:px-3.5">
-      <div className="text-center">
+      <header className="public-page-header"><div className="text-center">
         <h1 className="m-0 text-2xl font-bold text-ink-950">¿Cómo quieres continuar?</h1>
         <p className="mt-2 mb-0 text-sm text-slate-500">
           Puedes comprar sin crear una cuenta o ingresar para reutilizar tus datos.
         </p>
-      </div>
+      </div><CompactBackLink {...checkoutReturn(checkoutState)} /></header>
 
       <section className="grid grid-cols-2 gap-4 max-[720px]:grid-cols-1">
         <article className="grid content-start gap-4 rounded-lg border-2 border-rust-500 bg-white p-6 shadow-sm">
@@ -68,7 +68,6 @@ export default function CheckoutChoicePage() {
         </article>
       </section>
 
-      <CompactBackLink {...checkoutReturn(checkoutState)} />
     </main>
   );
 }

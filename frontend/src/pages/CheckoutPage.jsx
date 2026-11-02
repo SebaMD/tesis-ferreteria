@@ -13,7 +13,7 @@ import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import DeliveryConditions from "../components/DeliveryConditions.jsx";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { receiveCheckoutQuote, acceptCheckoutQuote, checkoutQuoteFailure, createLatestCheckoutRequest } from "../helpers/checkoutQuote.js";
-import { EMPTY_CHECKOUT_DESTINATION, mergeSavedCheckoutDestination, savedCheckoutDestination } from "../helpers/checkoutDestination.js";
+import { EMPTY_CHECKOUT_DESTINATION, mergeSavedCheckoutDestination, savedCheckoutDestination, savedCheckoutAddressIsUsable } from "../helpers/checkoutDestination.js";
 import CheckoutDraftContext from "../context/CheckoutDraftContext.js";
 import { markDirectPurchaseOrder, readDirectPurchaseItem } from "../helpers/directPurchase.js";
 import { readCheckoutIntent, resolveCheckoutItems, checkoutReturn } from "../helpers/checkoutIntent.js";
@@ -87,18 +87,31 @@ function CheckoutForm({ draftStore }) {
   const [savedAddressNote, setSavedAddressNote] = useState("");
   const [savedAddress, setSavedAddress] = useState(null);
   const [savedAddressLoading, setSavedAddressLoading] = useState(isClient);
+  const [addressMode, setAddressMode] = useState(initialDraft?.addressMode || "AUTO");
+  const addressModeRef = useRef(initialDraft?.addressMode || "AUTO");
+  const alternativeDestination = useRef(initialDraft?.alternativeDestination || null);
+  const recipientInputRef = useRef(null);
+  const anotherAddressButtonRef = useRef(null);
   const [saveAddress, setSaveAddress] = useState(false);
   const [confirmAddressReplacement, setConfirmAddressReplacement] = useState(false);
-  const destinationField=key=>({value:destination[key],onChange:e=>{destinationTouched.current[key]=true;setDestination(v=>({...v,[key]:e.target.value}));if(savedAddress)setSaveAddress(false);}});
+  const destinationField=key=>({value:destination[key],onChange:e=>{addressModeRef.current="ALTERNATIVE";setAddressMode("ALTERNATIVE");destinationTouched.current[key]=true;setDestination(v=>({...v,[key]:e.target.value}));if(savedAddress)setSaveAddress(false);}});
   const useAnotherAddress = () => {
     destinationTouched.current = Object.fromEntries(Object.keys(EMPTY_CHECKOUT_DESTINATION).map(key => [key, true]));
-    setDestination({ ...EMPTY_CHECKOUT_DESTINATION }); setSaveAddress(false); setSavedAddressNote("");
+    addressModeRef.current = "ALTERNATIVE"; setAddressMode("ALTERNATIVE");
+    setDestination({ ...(alternativeDestination.current || EMPTY_CHECKOUT_DESTINATION) }); setSaveAddress(false); setSavedAddressNote("");
+    requestAnimationFrame(() => recipientInputRef.current?.focus());
   };
   const useSavedAddress = () => {
+    if (!savedCheckoutAddressIsUsable(savedAddress)) return;
+    if (addressModeRef.current !== "SAVED") alternativeDestination.current = { ...destination };
     const saved = savedCheckoutDestination(savedAddress);
     destinationTouched.current = Object.fromEntries(Object.keys(EMPTY_CHECKOUT_DESTINATION).map(key => [key, true]));
+    addressModeRef.current = "SAVED"; setAddressMode("SAVED");
     setDestination({ ...EMPTY_CHECKOUT_DESTINATION, ...saved.values }); setSaveAddress(false); setSavedAddressNote(saved.note);
+    requestAnimationFrame(() => anotherAddressButtonRef.current?.focus());
   };
+  const usingSavedAddress = isClient && addressMode === "SAVED" && savedCheckoutAddressIsUsable(savedAddress);
+  const loadingSavedAddress = isClient && addressMode === "AUTO" && savedAddressLoading;
   const destinationValid=deliveryType==="PICKUP"||(destination.deliveryRecipientName.trim().length>0&&/^[+0-9()\s-]{7,20}$/.test(destination.deliveryPhone)&&destination.deliveryAddress.trim().length>0);
   const [quoteState, setQuoteState] = useState({ key: "", data: null, error: "", acceptedSignature: initialDraft?.acceptedSignature || null, requireAcceptance: Boolean(initialDraft?.requireAcceptance) });
   const [quoteRefresh, setQuoteRefresh] = useState(0);
@@ -123,9 +136,9 @@ function CheckoutForm({ draftStore }) {
   );
 
   useEffect(() => {
-    draftStore.write(checkoutScope, { checkoutKey, deliveryType, destination, touched: destinationTouched.current,
+    draftStore.write(checkoutScope, { checkoutKey, deliveryType, destination, addressMode, alternativeDestination: alternativeDestination.current, touched: destinationTouched.current,
       guestData, guestEmailVerification, acceptedSignature: quoteState.acceptedSignature, requireAcceptance: quoteState.requireAcceptance });
-  }, [draftStore, checkoutScope, checkoutKey, deliveryType, destination, guestData, guestEmailVerification, quoteState.acceptedSignature, quoteState.requireAcceptance]);
+  }, [draftStore, checkoutScope, checkoutKey, deliveryType, destination, addressMode, guestData, guestEmailVerification, quoteState.acceptedSignature, quoteState.requireAcceptance]);
 
   useEffect(() => {
     if (!isClient) return undefined;
@@ -134,7 +147,10 @@ function CheckoutForm({ draftStore }) {
       if (controller.signal.aborted) return;
       setSavedAddress(saved);
       setSavedAddressLoading(false);
-      setDestination(current => mergeSavedCheckoutDestination(current, destinationTouched.current, saved));
+      const usable = savedCheckoutAddressIsUsable(saved);
+      const useDefault = usable && (addressModeRef.current === "SAVED" || addressModeRef.current === "AUTO" && !Object.values(destinationTouched.current).some(Boolean));
+      addressModeRef.current = useDefault ? "SAVED" : "ALTERNATIVE"; setAddressMode(addressModeRef.current);
+      setDestination(current => useDefault ? { ...EMPTY_CHECKOUT_DESTINATION, ...savedCheckoutDestination(saved).values } : mergeSavedCheckoutDestination(current, destinationTouched.current, saved));
       setSavedAddressNote(savedCheckoutDestination(saved).note);
     }).catch(() => {
       if (!controller.signal.aborted) { setSavedAddressLoading(false); setSavedAddressNote("No se pudo cargar la dirección guardada. Puedes ingresar los datos de entrega manualmente. Para guardar una dirección, vuelve a consultar Mi cuenta."); }
@@ -315,7 +331,7 @@ function CheckoutForm({ draftStore }) {
         })),
         deliveryType,
         ...(deliveryType==="DELIVERY"?{...destination,deliveryCommune:DELIVERY_COMMUNE}:{}),
-        saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveAddress,
+        saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveAddress && addressMode === "ALTERNATIVE",
       };
       const payment = isClient
         ? await createOnlineOrderCheckoutRequest(checkoutData)
@@ -582,19 +598,19 @@ function CheckoutForm({ draftStore }) {
               {deliveryType === "DELIVERY" && (
                 <div className="grid gap-3">
                   <DeliveryConditions />
-                  {isClient && savedAddress && <section className="grid gap-2 rounded-[5px] border border-slate-300 bg-slate-50 p-3 text-sm" aria-label="Dirección guardada">
+                  {loadingSavedAddress && <p role="status" className="text-sm text-slate-600">Cargando dirección de Mi cuenta…</p>}
+                  {usingSavedAddress && <section className="grid gap-2 rounded-[5px] border border-slate-300 bg-slate-50 p-3 text-sm" aria-label="Dirección guardada">
                     <strong>Dirección guardada en Mi cuenta</strong>
                     <span>{savedAddress.recipientName} · {savedAddress.phone}</span>
                     <span>{savedAddress.address} · {savedAddress.commune}</span>
                     {savedAddress.reference && <span>{savedAddress.reference}</span>}
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={useSavedAddress} disabled={submitting}>Usar dirección guardada</button>
-                      <button type="button" onClick={useAnotherAddress} disabled={submitting}>Usar otra dirección</button>
-                    </div>
-                    <p className="m-0 text-xs">Puedes usar otra dirección solo para este pedido, sin reemplazar la guardada.</p>
+                    <p className="m-0 text-xs">Esta dirección se utilizará para este pedido.</p>
+                    <button ref={anotherAddressButtonRef} className="w-fit border-slate-300 bg-white text-ink-700" type="button" onClick={useAnotherAddress} disabled={submitting}>Usar otra dirección</button>
                   </section>}
+                  {!usingSavedAddress && !loadingSavedAddress && <>
+                  {isClient && savedCheckoutAddressIsUsable(savedAddress) && <button className="w-fit border-slate-300 bg-white text-ink-700" type="button" onClick={useSavedAddress} disabled={submitting}>Volver a usar dirección guardada</button>}
                   <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    <label>Destinatario<input required maxLength={240} autoComplete="shipping name" {...destinationField("deliveryRecipientName")}/></label>
+                    <label>Destinatario<input ref={recipientInputRef} required maxLength={240} autoComplete="shipping name" {...destinationField("deliveryRecipientName")}/></label>
                     <label>Teléfono de contacto<input required maxLength={20} type="tel" autoComplete="shipping tel" {...destinationField("deliveryPhone")}/></label>
                     <label>Comuna<select value={DELIVERY_COMMUNE} onChange={()=>{}} aria-describedby="local-coverage-help"><option value={DELIVERY_COMMUNE}>{DELIVERY_COMMUNE}</option></select></label>
                     <label>Dirección, numeración o sector<input required maxLength={300} autoComplete="shipping street-address" {...destinationField("deliveryAddress")}/></label>
@@ -604,6 +620,7 @@ function CheckoutForm({ draftStore }) {
                     <input className="mt-1 size-4 shrink-0" type="checkbox" checked={saveAddress} disabled={savedAddressLoading || submitting || !destinationValid || Boolean(savedAddressNote && !savedAddress)} onChange={event => { if (event.target.checked && savedAddress) setConfirmAddressReplacement(true); else setSaveAddress(event.target.checked); }} />
                     <span>{savedAddress ? "Guardar esta dirección y reemplazar la de Mi cuenta" : "Guardar dirección en Mi cuenta"}<small className="mt-1 block">Se guardará al crear el pedido al iniciar el pago, no al marcar esta casilla.</small></span>
                   </label>}
+                  </>}
                   {savedAddressNote && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">{savedAddressNote}</p>}
                   <p id="local-coverage-help" className="m-0 text-xs text-slate-500">Solo se admite Santa Juana. No verificamos físicamente la dirección mediante mapas o geocodificación. Revisa los datos antes de pagar.</p>
                 </div>

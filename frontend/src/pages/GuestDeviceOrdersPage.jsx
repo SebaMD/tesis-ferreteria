@@ -1,6 +1,6 @@
 import { ClipboardList, CreditCard, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import CatalogEmptyState from "../components/CatalogEmptyState.jsx";
 import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -137,12 +137,7 @@ export default function GuestDeviceOrdersPage() {
       )}
 
       {!loading && !error && orders.length === 0 ? (
-        <section className="grid justify-items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-14 text-center">
-          <ClipboardList className="text-slate-400" size={42} />
-          <strong className="text-ink-950">Todavía no hay compras invitadas en este dispositivo</strong>
-          <p className="m-0 max-w-130 text-sm leading-6 text-slate-500">Las compras aparecerán aquí sin guardar los tokens individuales de seguimiento en el navegador.</p>
-          <Link className="product-positive-action inline-flex min-h-11 items-center justify-center rounded-[5px] px-5 text-sm font-bold no-underline" to="/catalog">Explorar catálogo</Link>
-        </section>
+        <CatalogEmptyState icon={ClipboardList} title="Todavía no hay compras invitadas en este dispositivo">Las compras aparecerán aquí sin guardar los tokens individuales de seguimiento en el navegador.</CatalogEmptyState>
       ) : !loading && !error && (
         <>
           {grouped.payments.length > 0 && (

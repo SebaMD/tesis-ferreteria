@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const sizeClasses = {
@@ -20,6 +20,7 @@ export default function AppModal({
   onClose,
   children,
   footer,
+  flowActions,
   headerActions,
   size = "medium",
   panelClassName = "",
@@ -32,6 +33,23 @@ export default function AppModal({
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const lastFocusedRef = useRef(null);
+  const [sideActions, setSideActions] = useState(false);
+  const hasFlowActions = Boolean(flowActions);
+
+  useLayoutEffect(() => {
+    if (!open || suspended || !hasFlowActions) return undefined;
+    const panel = dialogRef.current;
+    const measure = () => {
+      const { left, right } = panel.getBoundingClientRect();
+      // Each action needs 210px plus a 12px gap and a safe viewport margin.
+      setSideActions(Math.min(left, window.innerWidth - right) >= 234);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    window.addEventListener("resize", measure);
+    return () => { observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [open, suspended, hasFlowActions, size]);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -110,7 +128,7 @@ export default function AppModal({
       }}
     >
       <section
-        className={`app-modal-panel flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
+        className={`app-modal-panel relative flex max-h-[calc(100dvh-48px)] w-full flex-col ${hasFlowActions && sideActions ? "overflow-visible" : "overflow-hidden"} rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
         ref={dialogRef}
         onFocusCapture={event => { lastFocusedRef.current = event.target; }}
         role={suspended ? undefined : "dialog"}
@@ -139,6 +157,10 @@ export default function AppModal({
         </header>
         <div className="min-h-0 overflow-y-auto overscroll-contain p-5 max-[720px]:px-4">{children}</div>
         {footer && <footer className="admin-form-actions shrink-0 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}
+        {flowActions && <footer className="modal-flow-actions" data-placement={sideActions ? "side" : "footer"} aria-label="Continuar registro">
+          {flowActions.left && <div className="modal-flow-action modal-flow-action--left">{flowActions.left}</div>}
+          {flowActions.right && <div className="modal-flow-action modal-flow-action--right">{flowActions.right}</div>}
+        </footer>}
       </section>
     </div>,
     document.body,

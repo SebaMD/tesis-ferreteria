@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import {useEffect,useId,useRef,useState} from "react";
 import {toast} from "sonner";
 import AppModal from "./AppModal.jsx";
@@ -35,7 +36,7 @@ export default function FamilyDimensionDialog({draft,userId,onClose,onSaved,onCo
  async function submit(event){event?.preventDefault();event?.stopPropagation();if(guard.current)return;
   if(!frozen.current&&(!config.valid||duplicateName||!confirmed||reason.trim().length<8||reason.trim().length>500)){report(new Error("Completa el atributo, todas las asignaciones y el motivo antes de confirmar"));return;}
   guard.current=true;setBusy(true);setError("");try{
-   if(!frozen.current){const body={name:config.name,...measurementFields(config),options:config.options,assignments:config.assignments,reason:reason.trim(),confirmed:true,expectedRevision:draft.revision,operationKey:crypto.randomUUID()};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}
+   if(!frozen.current){const body={name:config.name,...measurementFields(config),options:config.options,assignments:config.assignments,reason:reason.trim(),confirmed:true,expectedRevision:draft.revision,operationKey:createId()};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}
    await finish((await api.post(path,frozen.current)).data.data);
   }catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);}setReview(false);if(e.response?.status===409)onConflict();report(e);}finally{guard.current=false;setBusy(false);}}
  async function recover(){if(guard.current||!frozen.current)return;guard.current=true;setBusy(true);try{const result=(await api.get(`${path}/${encodeURIComponent(frozen.current.operationKey)}`)).data.data;if(result)await finish(result);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);setConfirmed(false);report(new Error("No hay una ampliación confirmada. Revisa todas las asignaciones antes de reintentar."));}}catch(e){report(e);}finally{guard.current=false;setBusy(false);}}

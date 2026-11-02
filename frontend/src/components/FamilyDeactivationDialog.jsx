@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import AppModal from "./AppModal.jsx";
@@ -27,7 +28,7 @@ export default function FamilyDeactivationDialog({ familyId, userId, onClose, on
     if (!frozen.current && (!confirmed || reason.trim().length < 8 || reason.trim().length > 500 || !active.length)) { setError("Confirma la familia e indica un motivo de 8 a 500 caracteres."); return; }
     guard.current = true; setBusy(true); setError("");
     try {
-      if (!frozen.current) { const body = { operationKey: crypto.randomUUID(), expectedRevision: bundle.revision, reason: reason.trim(), confirmed: true }; sessionStorage.setItem(storageKey, JSON.stringify(body)); frozen.current = body; }
+      if (!frozen.current) { const body = { operationKey: createId(), expectedRevision: bundle.revision, reason: reason.trim(), confirmed: true }; sessionStorage.setItem(storageKey, JSON.stringify(body)); frozen.current = body; }
       await api.post(path, frozen.current); await finish();
     } catch (e) {
       if (!e.response || e.response.status >= 500) setUncertain(Boolean(frozen.current));

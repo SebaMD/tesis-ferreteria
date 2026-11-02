@@ -1,5 +1,6 @@
 import { ArrowLeft, CreditCard, RefreshCw, ShieldCheck, ShoppingCart, Store, Truck, UserRound } from "lucide-react";
 import { variantLabel } from "../helpers/productVariants.js";
+import { createId } from "../helpers/createId.js";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigationType } from "react-router-dom";
 import { toast } from "sonner";
@@ -44,11 +45,7 @@ function getPrimaryImage(product) {
 }
 
 function createCheckoutKey() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-
-  return `checkout-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+  return createId();
 }
 
 export default function CheckoutPage() {

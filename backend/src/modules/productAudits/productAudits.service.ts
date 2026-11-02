@@ -61,7 +61,7 @@ export async function listProductAudits(actorId: number, input: Record<string, u
       select p.id,p.product_id,p.family_id,p.user_id,p.previous,p.next,p.reason,p.operation,
         to_char(p.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') created_at,
         case when u.id is not null then concat_ws(' ',u.names,u.surnames) else null end actor_name,
-        (select jsonb_build_object('previous',a.previous,'next',a.next) from raw a where a.id::text=p.next->>'authorizationId' and a.family_id=p.family_id and a.user_id=p.user_id and a.next->>'operationKey'=p.next->>'operationKey' limit 1) authorization,
+        (select jsonb_build_object('previous',a.previous,'next',a.next) from raw a where a.id::text=p.next->>'authorizationId' and a.family_id=p.family_id and a.user_id=p.user_id and a.next->>'operationKey'=p.next->>'operationKey' limit 1) AS "authorization",
         (select b.next from raw b where p.operation='CONVERT_SIMPLE' and b.operation='BUNDLE_SAVE' and b.family_id=p.family_id and b.user_id=p.user_id and b.next->>'operationKey'=p.next->>'operationKey' limit 1) companion,
         coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'type',r.operation) order by r.id) from raw r where r.id<>p.id and (
           (r.id::text=p.next->>'authorizationId' and r.family_id=p.family_id and r.user_id=p.user_id and r.next->>'operationKey'=p.next->>'operationKey')

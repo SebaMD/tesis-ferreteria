@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
@@ -27,7 +28,7 @@ function QuoteDetails({id,guest,staff,warehouse,back}) {
   const refresh=async()=>{setError("");setSummary(null);setAccepted(false);try{await load();}catch(e){setError(getApiError(e));}};
   const run=async(suffix,body)=>{
     if(busy||!q)return;setBusy(true);setError("");
-    const signature=JSON.stringify({suffix,body,version:q.version});if(command.current?.signature!==signature)command.current={signature,key:crypto.randomUUID()};
+    const signature=JSON.stringify({suffix,body,version:q.version});if(command.current?.signature!==signature)command.current={signature,key:createId()};
     try{await api("post",suffix,{expectedVersion:q.version,commandKey:command.current.key,...body},guest,id);setAction("");setReason("");setSummary(null);setAccepted(false);await load();}
     catch(e){setError(getApiError(e,"No se pudo guardar. Actualiza el estado antes de reintentar."));}
     finally{setBusy(false);}
@@ -37,7 +38,7 @@ function QuoteDetails({id,guest,staff,warehouse,back}) {
     if(paymentBusy.current||(!retry&&(!accepted||!summary)))return;paymentBusy.current=true;setBusy(true);setError("");let redirected=false;
     try{
       const fingerprint=summary?.quoteFingerprint;
-      if(!command.current||command.current.signature!==fingerprint)command.current={signature:fingerprint,key:crypto.randomUUID()};
+      if(!command.current||command.current.signature!==fingerprint)command.current={signature:fingerprint,key:createId()};
       const payment=await api("post",retry?"/payment":"/checkout",retry?{}:{commandKey:command.current.key,expectedVersion:summary.expectedVersion,accepted:true,quoteFingerprint:summary.quoteFingerprint,commercialSignature:summary.commercialSignature},guest,id);
       if(guest&&payment.guestAccessToken)saveGuestOrderAccessToken(payment.orderId,payment.guestAccessToken);
       submitWebpayForm(payment);redirected=true;

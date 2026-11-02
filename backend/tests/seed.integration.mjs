@@ -141,6 +141,10 @@ try {
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: "admin@gmail.com", password: "@dmin.2026" }) });
   const { token: cashierToken } = await request("/auth/login", { method: "POST",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: "cajero@gmail.com", password: "Cajero123." }) });
+  const audits = await request('/product-audits?limit=10', { headers: { Authorization: `Bearer ${adminToken}` } });
+  assert.ok(audits.items.length > 0);
+  const emptyAudits = await request('/product-audits?limit=10&from=1900-01-01&to=1900-01-01', { headers: { Authorization: `Bearer ${adminToken}` } });
+  assert.deepEqual(emptyAudits.items, []);
   const stock = await request("/products", { headers: { Authorization: `Bearer ${cashierToken}` } });
   const posProduct = stock.find((product) => product.status && product.availableStock > 5);
   assert.ok(posProduct);

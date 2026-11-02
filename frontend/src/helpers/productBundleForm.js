@@ -1,3 +1,4 @@
+import { createId } from "./createId.js";
 import { familyBody, familyDraft } from "./productFamilyForm.js";
 import { normalizeAttributeNumber, attributeOptionLabel } from "./attributeMeasurements.js";
 
@@ -5,13 +6,13 @@ export function reconcileAttributeOptions(attribute, optionsText) {
   const pool = [...(attribute.optionPool || attribute.draftOptions || []), ...(attribute.options || []).map(o => ({ ...o, key: `option-${o.id}` }))];
   const draftOptions = optionsText.split("\n").map(s => s.trim()).filter(Boolean).map(label => {
     const old = pool.find(o => o.label.toLocaleLowerCase("es") === label.toLocaleLowerCase("es"));
-    const option = { ...(old || {}), label, key: old?.key || crypto.randomUUID() };
+    const option = { ...(old || {}), label, key: old?.key || createId() };
     pool.push(option); return option;
   });
-  return { ...attribute, key: attribute.key || crypto.randomUUID(), optionsText, draftOptions, optionPool: pool };
+  return { ...attribute, key: attribute.key || createId(), optionsText, draftOptions, optionPool: pool };
 }
 export const newBundleAttribute = () => reconcileAttributeOptions({ name: "", options: [] }, "");
-export const newBundleRow = (attributeCount = 1, common = {}) => ({ key: crypto.randomUUID(), selections: Array(attributeCount).fill(""), name: "", nameCustomized: false,
+export const newBundleRow = (attributeCount = 1, common = {}) => ({ key: createId(), selections: Array(attributeCount).fill(""), name: "", nameCustomized: false,
   price: common.price ?? "", barcode: "", minimumStock: common.minimumStock ?? 0, initialStock: 0, status: true,
   unitMeasure: common.unitMeasure ?? "unidad", inStoreOnly: Boolean(common.inStoreOnly), files: [], useCommon: false });
 
@@ -55,7 +56,7 @@ export function setBundleRowOption(draft, rowKey, index, value) {
   const usedElsewhere = new Set(draft.rows.filter(r => r.key !== rowKey).map(r => r.selections[index]));
   const current = attribute.draftOptions.find(o => o.key === row.selections[index]);
   const matching = attribute.draftOptions.find(o => normalize(o.label) === normalize(label));
-  const option = label ? matching || { label, key: current && !current.id && !usedElsewhere.has(current.key) ? current.key : crypto.randomUUID() } : null;
+  const option = label ? matching || { label, key: current && !current.id && !usedElsewhere.has(current.key) ? current.key : createId() } : null;
   const rows = draft.rows.map(r => r.key === rowKey ? { ...r,
     optionTexts: draft.attributes.map((a, i) => i === index ? value : r.optionTexts?.[i] ?? bundleRowValues(draft, r)[i]),
     selections: r.selections.map((s, i) => i === index ? option?.key || "" : s) } : r);

@@ -6,7 +6,7 @@ test('table family action uses actual family ID and unfiltered SKU states; simpl
  assert.match(page,/allProducts=\{products\}/);assert.match(table,/onStatus\(product\)/);assert.match(editor,/deactivateProductRequest\(statusTarget.id,statusTarget.updatedAt\)/);
 });
 test('family confirmation preserves independent revision, cancel, reason, uncertain recovery and original inactive counts',async()=>{
- const dialog=await read('components/FamilyDeactivationDialog.jsx');for(const s of ['getProductBundleRequest(familyId)','expectedRevision: bundle.revision','crypto.randomUUID()','sessionStorage','Consultar resultado','Reintentar misma desactivación','previamente inactivas','No se archiva ni elimina','Cancelar'])assert.ok(dialog.includes(s),s);
+ const dialog=await read('components/FamilyDeactivationDialog.jsx');for(const s of ['getProductBundleRequest(familyId)','expectedRevision: bundle.revision','createId()','sessionStorage','Consultar resultado','Reintentar misma desactivación','previamente inactivas','No se archiva ni elimina','Cancelar'])assert.ok(dialog.includes(s),s);
  assert.doesNotMatch(dialog,/saveProductBundle|status: true|archivedAt:/);
 });
 test('family deactivation audit is a reversible availability change, never physical deletion or SKU addition',()=>{

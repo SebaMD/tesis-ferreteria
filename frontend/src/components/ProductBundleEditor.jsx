@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import { Eye, Plus, Save, Trash2, CheckCircle, XCircle, ChevronDown, ScanBarcode, Info, Pencil } from "lucide-react";
 import AttributeSuggestionDialog from "./AttributeSuggestionDialog.jsx";
@@ -204,7 +205,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     }
     try {
       if (!draft.name.trim() || !draft.categoryId || !draft.unitMeasure.trim()) throw new Error("Completa el nombre, la categoría y la unidad de venta.");
-      bundlePayload(draft, crypto.randomUUID(), files, commonFiles);
+      bundlePayload(draft, createId(), files, commonFiles);
       setError(""); return true;
     } catch (err) { setAttributesOpen(true); setVariantsOpen(true); showError(err.message, err); return false; }
   }
@@ -285,7 +286,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
         const selectedFiles = asSimple ? pendingFiles : files;
         if (selectedFiles.length && !authorized) throw new Error("Confirma que las fotografías están autorizadas y representan las variantes elegidas.");
         if (selectedFiles.length > 12 || selectedFiles.some(f => !fileTypes.split(",").includes(f.type) || f.size > 5 * 1024 * 1024) || selectedFiles.reduce((s, f) => s + f.size, 0) > 15 * 1024 * 1024) throw new Error("Máximo 12 imágenes JPEG, PNG o WebP, 5 MB por imagen y 15 MB en total.");
-        const body = asSimple ? simpleProductPayload(commonData, crypto.randomUUID(), selectedFiles) : bundlePayload(draft, crypto.randomUUID(), selectedFiles, commonFiles);
+        const body = asSimple ? simpleProductPayload(commonData, createId(), selectedFiles) : bundlePayload(draft, createId(), selectedFiles, commonFiles);
         body.images = await Promise.all(selectedFiles.map(encodeImage));
         // Keep the operation key before posting: a lost response must not create a new batch.
         sessionStorage.setItem(pendingKey, body.operationKey); frozen.current = body;

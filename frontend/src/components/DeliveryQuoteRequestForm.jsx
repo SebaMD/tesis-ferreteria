@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getApiError } from "../api/httpClient.js";
@@ -11,7 +12,7 @@ export default function DeliveryQuoteRequestForm({items,isClient,user,guestData,
   const submit=async event=>{
     event.preventDefault();if(submitting.current||!verified)return;submitting.current=true;setBusy(true);setError("");
     const payload={items,...form,...(!isClient?{guestName:guestData.name,guestEmail:guestData.email.trim().toLowerCase(),challengeId:verification?.challengeId}:{})};
-    const signature=JSON.stringify(payload);if(operation.current?.signature!==signature)operation.current={signature,key:crypto.randomUUID()};
+    const signature=JSON.stringify(payload);if(operation.current?.signature!==signature)operation.current={signature,key:createId()};
     try{setCreated((await createDeliveryQuote({...payload,requestKey:operation.current.key},!isClient)).request);}
     catch(e){setError(getApiError(e,"No se pudo registrar la solicitud. Puedes reintentar sin duplicarla."));}
     finally{submitting.current=false;setBusy(false);}

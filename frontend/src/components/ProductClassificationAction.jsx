@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import {useEffect,useRef,useState} from "react";
 import {toast} from "sonner";
 import api,{getApiError} from "../api/httpClient.js";
@@ -32,7 +33,7 @@ function ClassificationDialog({field,product,categories,stored,storageKey,onClos
   const next=isBrand?String(value).trim().replace(/\s+/g," "):Number(value),previous=isBrand?product.brand:product.categoryId;
   if(!frozen.current&&(!confirmed||reason.trim().length<8||reason.trim().length>500||(isBrand?(!next||next.length>100||[...String(value)].some(c=>c.charCodeAt(0)<32||c.charCodeAt(0)===127)||next.toLocaleLowerCase("es")===(previous||"").trim().replace(/\s+/g," ").toLocaleLowerCase("es")):(!categories.some(c=>c.id===next)||next===previous)))){report(new Error("Indica un valor diferente válido, motivo de 8–500 caracteres y confirma el mismo artículo."));return;}
   guard.current=true;setBusy(true);setError("");try{
-   if(!frozen.current){const body={field,value:next,previousValue:previous,reason:reason.trim(),expectedRevision:product.updatedAt,operationKey:crypto.randomUUID(),confirmed:true};sessionStorage.setItem(storageKey,JSON.stringify(body));frozen.current=body;}
+   if(!frozen.current){const body={field,value:next,previousValue:previous,reason:reason.trim(),expectedRevision:product.updatedAt,operationKey:createId(),confirmed:true};sessionStorage.setItem(storageKey,JSON.stringify(body));frozen.current=body;}
    await finish((await api.post(path,frozen.current)).data.data);
   }catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(storageKey);frozen.current=null;setUncertain(false);}report(e);}finally{guard.current=false;setBusy(false);}
  }

@@ -1,6 +1,7 @@
 // Runtime marker intentionally expires on reload. A direct/external visit uses
 // the catalog instead of reconstructing an origin from document.referrer.
-const session = globalThis.crypto?.randomUUID?.() || Math.random().toString(36);
+import { createId } from './createId.js';
+const session = typeof globalThis.crypto?.getRandomValues === 'function' ? createId() : null;
 const informationPages = new Set(['/delivery-conditions', '/changes-and-returns']);
 const names = {
   '/catalog': 'al catálogo', '/orders': 'a mis pedidos', '/guest-orders': 'a mis compras',
@@ -15,13 +16,14 @@ const fallback = () => ({ to: { pathname: '/catalog' }, state: undefined, label:
 export function informationReturn(state) {
   const origin = state?.informationReturn;
   const name = destination(origin?.pathname);
-  if (origin?.session !== session || !name || informationPages.has(origin.pathname)) return fallback();
+  if (!session || origin?.session !== session || !name || informationPages.has(origin.pathname)) return fallback();
   return {
     to: { pathname: origin.pathname, search: typeof origin.search === 'string' && origin.search.startsWith('?') ? origin.search : '', hash: typeof origin.hash === 'string' && origin.hash.startsWith('#') ? origin.hash : '' },
     state: origin.state, label: `Volver ${name}`,
   };
 }
 export function informationNavigationState(location) {
+  if (!session) return undefined;
   if (informationPages.has(location.pathname)) {
     const back = informationReturn(location.state);
     return { informationReturn: { ...back.to, session, state: back.state } };

@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import AppModal from "./AppModal.jsx";
@@ -40,7 +41,7 @@ export default function ProductAttributeRenameDialog({ familyId, productId, targ
     guard.current = true; setBusy(true); setError("");
     try {
       if (!frozen.current) {
-        const body = { name: normalizedName, reason: reason.trim(), confirmed: true, expectedRevision: revision, operationKey: crypto.randomUUID() };
+        const body = { name: normalizedName, reason: reason.trim(), confirmed: true, expectedRevision: revision, operationKey: createId() };
         sessionStorage.setItem(storageKey, JSON.stringify({ id: target.id, name: target.name, body }));
         frozen.current = body;
       }
@@ -49,7 +50,7 @@ export default function ProductAttributeRenameDialog({ familyId, productId, targ
       if (frozen.current && (!failure.response || failure.response.status >= 500)) setUncertain(true);
       else { sessionStorage.removeItem(storageKey); frozen.current = null; setUncertain(false); }
       if (failure.response?.status === 409) onConflict();
-      report(getApiError(failure, "No se pudo confirmar el renombrado. Consulta el resultado antes de volver a intentarlo."));
+      report(getApiError(failure, frozen.current ? "No se pudo confirmar el renombrado. Consulta el resultado antes de volver a intentarlo." : "No se envió el renombrado. Revisa el navegador y vuelve a intentarlo."));
     } finally { guard.current = false; setBusy(false); }
   }
   async function recover() {

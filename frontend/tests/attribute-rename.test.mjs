@@ -29,7 +29,7 @@ test("independent action blocks dirty drafts, suspends the editor and only reloa
 test("rename dialog sends only descriptive data and preserves the exact operation through uncertain responses", async () => {
   const dialog = await read("components/ProductAttributeRenameDialog.jsx"), service = await read("services/productFamilies.service.js");
   assert.doesNotMatch(dialog, /saveProductBundleRequest|bundlePayload|rowChange/);
-  assert.match(dialog, /expectedRevision: revision, operationKey: crypto.randomUUID\(\)/);
+  assert.match(dialog, /expectedRevision: revision, operationKey: createId\(\)/);
   assert.match(dialog, /renameFamilyAttributeRequest\(familyId, target.id, frozen.current\)/);
   assert.match(dialog, /getAttributeRenameOperationRequest\(familyId, target.id, frozen.current.operationKey\)/);
   assert.match(dialog, /Reintentar mismo renombrado/);

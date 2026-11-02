@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import Root from "./pages/Root.jsx";
+import AppErrorBoundary from "./components/AppErrorBoundary.jsx";
 
 try {
   const storedUser = JSON.parse(localStorage.getItem("user") || "null");
@@ -18,7 +19,7 @@ try {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <Root />
+      <AppErrorBoundary><Root /></AppErrorBoundary>
     </BrowserRouter>
   </StrictMode>,
 );

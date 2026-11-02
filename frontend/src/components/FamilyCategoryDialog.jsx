@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import AppModal from "./AppModal.jsx";
@@ -18,7 +19,7 @@ export default function FamilyCategoryDialog({draft,categories,userId,onClose,on
   async function submit(event){event?.preventDefault();event?.stopPropagation();if(guard.current)return;
     if(!frozen.current&&(!confirmed||Number(categoryId)===Number(draft.categoryId)||reason.trim().length<8)){report(new Error("Selecciona otra categoría, indica el motivo y confirma el cambio"));return;}
     guard.current=true;setBusy(true);setError("");
-    try{if(!frozen.current){const body={categoryId:Number(categoryId),reason:reason.trim(),expectedRevision:draft.revision,operationKey:crypto.randomUUID(),confirmed:true};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}await finish((await api.post(path,frozen.current)).data.data);}
+    try{if(!frozen.current){const body={categoryId:Number(categoryId),reason:reason.trim(),expectedRevision:draft.revision,operationKey:createId(),confirmed:true};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}await finish((await api.post(path,frozen.current)).data.data);}
     catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);}if(e.response?.status===409)onConflict();report(e);}finally{guard.current=false;setBusy(false);}}
   async function recover(){if(guard.current||!frozen.current)return;guard.current=true;setBusy(true);try{const r=(await api.get(`${path}/${encodeURIComponent(frozen.current.operationKey)}`)).data.data;if(r)await finish(r);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);setConfirmed(false);report(new Error("No hay un cambio confirmado. Revisa antes de volver a confirmar."));}}catch(e){report(e);}finally{guard.current=false;setBusy(false);}}
   return <AppModal open initialFocusSelector="fieldset input" title="Cambiar categoría" size="medium" onClose={()=>{if(!busy&&!uncertain)onClose();}}>

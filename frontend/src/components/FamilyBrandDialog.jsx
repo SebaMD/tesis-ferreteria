@@ -1,3 +1,4 @@
+import { createId } from "../helpers/createId.js";
 import {useRef,useState} from "react";
 import {toast} from "sonner";
 import AppModal from "./AppModal.jsx";
@@ -17,7 +18,7 @@ export default function FamilyBrandDialog({draft,userId,onClose,onSaved,onConfli
   const clean=brand.trim().replace(/\s+/g," ");
   if(!frozen.current&&(!confirmed||!clean||clean.length>100||[...brand].some(c=>c.charCodeAt(0)<32||c.charCodeAt(0)===127)||clean.toLocaleLowerCase("es")===(draft.brand||"").trim().replace(/\s+/g," ").toLocaleLowerCase("es")||reason.trim().length<8||reason.trim().length>500)){report(new Error("Indica una marca corregida distinta, motivo de 8–500 caracteres y confirma el mismo fabricante"));return;}
   guard.current=true;setBusy(true);setError("");
-  try{if(!frozen.current){const body={brand:clean,reason:reason.trim(),expectedRevision:draft.revision,operationKey:crypto.randomUUID(),confirmed:true};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}await finish((await api.post(path,frozen.current)).data.data);}
+  try{if(!frozen.current){const body={brand:clean,reason:reason.trim(),expectedRevision:draft.revision,operationKey:createId(),confirmed:true};sessionStorage.setItem(key,JSON.stringify(body));frozen.current=body;}await finish((await api.post(path,frozen.current)).data.data);}
   catch(e){if(frozen.current&&(!e.response||e.response.status>=500))setUncertain(true);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);}if(e.response?.status===409)onConflict();report(e);}finally{guard.current=false;setBusy(false);}}
  async function recover(){if(guard.current||!frozen.current)return;guard.current=true;setBusy(true);try{const result=(await api.get(`${path}/${encodeURIComponent(frozen.current.operationKey)}`)).data.data;if(result)await finish(result);else{sessionStorage.removeItem(key);frozen.current=null;setUncertain(false);setConfirmed(false);report(new Error("No hay una corrección confirmada. Revisa antes de volver a confirmar."));}}catch(e){report(e);}finally{guard.current=false;setBusy(false);}}
  return <AppModal open initialFocusSelector="fieldset input" title="Corregir marca" size="medium" onClose={()=>{if(!busy&&!uncertain)onClose();}}>

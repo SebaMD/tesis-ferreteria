@@ -1,5 +1,5 @@
 import { Heart, RefreshCw } from "lucide-react";
-import CompactBackLink from "../components/CompactBackLink.jsx";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import { useContext, useEffect } from "react";
 import { Link } from "react-router-dom";
 import FavoritesContext from "../context/FavoritesContext.js";
@@ -15,9 +15,7 @@ export default function FavoritesPage() {
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <header className="public-page-header">
         <div><h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Favoritos</h1><p className="mt-1.5 mb-0 text-sm text-slate-500">Productos guardados para tus próximas compras. La disponibilidad se valida al comprar.</p></div>
-        {!loading && !error && products.length > 0 && (
-          <CompactBackLink to="/catalog" label="Volver al catálogo" />
-        )}
+        <InformationBackLink />
       </header>
       {loading && <p role="status">Cargando favoritos...</p>}
       {error && <div role="alert" className="grid gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4"><p className="m-0">{error}</p><button type="button" onClick={() => reload()} disabled={loading || busy.length > 0}><RefreshCw size={17} /> Reintentar</button></div>}

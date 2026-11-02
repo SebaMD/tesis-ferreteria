@@ -1,6 +1,7 @@
 import { createId } from "../helpers/createId.js";
 import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
-import { Eye, Plus, Save, Trash2, CheckCircle, XCircle, ChevronDown, ScanBarcode, Info, Pencil } from "lucide-react";
+import { Eye, Plus, Save, ArrowRight, Trash2, CheckCircle, XCircle, ChevronDown, ScanBarcode, Info, Pencil } from "lucide-react";
+import { creationStockAction } from "../helpers/creationStock.js";
 import AttributeSuggestionDialog from "./AttributeSuggestionDialog.jsx";
 import AttributeMeasurementFields from "./AttributeMeasurementFields.jsx";
 import { validAttributeMeasurement, attributeOptionLabel, legacyMeasurementCandidate } from "../helpers/attributeMeasurements.js";
@@ -46,10 +47,11 @@ function encodeImage(file) {
     reader.readAsDataURL(file);
   });
 }
-export default function ProductBundleEditor({ familyId, conversionId, initialData, categories, onClose, onSaved, embedded = false, commonData, pendingFiles = [], enabled = true, reviewRef, onCreated, onBusyChange, modalOpen = true, onBack, onReviewOpen, inline = false, onSimple, simpleModeEnabled = false, onDialogChange }) {
+export default function ProductBundleEditor({ familyId, conversionId, initialData, initialSnapshot, categories, onClose, onSaved, embedded = false, commonData, pendingFiles = [], enabled = true, reviewRef, onCreated, onBusyChange, modalOpen = true, onBack, onReviewOpen, inline = false, onSimple, simpleModeEnabled = false, onDialogChange }) {
   const { user } = useAuth();
   const pendingKey = `fyf-product-bundle-pending-${user.id}`;
-  const [draftState, setDraft] = useState(() => bundleDraft(null, initialData || commonData));
+  const [draftState, setDraft] = useState(() => initialSnapshot?.draft || bundleDraft(null, initialData || commonData));
+  const initialSnapshotRef = useRef(initialSnapshot);
   const savedStock = useRef(new Map());
   const draft = embedded && !conversionId ? { ...draftState, name: commonData.name, brand: commonData.brand, categoryId: commonData.categoryId, description: commonData.description, unitMeasure: commonData.unitMeasure } : draftState;
   const [busy, setBusy] = useState(Boolean(familyId || conversionId));
@@ -57,7 +59,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   const [errorTarget, setErrorTarget] = useState(null);
   const errorId = useId();
   const setError = useCallback(message => { setErrorMessage(message); setErrorTarget(null); }, []);
-  const [ownCommonFiles, setCommonFiles] = useState(() => conversionId ? pendingFiles : []);
+  const [ownCommonFiles, setCommonFiles] = useState(() => initialSnapshot?.commonFiles || (conversionId ? pendingFiles : []));
   const commonFiles = embedded ? pendingFiles : ownCommonFiles;
   const [authorized, setAuthorized] = useState(false);
   const [uncertain, setUncertain] = useState(() => Boolean(sessionStorage.getItem(pendingKey)));
@@ -104,7 +106,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
   useEffect(() => {
     let live = true;
     if (familyId) getProductBundleRequest(familyId).then(data => { if (live) { savedStock.current=stockSnapshots(data.variants);const next=bundleDraft(data);setDraft(next);setBaseline(bundleDraftSignature(next)); } }).catch(e => { if (live) setError(getApiError(e)); }).finally(() => { if (live) setBusy(false); });
-    if (conversionId) getProductConversionRequest(conversionId).then(data => { if (live) { savedStock.current=stockSnapshots([data.product]);const next=conversionDraft(data, initialCommon.current);setDraft(next);setExpandedRows(new Set([next.rows[0].key])); } }).catch(e => { if (live) setError(getApiError(e)); }).finally(() => { if (live) setBusy(false); });
+    if (conversionId) getProductConversionRequest(conversionId).then(data => { if (live) { savedStock.current=stockSnapshots([data.product]);const saved=initialSnapshotRef.current?.draft;const next=saved?.conversion?.expectedRevision===data.revision?saved:conversionDraft(data, initialCommon.current);if(saved?.conversion&&next!==saved)toast.warning("El SKU cambió. Revisa la conversión con su información actualizada.");setDraft(next);setExpandedRows(new Set([next.rows[0].key])); } }).catch(e => { if (live) setError(getApiError(e)); }).finally(() => { if (live) setBusy(false); });
     return () => { live = false; };
   }, [familyId, conversionId, setError]);
   const change = values => setDraft(d => ({ ...d, ...values }));
@@ -224,6 +226,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     focusInEditor(() => formRef.current?.querySelector('button[type="submit"]'));
   }
   useImperativeHandle(reviewRef, () => ({ review, continueAsSimple,
+    snapshot() { return guard.current || uncertain ? null : { draft, commonFiles }; },
     resume(base, images) { setDraft(d => resumeBundleDraft(d, base)); setCommonFiles(images); setError(""); setPreview(false); requestAnimationFrame(()=>formRef.current?.querySelector("input")?.focus()); },
     resumeConversion(base, images) { setDraft(d=>resumeConversionDraft(d,base)); setCommonFiles(images); },
     saveSimple() { if (!guard.current && !uncertain) void save(true); },
@@ -258,11 +261,12 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     isInputAllowed: target => Boolean(target?.dataset.bundleBarcode),
     onScan: (barcode, {target}) => { if(target?.dataset.bundleBarcode) rowChange(target.dataset.bundleBarcode,{barcode}); } });
   async function finish(result) {
+    const creation = frozen.current?.variants?.map(row => ({ initialStock: row.initialStock, existing: Boolean(row.id) }));
     sessionStorage.removeItem(pendingKey); frozen.current = null; setUncertain(false);
     toast.success(result.familyId ? "Producto y variantes guardados." : "Producto guardado.");
     setCanRetry(false); setDraft(d => ({ ...d, familyId: result.familyId, revision: null }));
     try { await onSaved(); } catch { toast.warning("Guardado confirmado. Recarga Inventario para actualizar la lista."); }
-    if (embedded || inline) { await onCreated?.(result); return; }
+    if (embedded || inline) { await onCreated?.(result, creation); return; }
     await load(result.familyId);
   }
   async function recover() {
@@ -404,7 +408,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
               <div className="relative grid min-w-0 content-start gap-1"><ProductUnitField label="Unidad individual" editIcon={!(row.hasHistory||row.isOriginal)} disabled={locked||row.hasHistory||row.isOriginal} value={row.unitMeasure??draft.unitMeasure} inputProps={{"data-bundle-field":"unitMeasure",...fieldFeedback("unitMeasure",row.key)}} onChange={unitMeasure=>rowChange(row.key,{unitMeasure})}/>{(row.hasHistory||row.isOriginal)&&<span className="text-xs text-slate-500">{row.isOriginal?"La conversión conserva la unidad original.":"Unidad protegida por ventas, pedidos o movimientos de inventario, incluidas entradas."}</span>}{row.id&&!row.hasHistory&&!row.isOriginal&&<span className="text-xs text-slate-500">Se verifican compromisos pendientes al guardar. Si existe un bloqueo, no se guarda ningún cambio del conjunto.</span>}</div>
               <label className="content-start">Stock mínimo<input data-bundle-field="minimumStock" {...fieldFeedback("minimumStock", row.key)} className="min-h-10.25" type="number" required min="0" step="1" max="2147483647" value={row.minimumStock} onChange={e => rowChange(row.key, { minimumStock: e.target.value })} /></label>
               {row.id ? <VariantStockSummary product={savedStock.current.get(row.id)} draftMinimumStock={row.minimumStock}/> : <label className="content-start" htmlFor={`initial-stock-${row.key}`}>Stock inicial
-                <input data-bundle-field="initialStock" {...fieldFeedback("initialStock", row.key)} className="min-h-10.25" id={`initial-stock-${row.key}`} required type="number" min="0" max="2147483647" step="1" value={row.initialStock} onChange={e => rowChange(row.key, { initialStock: e.target.value })} aria-describedby={[fieldFeedback("initialStock", row.key)["aria-describedby"],`initial-stock-help-${row.key}`].filter(Boolean).join(" ")}/>
+                <input data-bundle-field="initialStock" {...fieldFeedback("initialStock", row.key)} className="min-h-10.25" id={`initial-stock-${row.key}`} type="number" min="0" max="2147483647" step="1" value={row.initialStock} onChange={e => rowChange(row.key, { initialStock: e.target.value })} aria-describedby={[fieldFeedback("initialStock", row.key)["aria-describedby"],`initial-stock-help-${row.key}`].filter(Boolean).join(" ")}/>
                 <span className="text-xs font-normal text-slate-500" id={`initial-stock-help-${row.key}`}>Al guardar se registra una entrada si es mayor que cero.</span>
               </label>}
             </div>
@@ -433,7 +437,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
           </div>
         </section>
         {files.length > 0 && <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={authorized} onChange={e => setAuthorized(e.target.checked)} />Confirmo la autorización de uso de estas imágenes y que corresponden a las variantes seleccionadas.</label>}
-        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}<button type="submit" className="product-positive-action"><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : inline ? "Guardar producto" : embedded ? "Confirmar configuración" : "Guardar cambios"}</button></div>
+        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}<button type="submit" className="product-positive-action creation-continue-action">{inline && !draft.conversion ? <><span>{busy ? "Guardando…" : creationStockAction(draft.rows.map(row => row.initialStock)).label}</span><ArrowRight size={18} aria-hidden="true" /></> : <><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : embedded ? "Confirmar configuración" : "Guardar cambios"}</>}</button></div>
         </div>
       </fieldset>
     </form>

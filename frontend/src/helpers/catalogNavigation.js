@@ -88,3 +88,18 @@ export function readCatalogRestoration(state) {
     scrollY: Math.max(0, Number(state.restoreCatalog.scrollY) || 0),
   };
 }
+
+const catalogEntries = new Map();
+const catalogEntryKey = "fyf-catalog-navigation-v1";
+export function rememberCatalogEntry(key, value) {
+  catalogEntries.set(key, value);
+  if (catalogEntries.size > 40) catalogEntries.delete(catalogEntries.keys().next().value);
+  try { sessionStorage.setItem(catalogEntryKey, JSON.stringify([...catalogEntries])); } catch { /* Memory-only fallback. */ }
+}
+export function readCatalogEntry(key) {
+  if (!catalogEntries.size) {
+    try { for (const [entry, value] of JSON.parse(sessionStorage.getItem(catalogEntryKey) || "[]").slice(-40)) catalogEntries.set(entry, value); } catch { /* No stored navigation. */ }
+  }
+  const value = catalogEntries.get(key);
+  return value ? { snapshot: normalizeCatalogSnapshot(value.snapshot), scrollY: Math.max(0, Number(value.scrollY) || 0) } : null;
+}

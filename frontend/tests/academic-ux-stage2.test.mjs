@@ -63,7 +63,7 @@ test("mobile filter clients edit only modal drafts; commit and orange primary ar
 test("creation initial stock stays in existing payload; mobile add and back controls have names and 44px targets", async () => {
   const [products, bundle, styles, checkout] = await Promise.all([read("pages/ProductsPage.jsx"), read("components/ProductBundleEditor.jsx"), read("styles/styles.css"), read("pages/CheckoutPage.jsx")]);
   assert.match(products, /showProductContinueAction = linkedRegistration\?\.step === "product" && Boolean\(editingProductId\)/);
-  assert.match(products, /initialStock: 0/);
+  assert.match(products, /initialStock: ""/);
   assert.match(bundle, /aria-label="Agregar otro atributo" title="Agregar otro atributo"/);
   assert.match(bundle, /aria-label="Agregar otra variante" title="Agregar otra variante"/);
   assert.match(styles, /\.variant-section-add \{ width: 44px !important/);

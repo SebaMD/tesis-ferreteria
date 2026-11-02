@@ -1,5 +1,4 @@
 import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
-import { useLayoutEffect } from "react";
 import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import { getStoreContactDetails, RETURNS_INFORMATION } from "../helpers/storeInformation.js";
 import { panelClass } from "../helpers/uiClasses.js";
@@ -8,12 +7,9 @@ const CONTACT_ICONS = { phone: Phone, whatsapp: MessageCircle, email: Mail, addr
 
 export default function ReturnsInformationPage() {
   const contacts = getStoreContactDetails();
-  useLayoutEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }, []);
   return (
     <main className="mx-auto grid w-full max-w-4xl gap-5 px-6 py-8 max-[720px]:px-4">
-      <header className="grid gap-2">
+      <header className="client-information-heading grid gap-2">
         <div className="public-page-header">
           <h1 className="m-0 text-2xl font-bold text-ink-950 max-[520px]:text-xl">Cambios y devoluciones</h1>
           <InformationBackLink />

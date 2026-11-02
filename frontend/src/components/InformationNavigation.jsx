@@ -8,6 +8,6 @@ export function InformationLink(props) {
 }
 export function InformationBackLink() {
   const location = useLocation();
-  const back = informationReturn(location.state);
+  const back = informationReturn(location.state, location.pathname);
   return <CompactBackLink {...back} />;
 }

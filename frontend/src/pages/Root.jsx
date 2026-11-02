@@ -7,6 +7,7 @@ import CustomerNoticeProvider from "../context/CustomerNoticeProvider.jsx";
 import ThemeProvider from "../context/ThemeProvider.jsx";
 import CheckoutDraftProvider from "../context/CheckoutDraftProvider.jsx";
 import useTheme from "../hooks/useTheme.js";
+import ClientScrollRestoration from "../components/ClientScrollRestoration.jsx";
 
 function ThemedToaster() {
   const { theme } = useTheme();
@@ -34,6 +35,7 @@ export default function Root() {
         <CartProvider>
           <CustomerNoticeProvider>
             <ThemedToaster />
+            <ClientScrollRestoration />
             <CheckoutDraftProvider><FavoritesProvider><App /></FavoritesProvider></CheckoutDraftProvider>
           </CustomerNoticeProvider>
         </CartProvider>

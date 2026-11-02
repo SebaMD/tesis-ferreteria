@@ -13,7 +13,7 @@ export function reconcileAttributeOptions(attribute, optionsText) {
 }
 export const newBundleAttribute = () => reconcileAttributeOptions({ name: "", options: [] }, "");
 export const newBundleRow = (attributeCount = 1, common = {}) => ({ key: createId(), selections: Array(attributeCount).fill(""), name: "", nameCustomized: false,
-  price: common.price ?? "", barcode: "", minimumStock: common.minimumStock ?? 0, initialStock: 0, status: true,
+  price: common.price ?? "", barcode: "", minimumStock: common.minimumStock ?? 0, initialStock: "", status: true,
   unitMeasure: common.unitMeasure ?? "unidad", inStoreOnly: Boolean(common.inStoreOnly), files: [], useCommon: false });
 
 export const SINGLE_VARIANT_MESSAGE = "Has configurado una sola variante. Agrega otra o guarda este artículo como producto simple";

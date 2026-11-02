@@ -1,5 +1,7 @@
 import { ClipboardList, CreditCard, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -114,12 +116,15 @@ export default function GuestDeviceOrdersPage() {
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[620px]:px-3.5 max-[620px]:py-6">
       <LoadingOverlay active={loading} />
-      <header>
+      <header className="public-page-header">
+        <div>
         <span className="text-xs font-extrabold text-rust-600 uppercase">Compras sin cuenta</span>
         <h1 className="mt-2 mb-2 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">Mis compras en este dispositivo</h1>
         <p className="m-0 max-w-190 text-sm leading-6 text-slate-500">
           Aquí aparecen las compras invitadas realizadas desde este navegador. Si borras sus cookies, todavía puedes usar el enlace seguro enviado por correo.
         </p>
+        </div>
+        {!loading && !error && orders.length > 0 && <InformationBackLink />}
       </header>
 
       {error && (
@@ -136,6 +141,7 @@ export default function GuestDeviceOrdersPage() {
           <ClipboardList className="text-slate-400" size={42} />
           <strong className="text-ink-950">Todavía no hay compras invitadas en este dispositivo</strong>
           <p className="m-0 max-w-130 text-sm leading-6 text-slate-500">Las compras aparecerán aquí sin guardar los tokens individuales de seguimiento en el navegador.</p>
+          <Link className="product-positive-action inline-flex min-h-11 items-center justify-center rounded-[5px] px-5 text-sm font-bold no-underline" to="/catalog">Explorar catálogo</Link>
         </section>
       ) : !loading && !error && (
         <>

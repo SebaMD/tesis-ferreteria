@@ -13,24 +13,25 @@ function destination(pathname) {
   return names[pathname] || (/^\/catalog\/(products|families)\/[1-9]\d*$/.test(pathname || '') ? 'al producto' : null);
 }
 const fallback = () => ({ to: { pathname: '/catalog' }, state: undefined, label: 'Volver al catálogo' });
-export function informationReturn(state) {
+export function informationReturn(state, currentPath) {
   const origin = state?.informationReturn;
   const name = destination(origin?.pathname);
-  if (!session || origin?.session !== session || !name || informationPages.has(origin.pathname)) return fallback();
+  if (!session || origin?.session !== session || !name || informationPages.has(origin.pathname) || origin.pathname === currentPath) return fallback();
   return {
     to: { pathname: origin.pathname, search: typeof origin.search === 'string' && origin.search.startsWith('?') ? origin.search : '', hash: typeof origin.hash === 'string' && origin.hash.startsWith('#') ? origin.hash : '' },
-    state: origin.state, label: `Volver ${name}`,
+    state: origin.key ? { ...origin.state, restoreClientScrollKey: origin.key } : origin.state, label: `Volver ${name}`,
   };
 }
-export function informationNavigationState(location) {
+export function informationNavigationState(location, targetPath) {
   if (!session) return undefined;
+  if (targetPath === location.pathname) return location.state;
   if (informationPages.has(location.pathname)) {
     const back = informationReturn(location.state);
-    return { informationReturn: { ...back.to, session, state: back.state } };
+    return { informationReturn: { ...back.to, session, key: location.state?.informationReturn?.key, state: back.state } };
   }
   if (!destination(location.pathname)) return undefined;
   const { informationReturn: ignored, ...originState } = location.state || {};
   void ignored;
-  return { informationReturn: { session, pathname: location.pathname, search: location.search, hash: location.hash,
+  return { informationReturn: { session, key: location.key, pathname: location.pathname, search: location.search, hash: location.hash,
     state: { ...originState, ...(location.pathname === '/checkout' ? { resumeCheckout: true } : {}) } } };
 }

@@ -13,7 +13,7 @@ import AppSelect from "../components/AppSelect.jsx";
 import CatalogNoticeCarousel from "../components/CatalogNoticeCarousel.jsx";
 import CatalogPagination from "../components/CatalogPagination.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, validatePriceRange } from "../helpers/catalogFilters.js";
-import { readCatalogRestoration } from "../helpers/catalogNavigation.js";
+import { readCatalogRestoration, readCatalogEntry, rememberCatalogEntry } from "../helpers/catalogNavigation.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 
 const EMPTY_PAGINATION = { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
@@ -23,7 +23,7 @@ export default function CatalogPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const search = searchParams.get("search") || "";
-  const initialRestoration = readCatalogRestoration(location.state);
+  const initialRestoration = readCatalogEntry(location.key) || readCatalogEntry(location.state?.restoreClientScrollKey) || readCatalogRestoration(location.state);
   const restoredSnapshot = initialRestoration?.snapshot;
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState(() => restoredSnapshot?.filters || EMPTY_CATALOG_FILTERS);
@@ -41,7 +41,6 @@ export default function CatalogPage() {
   const searchWasActiveRef = useRef(Boolean(search.trim()));
   const handledNavigationScrollRef = useRef(null);
   const pendingNavigationScrollRef = useRef(false);
-  const pendingRestoreScrollRef = useRef(initialRestoration?.scrollY ?? null);
 
   const scrollToCatalogStart = useCallback(() => {
     const catalogStart = catalogStartRef.current;
@@ -120,19 +119,8 @@ export default function CatalogPage() {
   }, [scrollToCatalogStart, search]);
 
   useLayoutEffect(() => {
-    if (!location.state?.restoreCatalog) return;
-    navigate(
-      { pathname: location.pathname, search: location.search, hash: location.hash },
-      { replace: true, state: null, preventScrollReset: true },
-    );
-  }, [location.hash, location.pathname, location.search, location.state, navigate]);
-
-  useLayoutEffect(() => {
-    if (loading || pendingRestoreScrollRef.current === null) return;
-    const scrollY = pendingRestoreScrollRef.current;
-    pendingRestoreScrollRef.current = null;
-    window.scrollTo({ top: scrollY, behavior: "auto" });
-  }, [loading, products.length]);
+    rememberCatalogEntry(location.key, { snapshot: { filters, order, page, pageSize }, scrollY: window.scrollY });
+  }, [location.key, filters, order, page, pageSize]);
 
   useLayoutEffect(() => {
     if (!location.state?.scrollToCatalogResults) return;

@@ -25,6 +25,17 @@ export async function testUnifiedCreation({ pool, call, body, snapshot, users })
   await call("POST","/product-families/bundle",{...simple,variants:[{...simple.variants[0],initialStock:8}]},"ADMIN",409,true);
   assert.deepEqual(await snapshot(),saved);
 
+  // An empty frontend stock is normalized to zero by the existing payload.
+  // Zero must not create a zero-quantity ENTRY, including on durable replay.
+  const zero={...simple,operationKey:randomUUID(),family:{...simple.family,name:`Sin stock ${randomUUID()}`},images:[],
+    variants:[{...simple.variants[0],name:`Artículo sin stock ${randomUUID()}`,initialStock:0,imageIndexes:[]}]};
+  const zeroResult=await call("POST","/product-families/bundle",zero,"ADMIN",200,true);
+  const zeroReplay=await call("POST","/product-families/bundle",zero,"ADMIN",200,true);
+  assert.deepEqual(zeroResult.productIds,zeroReplay.productIds);
+  assert.equal((await pool.query("select current_stock from products where id=$1",[zeroResult.productIds[0]])).rows[0].current_stock,0);
+  assert.equal((await pool.query("select count(*)::int n from inventory_movements where product_id=$1",[zeroResult.productIds[0]])).rows[0].n,0);
+  console.log("PASS zero initial stock: one simple SKU, zero movements, same IDs on replay; positive stock remains exactly one ENTRY");
+
   const conversion=await call("GET",`/product-families/conversion/${id}`,null,"ADMIN");
   const convert=body(); convert.variants.forEach(v=>v.barcode=null);
   convert.family={...convert.family,categoryId:product.category_id,brand:product.brand}; convert.unitMeasure=product.unit_measure;

@@ -24,6 +24,7 @@ test("suggested names replace the first presentation suffix and preserve manual 
 });
 test("restoring equivalent numeric inputs clears dirty state without concealing real edits",()=>{
  const draft=bundleDraft(null,{name:"Producto",price:"5990.00",minimumStock:5});
+ draft.rows[0].initialStock=0;
  const original=bundleDraftSignature(draft);
  draft.rows[0].price="5990";draft.rows[0].minimumStock="5";draft.rows[0].initialStock="0";
  assert.equal(bundleDraftSignature(draft),original);

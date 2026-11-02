@@ -17,6 +17,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
@@ -215,10 +216,10 @@ export default function ClientAccountPage() {
   return (
     <main className="relative mx-auto grid w-full max-w-220 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <LoadingOverlay active={addressLoading} />
-      <div>
+      <header className="public-page-header"><div>
         <h1 className="m-0 text-2xl font-bold text-ink-950">Mi cuenta</h1>
         <p className="mt-1.5 mb-0 text-sm text-slate-500">Administra tus datos y preferencias para próximas compras.</p>
-      </div>
+      </div><InformationBackLink /></header>
 
       {!user.emailVerifiedAt && !user.emailVerified && (
         <section className="flex items-center justify-between gap-4 rounded-lg border-2 border-rust-300 bg-rust-50 p-5 max-[620px]:grid">

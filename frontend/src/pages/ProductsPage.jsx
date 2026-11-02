@@ -16,6 +16,8 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
 import ProductBundleEditor from "../components/ProductBundleEditor.jsx";
+import CreatedProductsStockDialog from "../components/CreatedProductsStockDialog.jsx";
+import { creationStockAction } from "../helpers/creationStock.js";
 import { ProductCategoryField, ProductUnitField } from "../components/ProductFormFields.jsx";
 import GroupedInventoryTable from "../components/GroupedInventoryTable.jsx";
 import { groupInventoryProducts, inventoryExportRows, inventoryVariantLabel, filterInventoryProducts } from "../helpers/inventoryGroups.js";
@@ -116,7 +118,7 @@ const emptyForm = {
   minimumStock: 0,
   inStoreOnly: false,
   status: true,
-  initialStock: 0,
+  initialStock: "",
 };
 
 function initialMovementForm(movementType = "ENTRY") {
@@ -146,7 +148,7 @@ export default function ProductsPage() {
   const [variantsSeen, setVariantsSeen] = useState(false);
   const [bundleSaving, setBundleSaving] = useState(false);
   const bundleReviewRef = useRef(null);
-  const bundleContinueRef = useRef(false);
+  const [creationReview, setCreationReview] = useState(null);
   const simpleModeRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
@@ -452,25 +454,24 @@ export default function ProductsPage() {
     setPendingProductImages(files); setVariantsEnabled(false);
     requestAnimationFrame(() => requestAnimationFrame(() => simpleModeRef.current?.focus()));
   };
-  const finishNewBundle = async (result) => {
-    if (linkedRegistration?.step === "product" && !result.familyId) {
-      try {
-        const product = (await getProductsRequest()).find(item => item.id === result.productIds[0]);
-        if (!product) throw new Error("No se pudo recuperar el artículo guardado");
-        const quantity = Number(form.initialStock || 0);
-        const next = { ...linkedRegistration, product, entryCompleted: quantity > 0,
-          entryResult: quantity > 0 ? { quantity, unitMeasure: product.unitMeasure, productName: product.name, currentStock: product.currentStock } : null };
-        setEditingProductId(product.id); setForm({ ...emptyForm, ...product, categoryId: String(product.categoryId) });
-        setPendingProductImages([]); setBundleSaving(false);
-        if (bundleContinueRef.current) goToLinkedEntry(next);
-        else setLinkedRegistration(next);
-        return;
-      } catch {
-        toast.warning("Producto guardado. Consulta Inventario para continuar con sus movimientos.");
+  const finishNewBundle = async (result, creation) => {
+    const category = linkedRegistration?.category;
+    try {
+      const saved = await getProductsRequest();
+      const items = result.productIds.map((id, index) => ({ product: saved.find(product => product.id === id), ...creation?.[index] }));
+      if (items.some(item => !item.product)) throw new Error("No se pudieron recuperar los productos guardados");
+      if (!result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
+        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null });
+      } else {
+        setLinkedRegistration(null); setActiveForm(null);
+        setCreationReview({ familyId: result.familyId, items, category });
       }
+    } catch {
+      setLinkedRegistration(null); setActiveForm(null);
+      toast.warning("Guardado confirmado. Consulta Inventario para revisar las existencias; no vuelvas a crear los productos.");
     }
     setBundleSaving(false); setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
-    setLinkedRegistration(null); setActiveForm(null); setPendingProductImages([]); setForm(emptyForm);
+    setEditingProductId(null); setPendingProductImages([]); setForm(emptyForm);
   };
   const returnFromConversion = ({ fields, files }) => {
     setForm(current => ({ ...current, price: fields.price, barcode: fields.barcode || "", minimumStock: fields.minimumStock, description: fields.description || "", inStoreOnly: fields.inStoreOnly }));
@@ -512,9 +513,10 @@ export default function ProductsPage() {
   const categoryContinueLabel = linkedCategoryIsSaved
     ? "Actualizar y continuar"
     : "Guardar y agregar producto";
-  const productContinueLabel = linkedProductIsSaved
+  const newProductAction = creationStockAction([form.initialStock]);
+  const productContinueLabel = linkedRegistration?.entryCompleted
     ? "Actualizar y revisar entrada"
-    : "Guardar y revisar entrada";
+    : "Actualizar y registrar entrada";
 
   const handleProductImageFiles = (files) => {
     const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -611,6 +613,7 @@ export default function ProductsPage() {
         step: "category",
         direction: "idle",
         category,
+        productDraft: belongsToLinkedFlow ? linkedRegistration.productDraft : undefined,
         product: belongsToLinkedFlow && linkedRegistration.product?.categoryId === category.id
           ? { ...linkedRegistration.product, categoryName: category.name }
           : belongsToLinkedFlow
@@ -662,7 +665,7 @@ export default function ProductsPage() {
   const handleCreateProduct = async (event, shouldContinue = false) => {
     event.preventDefault();
     if (variantsEnabled) { bundleReviewRef.current?.review(); return; }
-    if (!editingProductId) { bundleContinueRef.current = shouldContinue; bundleReviewRef.current?.saveSimple(); return; }
+    if (!editingProductId) { if (!newProductAction.valid) { toast.warning("El stock inicial debe estar vacío o ser un entero no negativo."); return; } bundleReviewRef.current?.saveSimple(); return; }
     const wasEditing = Boolean(editingProductId);
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
@@ -915,7 +918,8 @@ export default function ProductsPage() {
     const category = linkedRegistration?.category;
     if (!category) return;
 
-    setLinkedRegistration((current) => current ? { ...current, step: "category", direction: "backward" } : current);
+    const productDraft = { form, unitSearch, files: pendingProductImages, editingProductId, variantsEnabled, variantsSeen, bundle: bundleReviewRef.current?.snapshot() };
+    setLinkedRegistration((current) => current ? { ...current, productDraft, step: "category", direction: "backward" } : current);
     setEditingCategoryId(category.id);
     setCategoryName(category.name);
     setCategoryDescription(category.description || "");
@@ -928,6 +932,12 @@ export default function ProductsPage() {
     if (!category) return;
 
     setLinkedRegistration({ ...registration, step: "product", direction });
+    if (registration.productDraft) {
+      const saved = registration.productDraft;
+      setEditingProductId(saved.editingProductId); setForm(saved.form); setUnitSearch(saved.unitSearch);
+      setPendingProductImages(saved.files); setVariantsEnabled(saved.variantsEnabled); setVariantsSeen(saved.variantsSeen);
+      setActiveForm("product"); return;
+    }
     setEditingProductId(product?.id ?? null);
     setPendingProductImages([]);
     setForm(product ? {
@@ -1245,6 +1255,13 @@ export default function ProductsPage() {
   return (
     <section className={`${pageClass} inventory-compact-page`}>
       <LoadingOverlay active={loading} />
+      <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
+        const category = creationReview.category || categories.find(item => item.id === product.categoryId);
+        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null });
+      }} onAnother={() => {
+        const category = creationReview.category; setCreationReview(null);
+        goToLinkedProduct("forward", { category, product: null, entryCompleted: false, entryResult: null });
+      }} />
 
       <div className={`${pageHeaderClass} inventory-section-header`}>
         <div>
@@ -1489,14 +1506,14 @@ export default function ProductsPage() {
       <AppModal
         open={canManage && activeForm === "product"}
         suspended={bundleDialogActive || nameCorrectionOpen}
-        title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
+        title={editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
         description="Completa la información comercial y de inventario."
         onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
         size={variantsEnabled ? "xlarge" : "large"}
       >
         {linkedRegistration?.step === "product" && (
           <button
-            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
+            className="linked-flow-back"
             type="button"
             onClick={goToLinkedCategory}
             disabled={submittingProduct || bundleSaving}
@@ -1504,17 +1521,6 @@ export default function ProductsPage() {
           >
             <ArrowLeft size={22} />
             <span>Volver a categoría</span>
-          </button>
-        )}
-        {canSaveProductAndContinue && !submittingProduct && (
-          <button
-            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--large"
-            type="button"
-            onClick={handleProductContinue}
-            aria-label={productContinueLabel}
-          >
-            <span>{productContinueLabel}</span>
-            <ArrowRight size={22} />
           </button>
         )}
         <div
@@ -1586,7 +1592,7 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            {!editingProductId && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" required value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Al guardar se registra una entrada si es mayor que cero.</span></label>}
+            {!editingProductId && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Vacío: podrás registrar una entrada después. Cero: se crea sin existencias. Una cantidad positiva registra su entrada al guardar.</span></label>}
             {editingProduct && <p className="m-0 text-sm">Stock actual: <strong>{formatQuantityWithUnit(editingProduct.currentStock,editingProduct.unitMeasure)}</strong></p>}
             <label className="variant-online-control rounded border border-slate-200 bg-slate-50 px-3!">
               <input
@@ -1632,29 +1638,23 @@ export default function ProductsPage() {
                 {editingProductId ? "Convertir en producto con variantes" : "Agregar variantes"}
               </button>
               <div className="flex min-w-0 items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-                {linkedRegistration?.step === "product" && (
-                  <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={goToLinkedCategory} disabled={submittingProduct || bundleSaving}>
-                    <ArrowLeft size={17} />
-                    Volver
-                  </button>
-                )}
                 {canSaveProductAndContinue && !submittingProduct && (
-                  <button className="linked-flow-mobile-action" type="button" onClick={handleProductContinue}>
-                    {productContinueLabel}
+                  <button className="product-positive-action creation-continue-action" type="button" onClick={handleProductContinue}>
+                    <span>{productContinueLabel}</span>
                     <ArrowRight size={17} />
                   </button>
                 )}
-                <button type="submit" className="product-positive-action" disabled={submittingProduct || managingProductImages || bundleSaving}>
-                  {submittingProduct || bundleSaving ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : variantsEnabled ? (editingProductId ? "Revisar conversión y variantes" : "Guardar producto") : editingProductId ? "Actualizar producto" : "Guardar producto"}
+                <button type="submit" className="product-positive-action creation-continue-action" disabled={submittingProduct || managingProductImages || bundleSaving || (!editingProductId && (!canAddVariants || !newProductAction.valid))}>
+                  <span>{submittingProduct || bundleSaving ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : newProductAction.label}</span>{!editingProductId && <ArrowRight size={18} aria-hidden="true" />}
                 </button>
               </div>
             </div>
             {!canAddVariants && !variantsEnabled && !editingProduct?.familyId && <p id="variants-base-requirements" className="m-0 text-xs text-slate-500">Para agregar variantes, completa nombre, categoría, unidad, precio y stock mínimo. Si ingresas un código de barras, debe ser válido y no estar repetido.</p>}
           </form>
           </div>
-          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline modalOpen={variantsEnabled} simpleModeEnabled commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
+          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled} simpleModeEnabled commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
             reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
-          {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} modalOpen={variantsEnabled}
+          {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled}
             commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
             categories={categories} onSaved={loadData} onBack={returnFromConversion} onClose={cancelEditing} onCreated={finishNewBundle} />}
         </div>
@@ -1706,7 +1706,7 @@ export default function ProductsPage() {
       >
         {linkedRegistration?.step === "ENTRY" && (
           <button
-            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
+            className="linked-flow-back"
             type="button"
             onClick={() => goToLinkedProduct("backward")}
             disabled={submittingMovement}

@@ -6,13 +6,11 @@ import { getPendingReturnNoticeLabel } from "../src/helpers/labels.js";
 
 const read = path => readFile(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-test("entrada a Cambios y devoluciones reinicia únicamente el scroll de esa página antes de pintar", async () => {
+test("regreso informativo usa la restauración central sin reiniciar páginas durante POP", async () => {
   const [page, layout, app] = await Promise.all([read("pages/ReturnsInformationPage.jsx"), read("components/ClientLayout.jsx"), read("App.jsx")]);
-  const effect = page.match(/useLayoutEffect\(\(\) => \{([\s\S]*?)\}, \[\]\)/)?.[1];
-  assert.ok(effect);
-  const calls = [];
-  runInNewContext(effect, { window: { scrollTo: options => calls.push({ ...options }) } });
-  assert.deepEqual(calls, [{ top: 0, left: 0, behavior: "instant" }]);
+  assert.doesNotMatch(page, /window.scrollTo/);
+  const root = await read("pages/Root.jsx");
+  assert.match(root, /<ClientScrollRestoration/);
   assert.doesNotMatch(layout, /overflow-y|scrollTo|scrollTop/);
   assert.doesNotMatch(app, /scrollTo|scrollRestoration/);
   assert.match(layout, /to="\/changes-and-returns"/);

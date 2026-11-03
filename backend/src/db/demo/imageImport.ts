@@ -18,7 +18,7 @@ export async function importDemoImages(root: string, apply = false) {
   const { sourceRoot, entries } = await readDemoImageManifest(root);
   return db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-disposable-demo-seed'))`);
-    const target = (await tx.execute<{ name: string; comment: string | null }>(sql`select current_database() name, shobj_description(oid,'pg_database') comment from pg_database where datname=current_database()`)).rows[0];
+    const target = (await tx.execute<{ name: string; comment: string | null }>(sql`select current_database() AS "name", shobj_description(oid,'pg_database') AS "comment" from pg_database where datname=current_database()`)).rows[0];
     if (authorizeDemoTarget(target, process.env.DATABASE_URL, undefined, academicTargetFromEnvironment()) !== "loaded") throw new Error("Primero debe inicializarse la demo; no se importó nada");
     await acquirePromotionPricingLock(tx);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);

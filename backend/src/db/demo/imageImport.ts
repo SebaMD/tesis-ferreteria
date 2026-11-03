@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile, realpath, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sql } from "drizzle-orm";
@@ -6,16 +5,9 @@ import { db } from "../index.js";
 import { categoriesTable, productsTable, productImagesTable } from "../schema/index.js";
 import { demoDescription, demoProducts } from "./catalog.js";
 import { academicTargetFromEnvironment, authorizeDemoTarget } from "./seedAuthorization.js";
-import { validateImageBuffer, resolveStoredImagePath } from "../../utils/imageFiles.js";
+import { resolveStoredImagePath } from "../../utils/imageFiles.js";
 import { acquirePromotionPricingLock } from "../../modules/promotions/promotions.repository.js";
-
-type Entry = {
-  productKey: string; file: string; sha256: string; sourceDocument: string; sourcePage: number;
-  rightsStatus: string; publish: boolean;
-  sourceUrl?: string;
-  authorization?: { reference: string; scope: string };
-};
-const hash = (buffer: Buffer) => createHash("sha256").update(buffer).digest("hex");
+import { imageHash as hash, imageIsAuthorized, readDemoImageManifest, readDemoImageFile } from "./imageManifest.js";
 
 // This command enriches only an initialized, explicitly identified demo. It never seeds.
 export async function importDemoImages(root: string, apply = false) {
@@ -23,15 +15,7 @@ export async function importDemoImages(root: string, apply = false) {
     || process.env.MAIL_ENABLED !== "false" || process.env.WEBPAY_ENVIRONMENT !== "integration") {
     throw new Error("Importación demo requiere opt-in, entorno no productivo, MAIL_ENABLED=false y Webpay integration");
   }
-  const sourceRoot = await realpath(root);
-  const entries: Entry[] = JSON.parse(await readFile(path.join(sourceRoot, "extracted-images.json"), "utf8"));
-  if (!Array.isArray(entries) || entries.length > 1000) throw new Error("Manifiesto inválido");
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    if (!entry || typeof entry.productKey !== "string" || seen.has(entry.productKey)) throw new Error("Clave de imagen inexistente o duplicada");
-    seen.add(entry.productKey);
-    if (!demoProducts.some(p => p.key === entry.productKey)) throw new Error("Imagen ajena al catálogo demo");
-  }
+  const { sourceRoot, entries } = await readDemoImageManifest(root);
   return db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-disposable-demo-seed'))`);
     const target = (await tx.execute<{ name: string; comment: string | null }>(sql`select current_database() name, shobj_description(oid,'pg_database') comment from pg_database where datname=current_database()`)).rows[0];
@@ -50,25 +34,16 @@ export async function importDemoImages(root: string, apply = false) {
       const item = { productKey: article.key, supplierCode: article.supplierCode, brand: article.brand, model: article.model,
         specification: article.specification, productId: matches.length === 1 ? matches[0].id : null,
         source: entry ? { file: entry.file, document: entry.sourceDocument, page: entry.sourcePage, sha256: entry.sha256, url: entry.sourceUrl ?? null } : null,
-        authorization: entry?.authorization ?? null, rightsStatus: entry?.rightsStatus ?? "NO_IMAGE", result: "" };
+        authorization: entry?.authorization ?? null, assetKind: entry?.assetKind ?? null, rightsStatus: entry?.rightsStatus ?? "NO_IMAGE", result: "" };
       report.push(item);
       if (matches.length !== 1) { item.result = "IDENTITY_MISMATCH"; continue; }
       const product = matches[0];
       const existing = images.filter(i => i.productId === product.id);
       if (!entry) { item.result = existing.length ? "EXISTING_IMAGE_PRESERVED" : "NO_IMAGE"; continue; }
-      if (entry.publish !== true || entry.rightsStatus !== "AUTHORIZED" || entry.authorization?.scope !== "academic-web"
-        || typeof entry.authorization.reference !== "string" || entry.authorization.reference.trim().length < 8) {
+      if (!imageIsAuthorized(entry)) {
         item.result = existing.length ? "EXISTING_IMAGE_PRESERVED" : "AUTHORIZATION_PENDING"; continue;
       }
-      if (entry.sourceDocument !== article.source.document || entry.sourcePage !== article.source.page
-        || !/^[a-f0-9]{64}$/.test(entry.sha256) || typeof entry.file !== "string"
-        || entry.file.includes("\\") || path.isAbsolute(entry.file) || entry.file.split("/").some(p => !p || p === ".." || p === ".")) throw new Error(`Procedencia o ruta inválida: ${article.key}`);
-      const source = await realpath(path.join(sourceRoot, entry.file));
-      const relative = path.relative(sourceRoot, source);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Imagen fuera del paquete aprobado");
-      const buffer = await readFile(source);
-      if (hash(buffer) !== entry.sha256) throw new Error(`Hash de imagen incorrecto: ${article.key}`);
-      const { extension } = await validateImageBuffer(buffer);
+      const { buffer, extension } = await readDemoImageFile(sourceRoot, entry, article);
       const imagePath = `products/${product.id}/demo-${entry.sha256}${extension}`;
       if (existing.length) {
         if (existing.length === 1 && existing[0].imagePath === imagePath) {

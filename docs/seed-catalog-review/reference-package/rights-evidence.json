@@ -1,0 +1,9 @@
+{
+  "id": "FYF-ORIGINAL-REFERENCE-CARDS-v1",
+  "createdFor": "Quinta etapa de imágenes de la demo académica FYF, solicitud del usuario del 2026-11-02",
+  "kind": "ORIGINAL_PROJECT_GRAPHICS",
+  "scope": "academic-web",
+  "source": "backend/scripts/prepare-demo-image-review.mjs; native SVG paths and factual labels, no supplier artwork, external downloads, logos or stock photographs",
+  "generatorSha256": "d5242b08117fbf9dc74b6c5b764acec44ccd6a90ad40ff132f3b67ae509e9ca2",
+  "limitations": "Generic diagrams, not product photographs, not scale drawings and not manufacturer-endorsed. Brand names identify the seed SKU only. No rights over supplier assets are granted. For academic demo only; own product photos remain necessary for commercial deployment."
+}

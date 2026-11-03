@@ -30,6 +30,12 @@ existencias son ficticios; también se incluye esta advertencia en cada descripc
 
 ## Imágenes: NO publicar todavía
 
+**Actualización, 2 de noviembre de 2026:** esta restricción sigue vigente para
+las fotografías de proveedores. La quinta etapa entrega por separado 96 fichas
+gráficas originales referenciales, no fotografías. Revisar el [reporte por SKU](image-review.md),
+la [galería local](reference-package/index.html) y la [guía actual de imágenes/PM2](../academic-demo-images-stage5.md).
+El paquete no se importó en ninguna base real y no aprueba las 13 fotos privadas.
+
 `images/` contiene 13 objetos originales extraídos de la cotización. Se revisó
 su asociación con las filas y referencias catalogadas. `extracted-images.json`
 registra producto, página, objeto PDF, dimensiones y hashes de origen/imagen.

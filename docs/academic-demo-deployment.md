@@ -1,5 +1,10 @@
 # Demostración universitaria: seed e imágenes
 
+> Guía histórica de preparación con Compose. Para la demo universitaria que ya
+> funciona con PM2/PostgreSQL 13.23 y la seed cargada, consultar la
+> [quinta etapa de imágenes](academic-demo-images-stage5.md). No repetir la seed,
+> ejecutar migraciones ni aplicar este override Docker para importar imágenes.
+
 Solo para el servidor universitario autorizado. Este procedimiento NO se ha
 ejecutado en el servidor. No cambia `.env`, no crea otra base permanente, no
 restablece datos y no sirve para infraestructura comercial.

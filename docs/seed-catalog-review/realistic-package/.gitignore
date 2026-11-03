@@ -1,0 +1,4 @@
+# Only individually generated original illustrations belong in this review package.
+!images/
+!images/*.png
+!images/*.webp

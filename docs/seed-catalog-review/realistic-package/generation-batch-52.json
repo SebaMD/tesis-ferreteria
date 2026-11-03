@@ -1,0 +1,8 @@
+[
+  {
+    "productKey": "CATALOGO COM. CADENA.pdf:927",
+    "prompt": "Use case: product-mockup. Asset: one square catalog illustration of the PHYSICAL ARTICLE, not a text card or infographic. Subject: One unbranded 400 ml paint aerosol can, realistic metal cylinder with working spray nozzle and cap. Color/finish variant: 400 ml; verde. Use the corresponding cap color and show a small painted swatch as part of the product presentation, not a different paint color. Plain neutral packaging, no Rex marks. Fluorescent versions visibly high-visibility, not ordinary dull paint. No extra cans.\nStyle: realistic original high-detail 3D/studio illustration, convincing material texture and anatomy, white seamless background, soft contact shadow, entire object(s) inside frame with generous margins, 70-80% image occupancy, three-quarter view suitable for a hardware store. Not manufacturer photography; commercial identity cannot be certified. No brand name, logo, product code, price, arbitrary measurements text or fake packaging print. Only small bottom caption exactly \"Ilustración referencial\". No decorative extra tools, people or props. Render this SKU separately; do not collage different variants.\nCRITICAL correction: the paint color is a conventional DEEP FOREST GREEN, medium-dark natural evergreen hue. It must NOT be lime, neon, chartreuse or fluorescent. Both cap and swatch must be forest green, clearly different from the separate fluorescent-green SKU.",
+    "generatedFile": "exec-4f50f088-704f-464b-8f6a-3c55faa32d41.png",
+    "visualReview": "Preliminary object/type check; final SKU/model/measure approval remains pending."
+  }
+]

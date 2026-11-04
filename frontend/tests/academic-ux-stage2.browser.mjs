@@ -376,28 +376,74 @@ try {
     await dialog.getByRole("spinbutton", { name: /^Stock inicial/ }).fill(stock);
     const label = stock === "" ? "Guardar y registrar entrada" : stock === "0" ? "Guardar y revisar existencias" : "Guardar y revisar entrada";
     await dialog.getByRole("button", { name: label, exact: true }).click();
-    if (stock === "") {
-      await page.getByRole("heading", { name: "Registrar entrada", exact: true }).waitFor();
-      await page.getByRole("button", { name: "Volver a producto", exact: true }).click();
-      await page.getByRole("button", { name: "Convertir en producto con variantes", exact: true }).click();
-      await page.getByRole("heading", { name: "Convertir producto en variantes", exact: true }).waitFor();
-      await page.getByRole("heading", { name: "1. Preparar conversión" }).waitFor();
-      for (const width of [320, 360, 375, 400, 1280, 1440]) {
-        await page.setViewportSize({ width, height: 900 });
-        const back = page.getByRole("button", { name: "Volver a categoría", exact: true });
-        await back.scrollIntoViewIfNeeded();
-        const actions = page.locator('.modal-flow-actions');
-        assert.equal(await actions.getAttribute("data-placement"), "footer", "wide conversion panel uses footer when side space is insufficient");
-        const b = await back.boundingBox(); const body = await back.evaluate(element => { const body = element.closest('[role="dialog"]').querySelector('.overflow-y-auto'); return { bottom: body.getBoundingClientRect().bottom }; });
-        assert.ok(b.y >= body.bottom - 1, "back button must be below scrollable fields");
-        await noOverflow(page);
-      }
-    }
-    else await page.getByRole("heading", { name: "Productos guardados · Existencias y entradas", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Productos guardados · Existencias y entradas", exact: true }).waitFor();
     assert.equal(page.uxRecords.bundleWrites.length, 1); assert.equal(page.uxRecords.movementWrites, 0);
     assert.equal(page.uxRecords.bundleWrites[0].variants[0].initialStock, Number(stock));
+    assert.match(await page.getByRole('status').innerText(), /Producto guardado correctamente/);
+    await page.getByRole('button', { name: /Registrar (otra )?entrada.*SKU/ }).click();
+    assert.equal(await page.getByRole('button', { name: 'Volver a productos guardados', exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Volver al resumen', exact: true }).click();
+    assert.equal(page.uxRecords.movementWrites, 0);
+    await page.getByRole('button', { name: /Registrar (otra )?entrada.*SKU/ }).click();
+    await page.getByLabel('Cantidad a ingresar', { exact: true }).fill('2');
+    await page.getByRole('button', { name: 'Confirmar entrada', exact: true }).dblclick();
+    await page.getByRole('heading', { name: 'Productos guardados · Existencias y entradas', exact: true }).waitFor();
+    assert.equal(page.uxRecords.movementWrites, 1);
+    assert.match(await page.getByRole('dialog').innerText(), new RegExp('Stock actual: ' + (Number(stock) + 2)));
+    await page.getByRole('button', { name: 'Agregar otro producto a esta categoría', exact: true }).click();
+    assert.equal(await page.locator('.modal-flow-actions').count(), 0);
+    assert.equal(await page.getByRole('dialog').getByLabel('Nombre', { exact: true }).inputValue(), '');
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('button', { name: 'Editar', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Convertir en producto con variantes', exact: true }).click();
+    await page.getByRole('heading', { name: '1. Preparar conversión' }).waitFor();
+    assert.equal(await page.locator('.modal-flow-actions').count(), 0, 'normal conversion must not inherit category flow');
     await noOverflow(page); await page.context().close();
   }
+  const normalFamily = await pageFor('inventory', 375, 'dark');
+  await normalFamily.getByRole('button', { name: 'Nuevo producto', exact: true }).click();
+  await normalFamily.getByRole('combobox', { name: 'Buscar categoría', exact: true }).fill('Prueba');
+  await normalFamily.getByRole('option', { name: /^Prueba/ }).click();
+  await normalFamily.getByLabel('Nombre', { exact: true }).fill('Familia normal');
+  await normalFamily.getByLabel('Precio', { exact: true }).fill('1000');
+  await normalFamily.getByRole('button', { name: 'Producto con variantes', exact: true }).click();
+  await normalFamily.getByLabel('Nombre del atributo 1', { exact: true }).fill('Color');
+  await normalFamily.getByLabel('Opción de Color', { exact: true }).first().fill('Rojo');
+  await normalFamily.getByRole('button', { name: /^Variante 2/ }).click();
+  await normalFamily.getByLabel('Opción de Color', { exact: true }).nth(1).fill('Azul');
+  await normalFamily.locator('input[data-bundle-field="price"]').nth(1).fill('1000');
+  await normalFamily.getByRole('button', { name: 'Guardar y registrar entradas', exact: true }).click();
+  await normalFamily.getByRole('heading', { name: 'Productos guardados · Existencias y entradas', exact: true }).waitFor();
+  await normalFamily.getByRole('button', { name: /Registrar entrada.*SKU/ }).first().click();
+  for (const theme of ['light', 'dark']) for (const width of [320, 360, 375, 400, 1280, 1440]) {
+    await normalFamily.evaluate(dark => document.documentElement.classList.toggle('dark', dark), theme === 'dark');
+    await normalFamily.setViewportSize({ width, height: 900 });
+    assert.equal(await normalFamily.locator('.modal-flow-actions, .linked-flow-back').count(), 0);
+    const buttons = normalFamily.getByRole('dialog').locator('footer button');
+    assert.equal(await buttons.count(), 2);
+    const a = await buttons.nth(0).boundingBox(), b = await buttons.nth(1).boundingBox();
+    assert.ok(Math.abs(a.width - b.width) <= 2 && a.height >= 44 && b.height >= 44);
+    await noOverflow(normalFamily);
+    if ([320, 1440].includes(width)) await normalFamily.screenshot({ path: fileURLToPath(new URL(`normal-entry-${width}-${theme}.png`, shots)), fullPage: true });
+  }
+  await normalFamily.keyboard.press('Escape');
+  assert.equal(normalFamily.uxRecords.movementWrites, 0);
+  for (const index of [0, 1]) {
+    await normalFamily.getByRole('button', { name: /Registrar entrada.*SKU/ }).nth(index).click();
+    await normalFamily.getByLabel('Cantidad a ingresar', { exact: true }).fill(String(index + 2));
+    await normalFamily.getByRole('button', { name: 'Confirmar entrada', exact: true }).dblclick();
+    await normalFamily.getByRole('heading', { name: 'Productos guardados · Existencias y entradas', exact: true }).waitFor();
+  }
+  assert.equal(normalFamily.uxRecords.movementWrites, 2);
+  assert.equal(normalFamily.uxRecords.bundleWrites.length, 1);
+  assert.match(await normalFamily.getByRole('dialog').innerText(), /Stock actual: 2/);
+  assert.match(await normalFamily.getByRole('dialog').innerText(), /Stock actual: 3/);
+  await normalFamily.getByRole('button', { name: 'Finalizar', exact: true }).click();
+  await normalFamily.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
+  assert.equal(await normalFamily.getByRole('button', { name: 'Cancelar', exact: true }).count(), 1);
+  assert.equal(await normalFamily.getByRole('button', { name: 'Volver al resumen', exact: true }).count(), 0);
+  await normalFamily.context().close();
   for (const theme of ['light', 'dark']) for (const width of [320, 360, 375, 400, 1280, 1440]) {
     const normal = await pageFor('inventory', width, theme);
     await normal.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
@@ -627,6 +673,7 @@ try {
       await journey.getByRole('heading', { name: 'Mi cuenta', exact: true }).waitFor();
       await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
       await journey.getByRole('link', { name: /^Ver carrito,/ }).click();
+      await journey.getByRole('button', { name: 'Limpiar carrito', exact: true }).locator('svg').waitFor({ state: 'attached' });
       assert.equal(await journey.getByRole('button', { name: 'Limpiar carrito', exact: true }).locator('svg').count(), 1);
       await journey.getByRole('link', { name: 'Volver a favoritos', exact: true }).click();
       await journey.getByRole('heading', { name: 'Favoritos', exact: true }).waitFor();

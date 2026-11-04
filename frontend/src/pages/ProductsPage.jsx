@@ -178,8 +178,9 @@ export default function ProductsPage() {
   const [productStatusTarget, setProductStatusTarget] = useState(null);
   const [familyStatusTarget, setFamilyStatusTarget] = useState(null);
   const [linkedRegistration, setLinkedRegistration] = useState(null);
+  const reviewEntry = activeForm === "ENTRY" && linkedRegistration?.returnToReview;
   const quickReviewEntry = activeForm === "ENTRY" && linkedRegistration?.step === "ENTRY"
-    && linkedRegistration.returnToReview && linkedRegistration.quickFlow;
+    && linkedRegistration.returnToReview && linkedRegistration.origin === "CATEGORY_QUICK";
   const [submittingCategory, setSubmittingCategory] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
   const [pendingProductImages, setPendingProductImages] = useState([]);
@@ -463,17 +464,21 @@ export default function ProductsPage() {
     requestAnimationFrame(() => requestAnimationFrame(() => simpleModeRef.current?.focus()));
   };
   const finishNewBundle = async (result, creation) => {
-    const category = linkedRegistration?.category;
+    const origin = linkedRegistration?.origin === "CATEGORY_QUICK" ? "CATEGORY_QUICK" : "INVENTORY_CREATE";
+    const quickCategory = linkedRegistration?.category;
     try {
       const saved = await getProductsRequest();
       const items = result.productIds.map((id, index) => ({ product: saved.find(product => product.id === id), ...creation?.[index] }));
       if (items.some(item => !item.product)) throw new Error("No se pudieron recuperar los productos guardados");
-      if (!result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
-        if (category) entryReviewRef.current = { familyId: null, items, category };
-        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: Boolean(category), quickFlow: Boolean(category) });
+      const category = quickCategory || categories.find(item => item.id === items[0].product.categoryId);
+      const review = { origin, familyId: result.familyId, items, category,
+        confirmation: result.familyId ? "Productos guardados correctamente" : "Producto guardado correctamente" };
+      if (origin === "CATEGORY_QUICK" && !result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
+        entryReviewRef.current = review;
+        goToLinkedEntry({ origin, category, product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: true });
       } else {
         setLinkedRegistration(null); setActiveForm(null);
-        setCreationReview({ familyId: result.familyId, items, category });
+        setCreationReview(review);
       }
     } catch {
       setLinkedRegistration(null); setActiveForm(null);
@@ -619,6 +624,7 @@ export default function ProductsPage() {
 
       const belongsToLinkedFlow = linkedRegistration?.category?.id === category.id;
       const nextRegistration = {
+        origin: "CATEGORY_QUICK",
         step: "category",
         direction: "idle",
         category,
@@ -954,6 +960,11 @@ export default function ProductsPage() {
     const category = registration?.category;
     const product = registration?.product;
     if (!category) return;
+    if (registration.origin !== "CATEGORY_QUICK") {
+      if (product) startEditing(product, true);
+      else { openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) }); }
+      return;
+    }
 
     setLinkedRegistration({ ...registration, step: "product", direction });
     if (registration.productDraft) {
@@ -1005,6 +1016,10 @@ export default function ProductsPage() {
   const addAnotherProductToLinkedCategory = () => {
     const category = linkedRegistration?.category;
     if (!category) return;
+    if (linkedRegistration.origin !== "CATEGORY_QUICK") {
+      openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) });
+      return;
+    }
 
     setLinkedRegistration((current) => current ? {
       ...current,
@@ -1028,6 +1043,7 @@ export default function ProductsPage() {
   };
 
   const startEditing = (product, individual = false) => {
+    setLinkedRegistration(null); entryReviewRef.current = null; setCreationReview(null);
     setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
     if (product.familyId && !individual) { setActiveForm(null); setBundleEditor({ familyId: product.familyId }); return; }
     setEditingProductId(product.id);
@@ -1089,6 +1105,7 @@ export default function ProductsPage() {
   };
 
   const openCategoryForm = () => {
+    entryReviewRef.current = null; setCreationReview(null);
     setLinkedRegistration(null);
     setActiveForm("category");
     setEditingProductId(null);
@@ -1103,6 +1120,7 @@ export default function ProductsPage() {
   };
 
   const openProductForm = () => {
+    entryReviewRef.current = null; setCreationReview(null);
     setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
     setLinkedRegistration(null);
     setActiveForm("product");
@@ -1113,6 +1131,7 @@ export default function ProductsPage() {
   };
 
   const openMovementForm = (movementType) => {
+    entryReviewRef.current = null; setCreationReview(null);
     setLinkedRegistration(null);
     setActiveForm(movementType);
     setMovementForm(initialMovementForm(movementType));
@@ -1290,10 +1309,11 @@ export default function ProductsPage() {
       <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
         const category = creationReview.category || categories.find(item => item.id === product.categoryId);
         entryReviewRef.current = creationReview;
-        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null, returnToReview: true, quickFlow: Boolean(creationReview.category) });
+        setCreationReview(null); goToLinkedEntry({ origin: creationReview.origin, category, product, entryCompleted: false, entryResult: null, returnToReview: true });
       }} onAnother={() => {
-        const category = creationReview.category; setCreationReview(null);
-        goToLinkedProduct("forward", { category, product: null, entryCompleted: false, entryResult: null });
+        const { category, origin } = creationReview; setCreationReview(null);
+        if (origin === "CATEGORY_QUICK") goToLinkedProduct("forward", { origin, category, product: null, entryCompleted: false, entryResult: null });
+        else { openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) }); }
       }} />
 
       <div className={`${pageHeaderClass} inventory-section-header`}>
@@ -1707,9 +1727,12 @@ export default function ProductsPage() {
         onClose={closeMovementForm}
         size="large"
         flowActions={quickReviewEntry ? { left: <button className="product-positive-action creation-continue-action" type="button" onClick={closeMovementForm} disabled={submittingMovement}><ArrowLeft size={18} aria-hidden="true" /><span>Volver a productos guardados</span></button> } : undefined}
-        footer={quickReviewEntry && !linkedRegistration.entryCompleted ? <button className="product-positive-action" type="submit" form={movementFormId} disabled={submittingMovement}>{submittingMovement ? "Registrando..." : "Confirmar entrada"}</button> : undefined}
+        footer={reviewEntry ? <>
+          {!quickReviewEntry && <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>Volver al resumen</button>}
+          <button className="product-positive-action" type="submit" form={movementFormId} disabled={submittingMovement}>{submittingMovement ? "Registrando..." : "Confirmar entrada"}</button>
+        </> : undefined}
       >
-        {linkedRegistration?.step === "ENTRY" && !quickReviewEntry && (
+        {linkedRegistration?.step === "ENTRY" && !reviewEntry && (
           <button
             className="linked-flow-back"
             type="button"
@@ -1848,7 +1871,7 @@ export default function ProductsPage() {
               {estimatedLowStock && <span className="text-xs">Este movimiento dejará el producto con stock bajo.</span>}
             </div>
           )}
-          {!quickReviewEntry && <div className={formActionsClass}>
+          {!reviewEntry && <div className={formActionsClass}>
             {linkedRegistration?.step === "ENTRY" ? (
               <button className={secondaryButtonClass} type="button" onClick={linkedRegistration?.returnToReview ? closeMovementForm : closeLinkedRegistration} disabled={submittingMovement}>
                 {linkedRegistration?.returnToReview ? "Volver al resumen" : "Finalizar"}

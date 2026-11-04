@@ -79,7 +79,8 @@ test("category return stays outside fields and captures draft; conversion title 
   assert.match(page, /productDraft = \{ form, unitSearch, files: pendingProductImages/);
   assert.match(editor, /saved\?\.conversion\?\.expectedRevision===data.revision/);
   assert.match(editor, /onCreated\?\.\(result, creation\)/);
-  assert.match(page, /setCreationReview\(\{ familyId: result.familyId, items, category \}\)/);
+  assert.match(page, /const review = \{ origin, familyId: result.familyId, items, category/);
+  assert.match(page, /setCreationReview\(review\)/);
   assert.doesNotMatch(page.match(/const finishNewBundle =[\s\S]*?const returnFromConversion/)[0], /createInventoryMovementRequest/);
 });
 

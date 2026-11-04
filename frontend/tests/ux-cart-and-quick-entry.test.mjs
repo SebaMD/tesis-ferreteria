@@ -51,10 +51,12 @@ test('empty cart has no redundant header return and quick-entry presentation is 
   assert.doesNotMatch(catalog, /Explorar desde cero/);
   assert.match(catalog, /readCatalogEntry\(location.key, owner\)/);
   const products = await read('pages/ProductsPage.jsx');
-  assert.match(products, /linkedRegistration.returnToReview && linkedRegistration.quickFlow/);
-  assert.match(products, /quickFlow: Boolean\(creationReview.category\)/);
+  assert.match(products, /linkedRegistration.returnToReview && linkedRegistration.origin === "CATEGORY_QUICK"/);
+  assert.match(products, /origin: creationReview.origin/);
+  assert.match(products, /if \(registration.origin !== "CATEGORY_QUICK"\)/);
+  assert.match(products, /if \(linkedRegistration.origin !== "CATEGORY_QUICK"\)/);
   assert.match(products, /flowActions=\{quickReviewEntry \? \{ left:/);
   assert.match(products, /type="submit" form=\{movementFormId\}/);
-  assert.match(products, /!quickReviewEntry && <div className=\{formActionsClass\}/);
+  assert.match(products, /!reviewEntry && <div className=\{formActionsClass\}/);
   assert.match(products, /movementGuard.current \|\| submittingMovement/);
 });

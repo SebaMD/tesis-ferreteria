@@ -48,9 +48,12 @@ export function explorationDestination(owner, currentPath = '', storage) {
   } };
 }
 
-export function cartExplorationReturn(state, owner, storage) {
+export function cartExplorationReturn(state, owner) {
   const origin = informationReturn(state?.cartOwner === owner ? state : null, '/cart');
-  const destination = origin.state && catalogPath(origin.to.pathname)
-    ? origin : explorationDestination(owner, '/cart', storage);
-  return { ...destination, label: 'Volver al catálogo' };
+  const path = origin.to.pathname;
+  const clientOnly = ['/account', '/favorites', '/orders'].includes(path);
+  if ((clientOnly && !owner.startsWith('CLIENT:')) || (path === '/guest-orders' && owner !== 'GUEST')) {
+    return informationReturn(null, '/cart');
+  }
+  return origin;
 }

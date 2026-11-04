@@ -8,7 +8,7 @@ import { informationNavigationState } from "../helpers/informationNavigation.js"
 import { explorationDestination, explorationOwner } from "../helpers/explorationNavigation.js";
 
 function navClass({ isActive }) {
-  return `inline-flex min-h-10 items-center gap-1.5 rounded-[5px] px-3 py-2 text-sm font-bold transition-colors max-[720px]:px-2 max-[720px]:text-xs ${
+  return `inline-flex min-h-10 items-center gap-1.5 rounded-[5px] px-3 py-2 text-sm font-bold transition-colors max-[720px]:px-1 max-[720px]:text-[11px] ${
     isActive ? "bg-rust-50 text-rust-600" : "text-ink-700 hover:bg-slate-100 hover:text-ink-950"
   }`;
 }
@@ -74,9 +74,9 @@ export default function ClientNavbar() {
 
         <nav className="flex flex-wrap items-center gap-1 max-[720px]:order-3 max-[720px]:w-full max-[720px]:flex-nowrap" aria-label="Navegación de clientes">
           <NavLink className={navClass} {...catalogReturn} aria-label={typeof catalogReturn.to === 'object' && catalogReturn.to.pathname !== '/catalog' ? 'Catálogo: retomar producto visitado' : 'Catálogo'}>Catálogo</NavLink>
-          {isClient && <NavLink className={navClass} to="/orders" state={informationNavigationState(location, "/orders")}><ClipboardList size={15} /><span className="max-[720px]:hidden">Mis pedidos</span><span className="hidden max-[720px]:inline">Pedidos</span></NavLink>}
+          {isClient && <NavLink className={navClass} to="/orders" state={informationNavigationState(location, "/orders")}><ClipboardList size={15} />Mis pedidos</NavLink>}
           {isClient && <NavLink className={navClass} to="/favorites" state={informationNavigationState(location, "/favorites")}><Heart className="inline" size={15} /> Favoritos</NavLink>}
-          {!isAuthenticated && <NavLink className={navClass} to="/guest-orders" state={informationNavigationState(location, "/guest-orders")}><ClipboardList className="inline" size={15} /> Mis compras</NavLink>}
+          {!isAuthenticated && <NavLink className={navClass} to="/guest-orders" state={informationNavigationState(location, "/guest-orders")}><ClipboardList className="inline" size={15} /> Mis pedidos</NavLink>}
           <Link className="relative ml-auto hidden size-10 shrink-0 place-items-center rounded-[5px] border border-ink-950 bg-ink-950 text-white no-underline hover:bg-ink-700 max-[720px]:grid" to="/cart" state={cartState} title="Ver carrito" aria-label={`Ver carrito, ${totalUnits} ${totalUnits === 1 ? "unidad" : "unidades"}`}>
             <ShoppingCart size={20} />
             {totalUnits > 0 && (

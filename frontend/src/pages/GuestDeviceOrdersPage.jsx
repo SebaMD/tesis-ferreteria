@@ -118,8 +118,8 @@ export default function GuestDeviceOrdersPage() {
       <LoadingOverlay active={loading} />
       <header className="public-page-header">
         <div>
-        <span className="text-xs font-extrabold text-rust-600 uppercase">Compras sin cuenta</span>
-        <h1 className="mt-2 mb-2 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">Mis compras en este dispositivo</h1>
+        <span className="text-xs font-extrabold text-rust-600 uppercase">Pedidos sin cuenta</span>
+        <h1 className="mt-2 mb-2 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">Mis pedidos en este dispositivo</h1>
         <p className="m-0 max-w-190 text-sm leading-6 text-slate-500">
           Aquí aparecen las compras invitadas realizadas desde este navegador. Si borras sus cookies, todavía puedes usar el enlace seguro enviado por correo.
         </p>

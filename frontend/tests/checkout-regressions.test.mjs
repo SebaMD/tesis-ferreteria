@@ -96,7 +96,7 @@ test('checkout resume is memory-only, selection-scoped, expires and never leaks 
   client.clear(); assert.equal(client.read('[[1,1]]', 1001), null);
 });
 test('both information pages retain explicit safe origins, query/hash and checkout intent', () => {
-  for (const [pathname, label] of [['/catalog', 'Volver al catálogo'], ['/orders', 'Volver a mis pedidos'], ['/checkout', 'Volver a finalizar compra'], ['/guest-orders', 'Volver a mis compras'], ['/cart', 'Volver al carrito']]) {
+  for (const [pathname, label] of [['/catalog', 'Volver al catálogo'], ['/orders', 'Volver a mis pedidos'], ['/checkout', 'Volver a finalizar compra'], ['/guest-orders', 'Volver a mis pedidos'], ['/cart', 'Volver al carrito']]) {
     const state = informationNavigationState({ pathname, search: '?page=2', hash: '#order-12', state: { checkoutIntent: { source: 'DIRECT' } } });
     const back = informationReturn(state);
     assert.equal(back.label, label); assert.deepEqual(back.to, { pathname, search: '?page=2', hash: '#order-12' });

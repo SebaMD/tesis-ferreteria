@@ -317,7 +317,7 @@ try {
     const back = guestOrders.getByRole("link", { name: "Volver al catálogo", exact: true }); await back.waitFor();
     if (width < 620) {
       assert.equal((await back.boundingBox()).width, 44);
-      const heading = await guestOrders.getByRole("heading", { name: "Mis compras en este dispositivo", exact: true }).boundingBox();
+      const heading = await guestOrders.getByRole("heading", { name: "Mis pedidos en este dispositivo", exact: true }).boundingBox();
       assert.ok(Math.abs(heading.x + heading.width / 2 - width / 2) < 2, "title must be centered independently of arrow");
     }
     await noOverflow(guestOrders); await guestOrders.context().close();
@@ -547,7 +547,7 @@ try {
   await scroll.context().close();
   for (const theme of ["light", "dark"]) for (const width of [320, 360, 375, 400, 1280, 1440]) {
     const headers = await pageFor("scroll", width, theme);
-    for (const [link, title] of [["Favoritos", "Favoritos"], ["Mi cuenta", "Mi cuenta"], ["Mis compras", "Mis compras"], ["Devoluciones", "Cambios y devoluciones"], ["Condiciones", "Condiciones de despacho local"]]) {
+    for (const [link, title] of [["Favoritos", "Favoritos"], ["Mi cuenta", "Mi cuenta"], ["Mis pedidos", "Mis pedidos"], ["Devoluciones", "Cambios y devoluciones"], ["Condiciones", "Condiciones de despacho local"]]) {
       await headers.getByRole("navigation", { name: "Pruebas de navegación" }).getByRole("link", { name: link, exact: true }).click();
       const heading = headers.getByRole("heading", { name: title, exact: true }); await heading.waitFor();
       if (width < 620) { const box = await heading.boundingBox(); assert.ok(Math.abs(box.x + box.width / 2 - width / 2) < 2, title + " centered"); }
@@ -568,19 +568,20 @@ try {
       }
       const savedY = await cart.evaluate(() => scrollY);
       const nav = cart.getByRole('navigation', { name: 'Navegación de clientes' });
-      await nav.getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
+      await nav.getByRole('link', { name: guest ? 'Mis pedidos' : /pedidos/i }).click();
       await cart.getByRole('link', { name: /^Ver carrito,/ }).click();
       await cart.getByRole('heading', { name: 'Carrito', exact: true }).waitFor();
-      assert.equal(await cart.getByRole('link', { name: /Volver a mis compras|Volver a mis pedidos/ }).count(), 0);
+      assert.equal(await cart.getByRole('link', { name: /Volver a mis compras/ }).count(), 0);
       if (empty) {
         assert.equal(await cart.locator('main .compact-back-link').count(), 0);
         assert.equal(await cart.getByRole('link', { name: 'Explorar catálogo', exact: true }).count(), 1);
         await cart.getByRole('link', { name: 'Explorar catálogo', exact: true }).click();
       } else {
-        const back = cart.getByRole('link', { name: 'Volver al catálogo', exact: true });
+        const back = cart.getByRole('link', { name: 'Volver a mis pedidos', exact: true });
         await noOverflow(cart);
         if ([320, 1440].includes(width) && guest) await cart.screenshot({ path: fileURLToPath(new URL(`cart-final-${width}-${theme}.png`, shots)), fullPage: true });
         await back.click();
+        await nav.getByRole('link', { name: 'Catálogo', exact: true }).click();
         await cart.getByRole('link', { name: 'Artículo 7', exact: true }).waitFor();
         await cart.waitForFunction(y => Math.abs(scrollY - y) < 3, savedY, { timeout: 5000 });
         assert.match(await cart.getByRole('combobox', { name: 'Ordenar catálogo' }).textContent(), /Precio: mayor a menor/);
@@ -600,23 +601,36 @@ try {
     await journey.getByRole('heading', { name: 'Carrito', exact: true }).waitFor();
     await noOverflow(journey);
     await journey.screenshot({ path: fileURLToPath(new URL(`cart6-${guest ? 'guest-360-dark' : 'client-1440-light'}.png`, shots)), fullPage: true });
-    await journey.getByRole('link', { name: 'Volver al catálogo', exact: true }).click();
+    await journey.getByRole('link', { name: 'Volver al producto', exact: true }).click();
     await journey.getByRole('heading', { name: 'Producto de prueba', exact: true }).waitFor();
     const previousUrl = journey.url();
-    await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
+    await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis pedidos' : /pedidos/i }).click();
     await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: 'Catálogo: retomar producto visitado', exact: true }).click();
     await journey.getByRole('heading', { name: 'Producto de prueba', exact: true }).waitFor();
     assert.equal(journey.url(), previousUrl);
     await journey.getByRole('link', { name: 'Ficha familiar de prueba', exact: true }).click();
     await journey.getByRole('heading', { name: 'Familia de prueba', exact: true }).waitFor();
-    await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
+    await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis pedidos' : /pedidos/i }).click();
     await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: 'Catálogo: retomar producto visitado', exact: true }).click();
     await journey.waitForURL(/\/catalog\/families\/18\?variant=100/);
     await journey.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
     await journey.getByRole('button', { name: 'Ver carrito', exact: true }).last().click();
-    await journey.getByRole('link', { name: 'Volver al catálogo', exact: true }).click();
+    await journey.getByRole('link', { name: 'Volver al producto', exact: true }).click();
     await journey.waitForURL(/\/catalog\/families\/18\?variant=100/);
     await noOverflow(journey);
+    if (!guest) {
+      const nav = journey.getByRole('navigation', { name: 'Navegación de clientes' });
+      await journey.getByRole('link', { name: 'Mi cuenta', exact: true }).click();
+      await journey.getByRole('heading', { name: 'Mi cuenta', exact: true }).waitFor();
+      await journey.getByRole('link', { name: /^Ver carrito,/ }).click();
+      await journey.getByRole('link', { name: 'Volver a mi cuenta', exact: true }).click();
+      await journey.getByRole('heading', { name: 'Mi cuenta', exact: true }).waitFor();
+      await nav.getByRole('link', { name: 'Favoritos', exact: true }).click();
+      await journey.getByRole('link', { name: /^Ver carrito,/ }).click();
+      assert.equal(await journey.getByRole('button', { name: 'Limpiar carrito', exact: true }).locator('svg').count(), 1);
+      await journey.getByRole('link', { name: 'Volver a favoritos', exact: true }).click();
+      await journey.getByRole('heading', { name: 'Favoritos', exact: true }).waitFor();
+    }
     await journey.context().close();
   }
   const region = carousel.getByRole("region", { name: "Información destacada del catálogo" });
@@ -635,7 +649,7 @@ try {
   console.log("PASS UX3: empty/zero/positive stock continuation, category draft roundtrip, inline back/conversion title, family per-SKU stock, no automatic extra movement, guest empty/history actions, centered client headers, async catalog POP/reload/context/filter restoration.");
   console.log("PASS UX4: shared empty states/no duplicate return, compact accessible header arrows, guest choice header return, saved-address summary/form exclusivity and preserved alternative draft, optional confirmed replacement, external modal actions or pinned footer based on real space, keyboard/focus/Escape. APIs simulated.");
   console.log("PASS UX6: centered choice heading, cart toast/origin and family variant resume, two blank creation variants, suggestion dismissal, saved-products summary return, distinct SKU entries, double-click guard and blocked uncertain-result retry. APIs simulated.");
-  console.log("PASS final adjustments: empty/full cart for guest/client in both themes and six widths, catalog-only return/restored browsing, exact toast variant, clean catalog heading, quick-entry external/fixed back and full-width confirmation, normal inventory unchanged. APIs simulated.");
+  console.log("PASS final adjustments: empty/full cart for guest/client in both themes and six widths, origin-aware return/restored browsing, exact toast variant, account/favorites returns, full Mis pedidos labels, clean catalog heading, quick-entry external/fixed back and full-width confirmation, normal inventory unchanged. APIs simulated.");
   console.log("Screenshots:", fileURLToPath(shots));
 } catch (error) {
   console.error("Browser runtime errors:", errors);

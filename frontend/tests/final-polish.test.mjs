@@ -41,8 +41,8 @@ test("checkout, success navigation, clean catalog and warehouse shortcut are wir
   ]);
   assert.doesNotMatch(checkout, /handleRemoveProduct|Trash2/);
   assert.match(checkout, /vuelve al carrito antes de pagar/);
-  assert.match(result, /Ir a mis compras/);
-  assert.match(guest, /Ir a mis compras/);
+  assert.match(result, /Ir a mis pedidos/);
+  assert.match(guest, /Ir a mis pedidos/);
   assert.match(catalog, /max-\[600px\]:gap-2\.5/);
   assert.match(card, /en el carrito/);
   assert.doesNotMatch(controls, /En tu carrito:/);

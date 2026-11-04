@@ -4,7 +4,7 @@ import { createId } from './createId.js';
 const session = typeof globalThis.crypto?.getRandomValues === 'function' ? createId() : null;
 const informationPages = new Set(['/delivery-conditions', '/changes-and-returns']);
 const names = {
-  '/catalog': 'al catálogo', '/orders': 'a mis pedidos', '/guest-orders': 'a mis compras',
+  '/catalog': 'al catálogo', '/orders': 'a mis pedidos', '/guest-orders': 'a mis pedidos',
   '/checkout': 'a finalizar compra', '/cart': 'al carrito', '/account': 'a mi cuenta',
   '/favorites': 'a favoritos', '/checkout-options': 'a las opciones de compra',
   '/order-tracking': 'al seguimiento del pedido',

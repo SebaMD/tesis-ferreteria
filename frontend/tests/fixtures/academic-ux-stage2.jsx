@@ -50,7 +50,7 @@ const store = createCheckoutDraftStore("TEST");
 const favorites = { enabled: true, products: params.has("with-favorites") ? [product] : [], busy: [], loading: false, error: "", reload() {}, toggle() {} };
 
 function ScrollFixture() {
-  return <><nav className="sticky top-0 z-30 bg-white" aria-label="Pruebas de navegación"><Link to="/catalog">Catálogo</Link> <InformationLink to="/favorites">Favoritos</InformationLink> <InformationLink to="/account">Mi cuenta</InformationLink> <InformationLink to="/orders">Mis compras</InformationLink> <InformationLink to="/changes-and-returns">Devoluciones</InformationLink> <InformationLink to="/delivery-conditions">Condiciones</InformationLink></nav><Routes>
+  return <><nav className="sticky top-0 z-30 bg-white" aria-label="Pruebas de navegación"><Link to="/catalog">Catálogo</Link> <InformationLink to="/favorites">Favoritos</InformationLink> <InformationLink to="/account">Mi cuenta</InformationLink> <InformationLink to="/orders">Mis pedidos</InformationLink> <InformationLink to="/changes-and-returns">Devoluciones</InformationLink> <InformationLink to="/delivery-conditions">Condiciones</InformationLink></nav><Routes>
     <Route path="/catalog" element={<CatalogPage />} />
     <Route path="/catalog/products/:id" element={<ProductDetailPage />} />
     <Route path="/favorites" element={<FavoritesPage />} />
@@ -83,6 +83,7 @@ function JourneyFixture() {
     <Route path="/catalog/products/:id" element={<ProductDetailPage />} />
     <Route path="/catalog/families/:id" element={<ProductFamilyPage />} />
     <Route path="/cart" element={<ClientCartPage />} />
+    <Route path="/account" element={<ClientAccountPage />} />
     <Route path="/orders" element={<ClientOrdersPage />} />
     <Route path="/guest-orders" element={<GuestDeviceOrdersPage />} />
     <Route path="/favorites" element={<FavoritesPage />} />

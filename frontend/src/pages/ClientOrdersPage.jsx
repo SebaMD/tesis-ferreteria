@@ -197,7 +197,7 @@ export default function ClientOrdersPage() {
       <LoadingOverlay active={loading} />
       <header className="public-page-header">
         <div>
-          <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis compras</h1>
+          <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis pedidos</h1>
           <p className="mt-1.5 mb-0 text-sm text-slate-500">Sigue tus pedidos en curso y consulta tus compras anteriores.</p>
         </div>
         <InformationBackLink />

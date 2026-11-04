@@ -42,7 +42,7 @@ if (location.pathname === "/ux-test") {
 const mode = params.get("case");
 const guest = params.has("guest");
 const product = { id: 99, name: "Producto de prueba", price: 5990, currentStock: 20, availableStock: 20, unitMeasure: "unidad", status: true, images: [] };
-const cart = [{ product: { ...product, id: 5 }, quantity: 4 }];
+const cart = params.has('empty-cart') ? [] : [{ product: { ...product, id: 5 }, quantity: 4 }];
 const auth = { isAuthenticated: !guest, user: guest ? null : { id: 1, role: mode === 'settings' ? params.has('manager') ? 'MANAGER' : 'ADMIN' : ["bundle", "inventory"].includes(mode) ? "ADMIN" : "CLIENT", names: "Cliente", surnames: "Prueba", emailVerified: true }, replaceSession() {} };
 const forbiddenMutation = () => { throw new Error("Compra directa modificó el carrito"); };
 const notice = { refreshNotices() {}, deliveryInformation: { mode: "LOCAL_FIXED", flatFee: 3000, freeShippingFrom: 500000 }, presentation: { title: "Catálogo", mainText: "Presentación", secondaryText: "Prueba" }, notices: [{ id: 1, title: "Segundo aviso", message: "Contenido de prueba" }] };
@@ -89,7 +89,7 @@ function JourneyFixture() {
   </Routes></ClientLayout>;
 }
 function Fixture() {
-  return <AuthContext.Provider value={auth}><CartContext.Provider value={{ items: cart, totalUnits: 4, addItem: mode === 'journey' ? (product, quantity) => { cart.push({ product, quantity }); return { success: true }; } : forbiddenMutation, removeItem: forbiddenMutation, clearCart: forbiddenMutation }}><CheckoutDraftContext.Provider value={store}><CustomerNoticeContext.Provider value={notice}>
+  return <AuthContext.Provider value={auth}><CartContext.Provider value={{ items: cart, totalUnits: cart.reduce((sum, item) => sum + item.quantity, 0), addItem: mode === 'journey' ? (product, quantity) => { cart.push({ product, quantity }); return { success: true }; } : forbiddenMutation, removeItem: forbiddenMutation, clearCart: forbiddenMutation }}><CheckoutDraftContext.Provider value={store}><CustomerNoticeContext.Provider value={notice}>
     <BrowserRouter><ThemeContext.Provider value={{ isDark: params.get("theme") === "dark", toggleTheme() {} }}><FavoritesContext.Provider value={favorites}><ClientScrollRestoration />
       {mode === 'settings' ? <DeliverySettingsManager role={auth.user.role} /> : mode === 'journey' ? <JourneyFixture /> : mode === "inventory" ? <ProductsPage /> : mode === "guest-orders" ? <GuestDeviceOrdersPage /> : mode === "scroll" ? <ScrollFixture /> : mode === "filters" ? <FilterFixture /> : mode === "carousel" ? <CatalogNoticeCarousel /> : mode === "bundle" ? <ProductBundleEditor familyId={18} categories={[{ id: 1, name: "Prueba" }]} onClose={() => {}} /> : <PurchaseFixture />}
     </FavoritesContext.Provider></ThemeContext.Provider>

@@ -398,6 +398,18 @@ try {
     assert.equal(page.uxRecords.bundleWrites[0].variants[0].initialStock, Number(stock));
     await noOverflow(page); await page.context().close();
   }
+  for (const theme of ['light', 'dark']) for (const width of [320, 360, 375, 400, 1280, 1440]) {
+    const normal = await pageFor('inventory', width, theme);
+    await normal.getByRole('button', { name: 'Registrar entrada', exact: true }).click();
+    const dialog = normal.getByRole('dialog');
+    assert.equal(await dialog.getByRole('button', { name: 'Cancelar', exact: true }).count(), 1);
+    assert.equal(await dialog.getByRole('button', { name: 'Confirmar entrada', exact: true }).count(), 1);
+    assert.equal(await dialog.locator('.modal-flow-actions').count(), 0, 'normal inventory has no quick-flow actions');
+    await noOverflow(normal);
+    await normal.keyboard.press('Escape');
+    assert.equal(normal.uxRecords.movementWrites, 0);
+    await normal.context().close();
+  }
   const quick = await pageFor("inventory", 375, "dark");
   await quick.getByRole("button", { name: "Gestionar categorías", exact: true }).click();
   await quick.getByRole("dialog").getByLabel("Nombre", { exact: true }).fill("Categoría UX");
@@ -434,6 +446,28 @@ try {
   assert.equal(quick.uxRecords.bundleWrites.length, 1); assert.equal(quick.uxRecords.movementWrites, 0);
   const summary = quick.getByRole('dialog');
   await summary.getByRole('button', { name: /Registrar otra entrada.*SKU/ }).first().click();
+  for (const theme of ['light', 'dark']) for (const width of [320, 360, 375, 400, 1280, 1440]) {
+    await quick.evaluate(dark => document.documentElement.classList.toggle('dark', dark), theme === 'dark');
+    await quick.setViewportSize({ width, height: 900 });
+    await checkFlowPlacement(quick, width >= 1280 ? 'side' : 'footer');
+    assert.equal(await quick.getByRole('button', { name: 'Volver al resumen', exact: true }).count(), 0);
+    const confirm = quick.getByRole('button', { name: 'Confirmar entrada', exact: true });
+    const box = await confirm.boundingBox();
+    const formBox = await quick.getByRole('dialog').locator('form').boundingBox();
+    assert.ok(Math.abs(box.width - formBox.width) <= 2, 'confirm spans the form width');
+    assert.ok(box.height >= 44);
+    const back = quick.getByRole('button', { name: 'Volver a productos guardados', exact: true });
+    await back.focus(); await quick.keyboard.press('Tab');
+    assert.equal(await quick.getByRole('button', { name: 'Cerrar diálogo' }).evaluate(e => e === document.activeElement), true);
+    if ([320, 1280, 1440].includes(width)) await quick.screenshot({ path: fileURLToPath(new URL(`entry-final-${width}-${theme}.png`, shots)), fullPage: true });
+  }
+  await quick.keyboard.press('Escape');
+  await quick.getByRole('heading', { name: 'Productos guardados · Existencias y entradas', exact: true }).waitFor();
+  assert.equal(quick.uxRecords.movementWrites, 0, 'Escape does not write');
+  await quick.getByRole('dialog').getByRole('button', { name: /Registrar otra entrada.*SKU/ }).first().click();
+  await quick.getByRole('button', { name: 'Cerrar diálogo', exact: true }).click();
+  assert.equal(quick.uxRecords.movementWrites, 0, 'close does not write');
+  await quick.getByRole('dialog').getByRole('button', { name: /Registrar otra entrada.*SKU/ }).first().click();
   await quick.getByRole('button', { name: 'Volver a productos guardados', exact: true }).click();
   assert.equal(quick.uxRecords.movementWrites, 0, 'return does not write');
   await quick.getByRole('dialog').getByRole('button', { name: /Registrar otra entrada.*SKU/ }).first().click();
@@ -522,6 +556,40 @@ try {
     if ([320, 1280].includes(width)) await headers.screenshot({ path: fileURLToPath(new URL(`headers3-${width}-${theme}.png`, shots)), fullPage: true });
     await headers.context().close();
   }
+  for (const theme of ['light', 'dark']) for (const width of [320, 360, 375, 400, 1280, 1440]) for (const guest of [true, false]) {
+    for (const empty of [true, false]) {
+      const cart = await pageFor('journey', width, theme, `${guest ? 'guest' : 'with-favorites'}&${empty ? 'empty-cart' : ''}`);
+      await cart.getByRole('link', { name: 'Artículo 7', exact: true }).waitFor();
+      assert.equal(await cart.getByRole('button', { name: 'Explorar desde cero', exact: true }).count(), 0);
+      if (!empty) {
+        await cart.getByRole('combobox', { name: 'Ordenar catálogo' }).click();
+        await cart.getByRole('option', { name: 'Precio: mayor a menor', exact: true }).click();
+        await cart.getByRole('link', { name: 'Artículo 7', exact: true }).scrollIntoViewIfNeeded();
+      }
+      const savedY = await cart.evaluate(() => scrollY);
+      const nav = cart.getByRole('navigation', { name: 'Navegación de clientes' });
+      await nav.getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
+      await cart.getByRole('link', { name: /^Ver carrito,/ }).click();
+      await cart.getByRole('heading', { name: 'Carrito', exact: true }).waitFor();
+      assert.equal(await cart.getByRole('link', { name: /Volver a mis compras|Volver a mis pedidos/ }).count(), 0);
+      if (empty) {
+        assert.equal(await cart.locator('main .compact-back-link').count(), 0);
+        assert.equal(await cart.getByRole('link', { name: 'Explorar catálogo', exact: true }).count(), 1);
+        await cart.getByRole('link', { name: 'Explorar catálogo', exact: true }).click();
+      } else {
+        const back = cart.getByRole('link', { name: 'Volver al catálogo', exact: true });
+        await noOverflow(cart);
+        if ([320, 1440].includes(width) && guest) await cart.screenshot({ path: fileURLToPath(new URL(`cart-final-${width}-${theme}.png`, shots)), fullPage: true });
+        await back.click();
+        await cart.getByRole('link', { name: 'Artículo 7', exact: true }).waitFor();
+        await cart.waitForFunction(y => Math.abs(scrollY - y) < 3, savedY, { timeout: 5000 });
+        assert.match(await cart.getByRole('combobox', { name: 'Ordenar catálogo' }).textContent(), /Precio: mayor a menor/);
+      }
+      await cart.waitForURL(/\/catalog$/);
+      await noOverflow(cart);
+      await cart.context().close();
+    }
+  }
   const carousel = await pageFor("carousel", 375, "dark");
   for (const guest of [false, true]) {
     const journey = await pageFor('journey', guest ? 360 : 1440, guest ? 'dark' : 'light', guest ? 'guest' : 'with-favorites');
@@ -532,7 +600,7 @@ try {
     await journey.getByRole('heading', { name: 'Carrito', exact: true }).waitFor();
     await noOverflow(journey);
     await journey.screenshot({ path: fileURLToPath(new URL(`cart6-${guest ? 'guest-360-dark' : 'client-1440-light'}.png`, shots)), fullPage: true });
-    await journey.getByRole('link', { name: 'Volver al producto', exact: true }).click();
+    await journey.getByRole('link', { name: 'Volver al catálogo', exact: true }).click();
     await journey.getByRole('heading', { name: 'Producto de prueba', exact: true }).waitFor();
     const previousUrl = journey.url();
     await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
@@ -543,6 +611,10 @@ try {
     await journey.getByRole('heading', { name: 'Familia de prueba', exact: true }).waitFor();
     await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: guest ? 'Mis compras' : /pedidos/i }).click();
     await journey.getByRole('navigation', { name: 'Navegación de clientes' }).getByRole('link', { name: 'Catálogo: retomar producto visitado', exact: true }).click();
+    await journey.waitForURL(/\/catalog\/families\/18\?variant=100/);
+    await journey.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
+    await journey.getByRole('button', { name: 'Ver carrito', exact: true }).last().click();
+    await journey.getByRole('link', { name: 'Volver al catálogo', exact: true }).click();
     await journey.waitForURL(/\/catalog\/families\/18\?variant=100/);
     await noOverflow(journey);
     await journey.context().close();
@@ -563,6 +635,7 @@ try {
   console.log("PASS UX3: empty/zero/positive stock continuation, category draft roundtrip, inline back/conversion title, family per-SKU stock, no automatic extra movement, guest empty/history actions, centered client headers, async catalog POP/reload/context/filter restoration.");
   console.log("PASS UX4: shared empty states/no duplicate return, compact accessible header arrows, guest choice header return, saved-address summary/form exclusivity and preserved alternative draft, optional confirmed replacement, external modal actions or pinned footer based on real space, keyboard/focus/Escape. APIs simulated.");
   console.log("PASS UX6: centered choice heading, cart toast/origin and family variant resume, two blank creation variants, suggestion dismissal, saved-products summary return, distinct SKU entries, double-click guard and blocked uncertain-result retry. APIs simulated.");
+  console.log("PASS final adjustments: empty/full cart for guest/client in both themes and six widths, catalog-only return/restored browsing, exact toast variant, clean catalog heading, quick-entry external/fixed back and full-width confirmation, normal inventory unchanged. APIs simulated.");
   console.log("Screenshots:", fileURLToPath(shots));
 } catch (error) {
   console.error("Browser runtime errors:", errors);

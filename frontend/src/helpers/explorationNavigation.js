@@ -1,4 +1,5 @@
 import { clearCatalogEntries, createProductDetailNavigationState, normalizeCatalogSnapshot, readCatalogEntry } from './catalogNavigation.js';
+import { informationReturn } from './informationNavigation.js';
 
 const key = 'fyf-exploration-v1';
 let memory = null;
@@ -45,4 +46,11 @@ export function explorationDestination(owner, currentPath = '', storage) {
     restoreClientScrollKey: entry.key,
     ...(entry.pathname === '/catalog' ? { restoreCatalog: { owner, snapshot: entry.snapshot, scrollY: entry.scrollY } } : {}),
   } };
+}
+
+export function cartExplorationReturn(state, owner, storage) {
+  const origin = informationReturn(state?.cartOwner === owner ? state : null, '/cart');
+  const destination = origin.state && catalogPath(origin.to.pathname)
+    ? origin : explorationDestination(owner, '/cart', storage);
+  return { ...destination, label: 'Volver al catálogo' };
 }

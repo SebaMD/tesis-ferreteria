@@ -207,11 +207,6 @@ function CatalogContents({ owner }) {
         <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
           <div>
             <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
-            <button type="button" className="mt-2 min-h-11 border-slate-300 bg-white text-xs text-rust-600" onClick={() => {
-              setFilters(EMPTY_CATALOG_FILTERS); setOrder('name-asc'); setPage(1); setPageSize(20);
-              navigate('/catalog', { replace: true, state: null });
-              window.scrollTo({ top: 0, behavior: 'instant' });
-            }}>Explorar desde cero</button>
             <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos o familias en catálogo</span>
             {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
           </div>

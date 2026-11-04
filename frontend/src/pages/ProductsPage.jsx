@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -140,6 +140,7 @@ export default function ProductsPage() {
   const [movements, setMovements] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [movementForm, setMovementForm] = useState(initialMovementForm);
+  const movementFormId = useId();
   const [editingProductId, setEditingProductId] = useState(null);
   const [nameCorrectionOpen, setNameCorrectionOpen] = useState(false);
   const [activeForm, setActiveForm] = useState(null);
@@ -177,6 +178,8 @@ export default function ProductsPage() {
   const [productStatusTarget, setProductStatusTarget] = useState(null);
   const [familyStatusTarget, setFamilyStatusTarget] = useState(null);
   const [linkedRegistration, setLinkedRegistration] = useState(null);
+  const quickReviewEntry = activeForm === "ENTRY" && linkedRegistration?.step === "ENTRY"
+    && linkedRegistration.returnToReview && linkedRegistration.quickFlow;
   const [submittingCategory, setSubmittingCategory] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
   const [pendingProductImages, setPendingProductImages] = useState([]);
@@ -467,7 +470,7 @@ export default function ProductsPage() {
       if (items.some(item => !item.product)) throw new Error("No se pudieron recuperar los productos guardados");
       if (!result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
         if (category) entryReviewRef.current = { familyId: null, items, category };
-        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: Boolean(category) });
+        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: Boolean(category), quickFlow: Boolean(category) });
       } else {
         setLinkedRegistration(null); setActiveForm(null);
         setCreationReview({ familyId: result.familyId, items, category });
@@ -1287,7 +1290,7 @@ export default function ProductsPage() {
       <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
         const category = creationReview.category || categories.find(item => item.id === product.categoryId);
         entryReviewRef.current = creationReview;
-        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null, returnToReview: true });
+        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null, returnToReview: true, quickFlow: Boolean(creationReview.category) });
       }} onAnother={() => {
         const category = creationReview.category; setCreationReview(null);
         goToLinkedProduct("forward", { category, product: null, entryCompleted: false, entryResult: null });
@@ -1703,8 +1706,10 @@ export default function ProductsPage() {
           : "Establece el stock exacto después de una revisión administrativa."}
         onClose={closeMovementForm}
         size="large"
+        flowActions={quickReviewEntry ? { left: <button className="product-positive-action creation-continue-action" type="button" onClick={closeMovementForm} disabled={submittingMovement}><ArrowLeft size={18} aria-hidden="true" /><span>Volver a productos guardados</span></button> } : undefined}
+        footer={quickReviewEntry && !linkedRegistration.entryCompleted ? <button className="product-positive-action" type="submit" form={movementFormId} disabled={submittingMovement}>{submittingMovement ? "Registrando..." : "Confirmar entrada"}</button> : undefined}
       >
-        {linkedRegistration?.step === "ENTRY" && (
+        {linkedRegistration?.step === "ENTRY" && !quickReviewEntry && (
           <button
             className="linked-flow-back"
             type="button"
@@ -1747,7 +1752,7 @@ export default function ProductsPage() {
             </div>
           </div>
         ) : (
-        <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
+        <form id={movementFormId} className="grid gap-3.75" onSubmit={handleCreateMovement}>
           {movementForm.movementType === "ADJUSTMENT" && (
             <div className="inventory-adjustment-note flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
               <Info className="shrink-0 text-rust-600" size={19} />
@@ -1843,7 +1848,7 @@ export default function ProductsPage() {
               {estimatedLowStock && <span className="text-xs">Este movimiento dejará el producto con stock bajo.</span>}
             </div>
           )}
-          <div className={formActionsClass}>
+          {!quickReviewEntry && <div className={formActionsClass}>
             {linkedRegistration?.step === "ENTRY" ? (
               <button className={secondaryButtonClass} type="button" onClick={linkedRegistration?.returnToReview ? closeMovementForm : closeLinkedRegistration} disabled={submittingMovement}>
                 {linkedRegistration?.returnToReview ? "Volver al resumen" : "Finalizar"}
@@ -1866,7 +1871,7 @@ export default function ProductsPage() {
                     : "Confirmar ajuste administrativo"}
               </button>
             </div>
-          </div>
+          </div>}
         </form>
         )}
         </div>

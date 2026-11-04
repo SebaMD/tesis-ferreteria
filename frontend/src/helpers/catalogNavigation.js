@@ -47,6 +47,7 @@ export function createProductDetailNavigationState(origin, scrollY = 0) {
   return {
     productDetailOrigin: {
       source: "catalog",
+      ...(origin.owner ? { owner: origin.owner } : {}),
       search: catalogSearchOnly(origin.search),
       snapshot: normalizeCatalogSnapshot(origin.snapshot),
       scrollY: Math.max(0, Number(scrollY) || 0),
@@ -71,6 +72,7 @@ export function resolveProductDetailReturn(state) {
       to: `/catalog${catalogSearchOnly(origin.search)}`,
       state: {
         restoreCatalog: {
+          ...(origin.owner ? { owner: origin.owner } : {}),
           snapshot: normalizeCatalogSnapshot(origin.snapshot),
           scrollY: Math.max(0, Number(origin.scrollY) || 0),
         },
@@ -81,8 +83,9 @@ export function resolveProductDetailReturn(state) {
   return { label: "Volver al catálogo", to: "/catalog", state: null };
 }
 
-export function readCatalogRestoration(state) {
+export function readCatalogRestoration(state, owner) {
   if (!state?.restoreCatalog) return null;
+  if (owner !== undefined && state.restoreCatalog.owner !== owner) return null;
   return {
     snapshot: normalizeCatalogSnapshot(state.restoreCatalog.snapshot),
     scrollY: Math.max(0, Number(state.restoreCatalog.scrollY) || 0),
@@ -91,15 +94,20 @@ export function readCatalogRestoration(state) {
 
 const catalogEntries = new Map();
 const catalogEntryKey = "fyf-catalog-navigation-v1";
+export function clearCatalogEntries() {
+  catalogEntries.clear();
+  try { sessionStorage.removeItem(catalogEntryKey); } catch { /* Memory cleared. */ }
+}
 export function rememberCatalogEntry(key, value) {
   catalogEntries.set(key, value);
   if (catalogEntries.size > 40) catalogEntries.delete(catalogEntries.keys().next().value);
   try { sessionStorage.setItem(catalogEntryKey, JSON.stringify([...catalogEntries])); } catch { /* Memory-only fallback. */ }
 }
-export function readCatalogEntry(key) {
+export function readCatalogEntry(key, owner) {
   if (!catalogEntries.size) {
     try { for (const [entry, value] of JSON.parse(sessionStorage.getItem(catalogEntryKey) || "[]").slice(-40)) catalogEntries.set(entry, value); } catch { /* No stored navigation. */ }
   }
   const value = catalogEntries.get(key);
+  if (owner !== undefined && value?.owner !== owner) return null;
   return value ? { snapshot: normalizeCatalogSnapshot(value.snapshot), scrollY: Math.max(0, Number(value.scrollY) || 0) } : null;
 }

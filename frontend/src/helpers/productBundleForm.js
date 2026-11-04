@@ -75,10 +75,10 @@ export function conversionDraft(snapshot, pending = {}) {
     rows: [{ ...newBundleRow(), ...original, ...conversionDetails(pending),
       isOriginal: true, hasHistory: original.hasHistory, nameCustomized: true, useCommon: true, key: `product-${original.id}` }] };
 }
-export function bundleDraft(snapshot, initial = {}) {
+export function bundleDraft(snapshot, initial = {}, twoVariants = false) {
   if (!snapshot) return { familyId: null, revision: null, ...familyDraft(), name: initial.name || "", description: initial.description || "",
     attributes: [newBundleAttribute()], categoryId: initial.categoryId || "", brand: initial.brand || "", unitMeasure: initial.unitMeasure || "unidad",
-    rows: [{ ...newBundleRow(1, initial), barcode: initial.barcode || "", useCommon: true }] };
+    rows: [{ ...newBundleRow(1, initial), barcode: initial.barcode || "", useCommon: true }, ...(twoVariants ? [newBundleRow(1, { unitMeasure: initial.unitMeasure })] : [])] };
   const { family, variants, revision } = snapshot;
   const attributes = familyDraft(family).attributes.map(a => reconcileAttributeOptions(a, a.optionsText));
   return { ...familyDraft(family), attributes, familyId: family.id, revision, categoryId: family.categoryId, brand: family.brand || "", unitMeasure: variants[0]?.unitMeasure || "unidad",

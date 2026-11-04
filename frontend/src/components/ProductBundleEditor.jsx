@@ -50,7 +50,7 @@ function encodeImage(file) {
 export default function ProductBundleEditor({ familyId, conversionId, initialData, initialSnapshot, categories, onClose, onSaved, embedded = false, commonData, pendingFiles = [], enabled = true, reviewRef, onCreated, onBusyChange, modalOpen = true, onBack, onReviewOpen, inline = false, onSimple, simpleModeEnabled = false, onDialogChange, externalActions = false, onActionChange }) {
   const { user } = useAuth();
   const pendingKey = `fyf-product-bundle-pending-${user.id}`;
-  const [draftState, setDraft] = useState(() => initialSnapshot?.draft || bundleDraft(null, initialData || commonData));
+  const [draftState, setDraft] = useState(() => initialSnapshot?.draft || bundleDraft(null, initialData || commonData, !familyId && !conversionId));
   const initialSnapshotRef = useRef(initialSnapshot);
   const savedStock = useRef(new Map());
   const draft = embedded && !conversionId ? { ...draftState, name: commonData.name, brand: commonData.brand, categoryId: commonData.categoryId, description: commonData.description, unitMeasure: commonData.unitMeasure } : draftState;
@@ -100,6 +100,17 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
     return () => { active = false; };
   }, [singleVariant]);
   const guard = useRef(false), frozen = useRef(null), formRef = useRef(null), previewTrigger = useRef(null), initialCommon = useRef(commonData);
+  useEffect(() => {
+    // Chromium's native datalist popup can outlive its scrolled-away anchor.
+    const dismissSuggestions = event => {
+      const input = document.activeElement;
+      if (input?.matches('input[list]') && formRef.current?.contains(input)
+        && (event.type === 'resize' || event.target?.contains?.(input))) input.blur();
+    };
+    window.addEventListener('scroll', dismissSuggestions, true);
+    window.addEventListener('resize', dismissSuggestions);
+    return () => { window.removeEventListener('scroll', dismissSuggestions, true); window.removeEventListener('resize', dismissSuggestions); };
+  }, []);
   const errorRef = useRef(null), reasonRef = useRef(null), configurationRef = useRef(null);
   useEffect(() => { onBusyChange?.(busy || uncertain || dimensionLocked); }, [busy, uncertain, dimensionLocked, onBusyChange]);
   useEffect(() => { onDialogChange?.(singleVariant || confirmSave || Boolean(statusTarget) || reloadConfirm || Boolean(renameTarget) || nameCorrectionOpen || categoryDialog || brandDialog || Boolean(optionLabelTarget) || dimensionReview || attributePicker || Boolean(unitPreview)); }, [unitPreview, attributePicker, singleVariant, confirmSave, statusTarget, reloadConfirm, renameTarget, nameCorrectionOpen, categoryDialog, brandDialog, optionLabelTarget, dimensionReview, onDialogChange]);
@@ -439,7 +450,7 @@ export default function ProductBundleEditor({ familyId, conversionId, initialDat
           </div>
         </section>
         {files.length > 0 && <label className="flex items-start gap-2 text-sm"><input type="checkbox" required checked={authorized} onChange={e => setAuthorized(e.target.checked)} />Confirmo la autorización de uso de estas imágenes y que corresponden a las variantes seleccionadas.</label>}
-        <div hidden={dimensionDialog} className="bundle-footer-actions"><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}{!externalActions && <button type="submit" className="product-positive-action creation-continue-action">{inline && !draft.conversion ? <><span>{busy ? "Guardando…" : actionLabel}</span><ArrowRight size={18} aria-hidden="true" /></> : <><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : embedded ? "Confirmar configuración" : "Guardar cambios"}</>}</button>}</div>
+        <div hidden={dimensionDialog} className="bundle-footer-actions" data-external-actions={externalActions ? "true" : undefined}><button type="button" className={secondaryButtonClass} onClick={draft.conversion ? () => { setConversionStep("prepare"); focusInEditor(() => reasonRef.current); } : embedded ? backToProduct : onClose}>{draft.conversion ? "Volver a preparar conversión" : embedded ? "Volver al producto" : "Cancelar"}</button>{!dimensionDialog&&previewAction}{!externalActions && <button type="submit" className="product-positive-action creation-continue-action">{inline && !draft.conversion ? <><span>{busy ? "Guardando…" : actionLabel}</span><ArrowRight size={18} aria-hidden="true" /></> : <><Save size={16}/>{busy ? "Guardando…" : draft.conversion ? "Revisar conversión" : embedded ? "Confirmar configuración" : "Guardar cambios"}</>}</button>}</div>
         </div>
       </fieldset>
     </form>

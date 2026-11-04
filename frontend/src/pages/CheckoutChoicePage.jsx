@@ -26,7 +26,7 @@ export default function CheckoutChoicePage() {
 
   return (
     <main className="mx-auto grid w-full max-w-220 gap-5 px-6 py-10 max-[720px]:px-3.5">
-      <header className="public-page-header"><div className="text-center">
+      <header className="public-page-header checkout-choice-heading"><div className="text-center">
         <h1 className="m-0 text-2xl font-bold text-ink-950">¿Cómo quieres continuar?</h1>
         <p className="mt-2 mb-0 text-sm text-slate-500">
           Puedes comprar sin crear una cuenta o ingresar para reutilizar tus datos.

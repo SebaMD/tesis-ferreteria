@@ -9,6 +9,11 @@ test('local freight uses strictly greater net subtotal; no automatic equivalence
  assert.equal(deliveryBenefit(p,'DELIVERY',500000).remaining,1);assert.equal(publicDeliveryInformation(p).onlineQuoteRequestsEnabled,false);
  assert.throws(()=>calculateDelivery({...p,pricingMode:'MANUAL_QUOTE'},'DELIVERY',600000));
  assert.throws(()=>calculateDelivery({...p,deliveryEnabled:false},'DELIVERY',1));
+ const suspended={...p,deliveryEnabled:false};
+ assert.equal(deliveryBenefit(suspended,'DELIVERY',500001).active,false);
+ assert.equal(deliveryBenefit(suspended,'DELIVERY',500001).qualified,false);
+ assert.equal(suspended.freeShippingFrom,'500000.00');
+ assert.equal(deliveryBenefit({...suspended,deliveryEnabled:true},'DELIVERY',500001).qualified,true);
 });
 test('local revision validation and structured commune do not accept substring addresses or client fee values',()=>{
  const body={expectedRevisionId:1,pricingMode:'LOCAL_FIXED',pickupEnabled:true,deliveryEnabled:true,flatFee:3000,minimumProductsTotal:null,freeShippingFrom:500000,isDemo:false};

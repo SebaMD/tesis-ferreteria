@@ -17,6 +17,7 @@ import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
 import ProductBundleEditor from "../components/ProductBundleEditor.jsx";
 import CreatedProductsStockDialog from "../components/CreatedProductsStockDialog.jsx";
+import { reviewAfterEntry } from "../helpers/createdProductsStock.js";
 import { creationStockAction } from "../helpers/creationStock.js";
 import { ProductCategoryField, ProductUnitField } from "../components/ProductFormFields.jsx";
 import GroupedInventoryTable from "../components/GroupedInventoryTable.jsx";
@@ -151,6 +152,8 @@ export default function ProductsPage() {
   const simpleProductFormRef = useRef(null);
   const [bundleAction, setBundleAction] = useState({ label: "Revisar variantes", disabled: true });
   const [creationReview, setCreationReview] = useState(null);
+  const entryReviewRef = useRef(null);
+  const movementGuard = useRef(false);
   const simpleModeRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
@@ -463,7 +466,8 @@ export default function ProductsPage() {
       const items = result.productIds.map((id, index) => ({ product: saved.find(product => product.id === id), ...creation?.[index] }));
       if (items.some(item => !item.product)) throw new Error("No se pudieron recuperar los productos guardados");
       if (!result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
-        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null });
+        if (category) entryReviewRef.current = { familyId: null, items, category };
+        goToLinkedEntry({ category: category || categories.find(item => item.id === items[0].product.categoryId), product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: Boolean(category) });
       } else {
         setLinkedRegistration(null); setActiveForm(null);
         setCreationReview({ familyId: result.familyId, items, category });
@@ -819,6 +823,7 @@ export default function ProductsPage() {
 
   const handleCreateMovement = async (event) => {
     event.preventDefault();
+    if (movementGuard.current || submittingMovement) return;
 
     if (!movementForm.productId) {
       toast.warning("Selecciona un producto desde el buscador");
@@ -840,6 +845,7 @@ export default function ProductsPage() {
     }
 
     try {
+      movementGuard.current = true;
       setSubmittingMovement(true);
       const reason = movementForm.movementType === "ADJUSTMENT"
         ? `${movementForm.adjustmentReason}${movementForm.reason.trim() ? `: ${movementForm.reason.trim()}` : ""}`
@@ -851,7 +857,13 @@ export default function ProductsPage() {
         reason,
       });
 
-      if (linkedRegistration?.step === "ENTRY") {
+      if (entryReviewRef.current) {
+        const review = reviewAfterEntry(entryReviewRef.current, Number(movementForm.productId), movement);
+        entryReviewRef.current = null;
+        setCreationReview(review);
+        setLinkedRegistration(null); setActiveForm(null);
+        setMovementForm(initialMovementForm()); setProductSearch("");
+      } else if (linkedRegistration?.step === "ENTRY") {
         setLinkedRegistration((current) => current ? {
           ...current,
           entryCompleted: true,
@@ -880,10 +892,17 @@ export default function ProductsPage() {
         toast.warning(`${movement.stock.productName} quedó con stock bajo: ${movement.stock.currentStock} unidades. Mínimo: ${movement.stock.minimumStock}.`);
       }
 
-      await loadData();
+      try { await loadData(); } catch { toast.warning("Entrada confirmada. Actualiza Inventario; no repitas la entrada."); }
     } catch (err) {
+      if (entryReviewRef.current && (!err.response || err.response.status >= 500)) {
+        setCreationReview({ ...entryReviewRef.current, confirmation: null, uncertainProductIds: [...new Set([...(entryReviewRef.current.uncertainProductIds || []), Number(movementForm.productId)])],
+          uncertainty: "No se pudo confirmar el resultado de la entrada. Consulta el historial y el stock antes de registrar otra para este SKU. No se reintentará automáticamente." });
+        entryReviewRef.current = null;
+        setLinkedRegistration(null); setActiveForm(null);
+      }
       toast.error(getApiError(err, "No se pudo registrar el movimiento"));
     } finally {
+      movementGuard.current = false;
       setSubmittingMovement(false);
     }
   };
@@ -1156,6 +1175,14 @@ export default function ProductsPage() {
   };
 
   const closeMovementForm = () => {
+    if (movementGuard.current) return;
+    if (entryReviewRef.current) {
+      setCreationReview(entryReviewRef.current);
+      entryReviewRef.current = null;
+      setLinkedRegistration(null); setActiveForm(null);
+      setMovementForm(initialMovementForm()); setProductSearch("");
+      return;
+    }
     if (linkedRegistration) {
       closeLinkedRegistration();
       return;
@@ -1259,7 +1286,8 @@ export default function ProductsPage() {
       <LoadingOverlay active={loading} />
       <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
         const category = creationReview.category || categories.find(item => item.id === product.categoryId);
-        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null });
+        entryReviewRef.current = creationReview;
+        setCreationReview(null); goToLinkedEntry({ category, product, entryCompleted: false, entryResult: null, returnToReview: true });
       }} onAnother={() => {
         const category = creationReview.category; setCreationReview(null);
         goToLinkedProduct("forward", { category, product: null, entryCompleted: false, entryResult: null });
@@ -1680,12 +1708,12 @@ export default function ProductsPage() {
           <button
             className="linked-flow-back"
             type="button"
-            onClick={() => goToLinkedProduct("backward")}
+            onClick={() => entryReviewRef.current ? closeMovementForm() : goToLinkedProduct("backward")}
             disabled={submittingMovement}
-            aria-label="Volver a producto"
+            aria-label={linkedRegistration?.returnToReview ? "Volver a productos guardados" : "Volver a producto"}
           >
             <ArrowLeft size={22} />
-            <span>Volver a producto</span>
+            <span>{linkedRegistration?.returnToReview ? "Volver a productos guardados" : "Volver a producto"}</span>
           </button>
         )}
         <div
@@ -1709,7 +1737,7 @@ export default function ProductsPage() {
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
+              <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>
                 Finalizar
               </button>
               <button type="button" onClick={addAnotherProductToLinkedCategory} disabled={submittingMovement}>
@@ -1817,14 +1845,14 @@ export default function ProductsPage() {
           )}
           <div className={formActionsClass}>
             {linkedRegistration?.step === "ENTRY" ? (
-              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
-                Finalizar
+              <button className={secondaryButtonClass} type="button" onClick={linkedRegistration?.returnToReview ? closeMovementForm : closeLinkedRegistration} disabled={submittingMovement}>
+                {linkedRegistration?.returnToReview ? "Volver al resumen" : "Finalizar"}
               </button>
             ) : (
               <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>Cancelar</button>
             )}
             <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-              {linkedRegistration?.step === "ENTRY" && (
+              {linkedRegistration?.step === "ENTRY" && !linkedRegistration?.returnToReview && (
                 <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={() => goToLinkedProduct("backward")} disabled={submittingMovement}>
                   <ArrowLeft size={17} />
                   Volver

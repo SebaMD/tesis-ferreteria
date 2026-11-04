@@ -84,7 +84,7 @@ test("CatalogPage restaura después de cargar y ProductDetail limita la proceden
   ]);
 
   assert.match(catalog, /readCatalogRestoration/);
-  assert.match(catalog, /readCatalogEntry\(location.key\)/);
+  assert.match(catalog, /readCatalogEntry\(location.key, owner\)/);
   assert.match(catalog, /rememberCatalogEntry\(location.key/);
   const restoration = await readFile(new URL("../src/components/ClientScrollRestoration.jsx", import.meta.url), "utf8");
   assert.match(restoration, /ResizeObserver/);

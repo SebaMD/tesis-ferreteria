@@ -54,7 +54,7 @@ export function calculateDelivery(policy: DeliveryPolicy | null, type: "PICKUP" 
 }
 
 export function deliveryBenefit(_policy: DeliveryPolicy, _type: string, _productsNet: number) {
-  if(_policy.pricingMode==="LOCAL_FIXED"&&_type==="DELIVERY"&&_policy.freeShippingFrom!==null)return {active:true,threshold:Number(_policy.freeShippingFrom),remaining:Math.max(0,Number(_policy.freeShippingFrom)+1-_productsNet),qualified:_productsNet>Number(_policy.freeShippingFrom)};
+  if(_policy.deliveryEnabled&&_policy.pricingMode==="LOCAL_FIXED"&&_type==="DELIVERY"&&_policy.freeShippingFrom!==null)return {active:true,threshold:Number(_policy.freeShippingFrom),remaining:Math.max(0,Number(_policy.freeShippingFrom)+1-_productsNet),qualified:_productsNet>Number(_policy.freeShippingFrom)};
   // No approval has been recorded by the current model. Never infer free freight from a cart total.
   return { active: false, threshold: null, remaining: null, qualified: false };
 }

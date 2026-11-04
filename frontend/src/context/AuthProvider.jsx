@@ -8,12 +8,14 @@ import {
 import { loginRequest, logoutRequest, registerClientRequest } from "../services/auth.service.js";
 import AuthContext from "./AuthContext.js";
 import { shouldMergeGuestCartOnAuthentication } from "../helpers/checkoutIntent.js";
+import { resetClientExploration } from '../helpers/explorationNavigation.js';
 
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(readStoredAuth);
   const { token, user, mergeGuestCart = false } = session;
 
   const replaceSession = useCallback((sessionData, { mergeGuestCart = false } = {}) => {
+    resetClientExploration();
     storeAuthSession(sessionData.token, sessionData.user);
     clearSessionNotice();
     setSession({ token: sessionData.token, user: sessionData.user, mergeGuestCart });
@@ -31,12 +33,14 @@ export default function AuthProvider({ children }) {
       if (localStorage.getItem("token")) await logoutRequest();
     } finally {
       clearStoredAuth();
+      resetClientExploration();
       clearSessionNotice();
       setSession({ token: null, user: null });
     }
   }, []);
 
   const clearSession = useCallback(() => {
+    resetClientExploration();
     clearStoredAuth();
     clearSessionNotice();
     setSession({ token: null, user: null });

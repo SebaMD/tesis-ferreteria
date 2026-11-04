@@ -10,6 +10,11 @@ import CustomerNoticeContext from "../../src/context/CustomerNoticeContext.js";
 import FavoritesContext from "../../src/context/FavoritesContext.js";
 import ThemeContext from "../../src/context/ThemeContext.js";
 import ClientScrollRestoration from "../../src/components/ClientScrollRestoration.jsx";
+import ClientLayout from '../../src/components/ClientLayout.jsx';
+import DeliverySettingsManager from '../../src/components/DeliverySettingsManager.jsx';
+import ClientCartPage from '../../src/pages/ClientCartPage.jsx';
+import ProductFamilyPage from '../../src/pages/ProductFamilyPage.jsx';
+import { Toaster } from 'sonner';
 import ProductsPage from "../../src/pages/ProductsPage.jsx";
 import GuestDeviceOrdersPage from "../../src/pages/GuestDeviceOrdersPage.jsx";
 import CatalogPage from "../../src/pages/CatalogPage.jsx";
@@ -32,15 +37,15 @@ import "../../src/styles/styles.css";
 const params = new URLSearchParams(location.pathname === "/ux-test" ? location.search : sessionStorage.getItem("ux-fixture-parameters"));
 if (location.pathname === "/ux-test") {
   sessionStorage.setItem("ux-fixture-parameters", location.search);
-  history.replaceState({ usr: { productDetailOrigin: { source: "favorites" } } }, "", params.get("case") === "scroll" ? "/catalog" : "/catalog/families/18?variant=99");
+  history.replaceState({ usr: { productDetailOrigin: { source: "favorites" } } }, "", ['scroll', 'journey'].includes(params.get('case')) ? "/catalog" : "/catalog/families/18?variant=99");
 }
 const mode = params.get("case");
 const guest = params.has("guest");
 const product = { id: 99, name: "Producto de prueba", price: 5990, currentStock: 20, availableStock: 20, unitMeasure: "unidad", status: true, images: [] };
 const cart = [{ product: { ...product, id: 5 }, quantity: 4 }];
-const auth = { isAuthenticated: !guest, user: guest ? null : { id: 1, role: ["bundle", "inventory"].includes(mode) ? "ADMIN" : "CLIENT", names: "Cliente", surnames: "Prueba", emailVerified: true }, replaceSession() {} };
+const auth = { isAuthenticated: !guest, user: guest ? null : { id: 1, role: mode === 'settings' ? params.has('manager') ? 'MANAGER' : 'ADMIN' : ["bundle", "inventory"].includes(mode) ? "ADMIN" : "CLIENT", names: "Cliente", surnames: "Prueba", emailVerified: true }, replaceSession() {} };
 const forbiddenMutation = () => { throw new Error("Compra directa modificó el carrito"); };
-const notice = { deliveryInformation: { mode: "LOCAL_FIXED", flatFee: 3000, freeShippingFrom: 500000 }, presentation: { title: "Catálogo", mainText: "Presentación", secondaryText: "Prueba" }, notices: [{ id: 1, title: "Segundo aviso", message: "Contenido de prueba" }] };
+const notice = { refreshNotices() {}, deliveryInformation: { mode: "LOCAL_FIXED", flatFee: 3000, freeShippingFrom: 500000 }, presentation: { title: "Catálogo", mainText: "Presentación", secondaryText: "Prueba" }, notices: [{ id: 1, title: "Segundo aviso", message: "Contenido de prueba" }] };
 const store = createCheckoutDraftStore("TEST");
 const favorites = { enabled: true, products: params.has("with-favorites") ? [product] : [], busy: [], loading: false, error: "", reload() {}, toggle() {} };
 
@@ -72,10 +77,21 @@ function PurchaseFixture() {
     <Route path="/delivery-conditions" element={<DeliveryConditionsPage />} />
   </Routes></>;
 }
+function JourneyFixture() {
+  return <ClientLayout><Toaster /><Link to="/catalog/families/18?variant=100">Ficha familiar de prueba</Link><Routes>
+    <Route path="/catalog" element={<CatalogPage />} />
+    <Route path="/catalog/products/:id" element={<ProductDetailPage />} />
+    <Route path="/catalog/families/:id" element={<ProductFamilyPage />} />
+    <Route path="/cart" element={<ClientCartPage />} />
+    <Route path="/orders" element={<ClientOrdersPage />} />
+    <Route path="/guest-orders" element={<GuestDeviceOrdersPage />} />
+    <Route path="/favorites" element={<FavoritesPage />} />
+  </Routes></ClientLayout>;
+}
 function Fixture() {
-  return <AuthContext.Provider value={auth}><CartContext.Provider value={{ items: cart, addItem: forbiddenMutation, removeItem: forbiddenMutation, clearCart: forbiddenMutation }}><CheckoutDraftContext.Provider value={store}><CustomerNoticeContext.Provider value={notice}>
+  return <AuthContext.Provider value={auth}><CartContext.Provider value={{ items: cart, totalUnits: 4, addItem: mode === 'journey' ? (product, quantity) => { cart.push({ product, quantity }); return { success: true }; } : forbiddenMutation, removeItem: forbiddenMutation, clearCart: forbiddenMutation }}><CheckoutDraftContext.Provider value={store}><CustomerNoticeContext.Provider value={notice}>
     <BrowserRouter><ThemeContext.Provider value={{ isDark: params.get("theme") === "dark", toggleTheme() {} }}><FavoritesContext.Provider value={favorites}><ClientScrollRestoration />
-      {mode === "inventory" ? <ProductsPage /> : mode === "guest-orders" ? <GuestDeviceOrdersPage /> : mode === "scroll" ? <ScrollFixture /> : mode === "filters" ? <FilterFixture /> : mode === "carousel" ? <CatalogNoticeCarousel /> : mode === "bundle" ? <ProductBundleEditor familyId={18} categories={[{ id: 1, name: "Prueba" }]} onClose={() => {}} /> : <PurchaseFixture />}
+      {mode === 'settings' ? <DeliverySettingsManager role={auth.user.role} /> : mode === 'journey' ? <JourneyFixture /> : mode === "inventory" ? <ProductsPage /> : mode === "guest-orders" ? <GuestDeviceOrdersPage /> : mode === "scroll" ? <ScrollFixture /> : mode === "filters" ? <FilterFixture /> : mode === "carousel" ? <CatalogNoticeCarousel /> : mode === "bundle" ? <ProductBundleEditor familyId={18} categories={[{ id: 1, name: "Prueba" }]} onClose={() => {}} /> : <PurchaseFixture />}
     </FavoritesContext.Provider></ThemeContext.Provider>
     </BrowserRouter>
   </CustomerNoticeContext.Provider></CheckoutDraftContext.Provider></CartContext.Provider></AuthContext.Provider>;

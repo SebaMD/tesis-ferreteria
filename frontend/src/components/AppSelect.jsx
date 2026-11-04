@@ -79,7 +79,14 @@ export default function AppSelect({
   useLayoutEffect(() => {
     if (!open) return undefined;
     updatePosition();
-    const handleViewportChange = () => updatePosition();
+    const handleViewportChange = event => {
+      // A portalled menu must not remain detached from a scrolled-away field.
+      if (event.type === 'resize' || !popupRef.current?.contains(event.target)) {
+        setOpen(false);
+        return;
+      }
+      updatePosition();
+    };
     window.addEventListener("resize", handleViewportChange);
     window.addEventListener("scroll", handleViewportChange, true);
     return () => {

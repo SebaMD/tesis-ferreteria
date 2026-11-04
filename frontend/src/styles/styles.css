@@ -1175,6 +1175,8 @@
   border-top: 1px solid var(--color-slate-200);
 }
 .modal-flow-action { flex: 1; min-width: 0; }
+.modal-flow-actions { align-items: stretch; }
+.modal-flow-action > button { height: 100%; }
 .modal-flow-action > button { width: 100%; min-height: 44px; margin: 0; white-space: normal; }
 .modal-flow-action > button > span { min-width: 0; overflow-wrap: anywhere; }
 .modal-flow-action > button > svg { flex-shrink: 0; }
@@ -1202,6 +1204,14 @@
 .creation-continue-action { min-width: 0; max-width: 100%; white-space: normal; gap: 8px; }
 .creation-continue-action > span { min-width: 0; overflow-wrap: anywhere; }
 .creation-continue-action > svg { flex-shrink: 0; }
+@media (min-width: 621px) {
+  .checkout-choice-heading { position: relative; display: block; padding: 0 150px; }
+  .checkout-choice-heading > .compact-back-link { position: absolute; right: 0; top: 0; }
+}
+.bundle-footer-actions[data-external-actions="true"] { grid-template-columns: repeat(2,minmax(0,1fr)); }
+@media (max-width:720px) {
+  .bundle-footer-actions[data-external-actions="true"] { grid-template-columns: 1fr; }
+}
 @media (max-width: 620px) {
   .public-page-header { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 6px; align-items: start; }
   .public-page-header > :first-child { grid-column: 2; text-align: center; }

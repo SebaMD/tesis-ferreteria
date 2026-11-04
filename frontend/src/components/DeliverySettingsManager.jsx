@@ -33,11 +33,12 @@ export default function DeliverySettingsManager({role}){
  <fieldset disabled={loading||Boolean(error)} className="grid min-w-0 gap-3 border-0 p-0">
  <label className="delivery-settings-checkbox"><input type="checkbox" checked={form.deliveryEnabled} onChange={e=>edit('deliveryEnabled',e.target.checked)}/><span>Despacho local habilitado</span></label>
  <label>Tarifa fija CLP<input required type="number" min="0" max="9999999999" step="1" value={form.flatFee} onChange={e=>edit('flatFee',Number(e.target.value))}/></label>
- <label className="delivery-settings-checkbox"><input type="checkbox" checked={form.freeShippingFrom!==null} onChange={e=>edit('freeShippingFrom',e.target.checked?500000:null)}/><span>Habilitar despacho gratuito por monto</span></label>
- {form.freeShippingFrom!==null&&<label>Umbral CLP (debe superarse)<input required type="number" min="1" max="9999999999" step="1" value={form.freeShippingFrom} onChange={e=>edit('freeShippingFrom',Number(e.target.value))}/></label>}
+ <label className="delivery-settings-checkbox"><input type="checkbox" disabled={!form.deliveryEnabled} checked={form.freeShippingFrom!==null} onChange={e=>edit('freeShippingFrom',e.target.checked?500000:null)}/><span>Habilitar despacho gratuito por monto</span></label>
+ {!form.deliveryEnabled&&<p className="m-0 text-sm" role="status">La gratuidad no se aplica mientras el despacho esté deshabilitado. El umbral se conserva para reutilizarlo al habilitar el servicio.</p>}
+ {form.freeShippingFrom!==null&&<label>Umbral CLP (debe superarse)<input disabled={!form.deliveryEnabled} required type="number" min="1" max="9999999999" step="1" value={form.freeShippingFrom} onChange={e=>edit('freeShippingFrom',Number(e.target.value))}/></label>}
  </fieldset>
  <p className="m-0 text-sm">Se utiliza el subtotal de productos después de descuentos. Igualar el umbral no concede gratuidad. Retiro en tienda: $0. Deshabilitar despacho impide también iniciar nuevos pagos de solicitudes antiguas; no cancela pagos iniciados.</p>
- {review&&<p role="status" className="rounded border border-slate-200 p-3 text-sm">Revisa: {form.deliveryEnabled?'despacho '+formatClp(form.flatFee):'despacho deshabilitado'}. {form.freeShippingFrom===null?'Sin beneficio por monto.':'Gratis solo por productos netos superiores a '+formatClp(form.freeShippingFrom)+'.'} Se conservan los importes de los pedidos existentes.</p>}
+ {review&&<p role="status" className="rounded border border-slate-200 p-3 text-sm">Revisa: {form.deliveryEnabled?'despacho '+formatClp(form.flatFee):'despacho deshabilitado'}. {!form.deliveryEnabled?'Beneficio por monto suspendido; umbral conservado.':form.freeShippingFrom===null?'Sin beneficio por monto.':'Gratis solo por productos netos superiores a '+formatClp(form.freeShippingFrom)+'.'} Se conservan los importes de los pedidos existentes.</p>}
  <div className="variant-editor-actions"><button type="button" disabled={loading} onClick={()=>setOpen(false)}>Cancelar</button><button type="submit" disabled={loading||Boolean(error)}>{loading?'Cargando…':review?'Confirmar y guardar revisión':'Revisar cambios'}</button></div>
  </form></AppModal></>;
 }

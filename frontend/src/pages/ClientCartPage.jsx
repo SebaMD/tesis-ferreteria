@@ -1,6 +1,9 @@
 import { ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import CompactBackLink from '../components/CompactBackLink.jsx';
+import { informationReturn } from '../helpers/informationNavigation.js';
+import { explorationOwner } from '../helpers/explorationNavigation.js';
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -28,6 +31,8 @@ export default function ClientCartPage() {
   const { items, updateQuantity } = useCart();
   const { removeProduct, clearProducts } = useCartActions();
   const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+  const back = informationReturn(location.state?.cartOwner === explorationOwner(user) ? location.state : null, '/cart');
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const cartProductIds = useMemo(() => items.map((item) => item.product.id), [items]);
@@ -77,10 +82,12 @@ export default function ClientCartPage() {
       <LoadingOverlay active={loading} />
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1.5">
         <h1 className="m-0 flex items-center gap-2 text-2xl font-bold text-ink-950"><ShoppingCart size={24} /> Carrito</h1>
-        <p className="col-start-1 row-start-2 mt-0 mb-0 text-sm text-slate-500 max-[620px]:col-span-2">Revisa tus productos antes de reservar stock e iniciar el pago.</p>
+        <div className="col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2"><CompactBackLink {...back} />
         {items.length > 0 && (
           <button className="col-start-2 row-start-1 row-span-2 self-end border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:row-span-1 max-[620px]:self-center max-[620px]:px-3 max-[620px]:text-xs" type="button" onClick={clearProducts}>Limpiar carrito</button>
         )}
+        </div>
+        <p className="col-start-1 row-start-2 mt-0 mb-0 text-sm text-slate-500 max-[620px]:col-span-2">Revisa tus productos antes de reservar stock e iniciar el pago.</p>
       </div>
 
       {items.length === 0 ? (

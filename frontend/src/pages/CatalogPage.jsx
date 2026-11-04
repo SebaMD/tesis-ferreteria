@@ -15,15 +15,23 @@ import CatalogPagination from "../components/CatalogPagination.jsx";
 import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, validatePriceRange } from "../helpers/catalogFilters.js";
 import { readCatalogRestoration, readCatalogEntry, rememberCatalogEntry } from "../helpers/catalogNavigation.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
+import useAuth from '../hooks/useAuth.js';
+import { explorationOwner } from '../helpers/explorationNavigation.js';
 
 const EMPTY_PAGINATION = { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
 
 export default function CatalogPage() {
+  const { user } = useAuth();
+  const owner = explorationOwner(user);
+  return <CatalogContents key={owner} owner={owner} />;
+}
+
+function CatalogContents({ owner }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const search = searchParams.get("search") || "";
-  const initialRestoration = readCatalogEntry(location.key) || readCatalogEntry(location.state?.restoreClientScrollKey) || readCatalogRestoration(location.state);
+  const initialRestoration = readCatalogEntry(location.key, owner) || readCatalogEntry(location.state?.restoreClientScrollKey, owner) || readCatalogRestoration(location.state, owner);
   const restoredSnapshot = initialRestoration?.snapshot;
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState(() => restoredSnapshot?.filters || EMPTY_CATALOG_FILTERS);
@@ -119,8 +127,8 @@ export default function CatalogPage() {
   }, [scrollToCatalogStart, search]);
 
   useLayoutEffect(() => {
-    rememberCatalogEntry(location.key, { snapshot: { filters, order, page, pageSize }, scrollY: window.scrollY });
-  }, [location.key, filters, order, page, pageSize]);
+    rememberCatalogEntry(location.key, { owner, snapshot: { filters, order, page, pageSize }, scrollY: window.scrollY });
+  }, [location.key, owner, filters, order, page, pageSize]);
 
   useLayoutEffect(() => {
     if (!location.state?.scrollToCatalogResults) return;
@@ -175,6 +183,7 @@ export default function CatalogPage() {
   };
   const detailOrigin = {
     source: "catalog",
+    owner,
     search: location.search,
     snapshot: { filters, order, page, pageSize },
   };
@@ -198,6 +207,11 @@ export default function CatalogPage() {
         <div className="grid min-w-0 gap-3 min-[1024px]:grid-cols-[240px_minmax(0,1fr)] min-[1024px]:items-end min-[1024px]:gap-5">
           <div>
             <h2 className="m-0 text-lg font-bold text-ink-950">Productos</h2>
+            <button type="button" className="mt-2 min-h-11 border-slate-300 bg-white text-xs text-rust-600" onClick={() => {
+              setFilters(EMPTY_CATALOG_FILTERS); setOrder('name-asc'); setPage(1); setPageSize(20);
+              navigate('/catalog', { replace: true, state: null });
+              window.scrollTo({ top: 0, behavior: 'instant' });
+            }}>Explorar desde cero</button>
             <span className="text-xs font-semibold text-slate-500">{pagination.totalItems} productos o familias en catálogo</span>
             {activeCount > 0 && <span className="ml-2 text-xs font-bold text-rust-700">· {activeCount} filtros activos</span>}
           </div>

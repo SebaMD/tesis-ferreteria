@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigationType } from "react-router-dom";
 import { isClientScrollPath, routeScrollAction, readRouteScrollEntries, persistRouteScrollEntries } from "../helpers/routeScroll.js";
+import useAuth from '../hooks/useAuth.js';
+import { explorationOwner, rememberExploration } from '../helpers/explorationNavigation.js';
 
 function scrollParents() {
   const parents = [];
@@ -15,17 +17,23 @@ function scrollParents() {
 export default function ClientScrollRestoration() {
   const location = useLocation();
   const navigationType = useNavigationType();
+  const { user } = useAuth();
+  const owner = explorationOwner(user);
+  const previousOwner = useRef(owner);
   const previous = useRef(null);
   const entries = useRef(null);
   if (entries.current == null) entries.current = readRouteScrollEntries();
   useLayoutEffect(() => {
     const old = previous.current;
+    const changedOwner = previousOwner.current !== owner;
+    previousOwner.current = owner;
+    if (changedOwner) entries.current.clear();
     previous.current = location;
     if (!isClientScrollPath(location.pathname)) return undefined;
     const originalRestoration = history.scrollRestoration;
     history.scrollRestoration = "manual";
-    const saved = entries.current.get(location.state?.restoreClientScrollKey || location.key);
-    const target = old === location && saved?.pathname === location.pathname ? saved.position : routeScrollAction(old, location, navigationType, saved);
+    const saved = changedOwner ? null : entries.current.get(location.state?.restoreClientScrollKey || location.key);
+    const target = changedOwner ? { x: 0, y: 0 } : old === location && saved?.pathname === location.pathname ? saved.position : routeScrollAction(old, location, navigationType, saved, owner);
     const parents = scrollParents();
     let last = entries.current.get(location.key)?.position || { x: 0, y: 0 };
     let restoring = Boolean(target?.y);
@@ -42,6 +50,7 @@ export default function ClientScrollRestoration() {
     const save = () => {
       if (!restoring) last = { x: window.scrollX, y: window.scrollY, parents: parents.map(parent => parent.scrollTop) };
       entries.current.set(location.key, { pathname: location.pathname, position: last });
+      rememberExploration(location, owner, last.y);
       if (entries.current.size > 60) entries.current.delete(entries.current.keys().next().value);
     };
     const release = () => {
@@ -84,6 +93,6 @@ export default function ClientScrollRestoration() {
       document.removeEventListener("scroll", capture, true); document.removeEventListener("click", capture, true);
       window.removeEventListener("pagehide", persist); window.removeEventListener("keydown", keyScroll); window.removeEventListener("wheel", release); window.removeEventListener("touchstart", release);
     };
-  }, [location, navigationType]);
+  }, [location, navigationType, owner]);
   return null;
 }

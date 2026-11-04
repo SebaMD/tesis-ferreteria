@@ -1,13 +1,14 @@
 export const isClientScrollPath = pathname => /^\/(catalog(?:\/.*)?|orders|guest-orders|favorites|account|cart|checkout|checkout-options|changes-and-returns|delivery-conditions|order-tracking|payment-result)$/.test(pathname);
 
-export function routeScrollAction(previous, current, navigationType, saved) {
+export function routeScrollAction(previous, current, navigationType, saved, owner) {
   if (!isClientScrollPath(current.pathname)) return null;
   if (previous?.key === current.key) return null;
   if (previous?.pathname === current.pathname && navigationType === "REPLACE") return null;
   if (previous?.pathname === current.pathname && previous.search !== current.search && navigationType !== "POP") return null;
   if (navigationType === "POP" && saved?.pathname === current.pathname) return saved.position;
   if (current.state?.restoreClientScrollKey && saved?.pathname === current.pathname) return saved.position;
-  if (current.pathname === "/catalog" && current.state?.restoreCatalog) {
+  if (current.pathname === "/catalog" && current.state?.restoreCatalog
+    && (owner === undefined || current.state.restoreCatalog.owner === owner)) {
     const y = Number(current.state.restoreCatalog.scrollY);
     return { x: 0, y: Number.isFinite(y) ? Math.min(10_000_000, Math.max(0, y)) : 0 };
   }

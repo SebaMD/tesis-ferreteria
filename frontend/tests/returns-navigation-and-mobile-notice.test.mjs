@@ -29,7 +29,7 @@ test("cabecera conserva regreso contextual a la derecha y visible en móvil sin 
   assert.match(compact, /to=\{to\} state=\{state\}/);
   assert.doesNotMatch(navigation, /max-\[720px\]:hidden/);
   const navbar = await read("components/ClientNavbar.jsx");
-  assert.match(navbar, /<NavLink className=\{navClass\} to="\/catalog">Catálogo<\/NavLink>/);
+  assert.match(navbar, /<NavLink className=\{navClass\} \{\.\.\.catalogReturn\}/);
 });
 
 test("aviso singular y plural comparte conteo sin Tienes en su versión móvil", async () => {

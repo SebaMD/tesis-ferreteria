@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Eye, RotateCcw } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProductAuditsRequest } from "../services/productAudits.service.js";
 import { getApiError } from "../api/httpClient.js";
@@ -6,18 +7,15 @@ import { secondaryButtonClass, tablePanelClass, tableScrollClass, tableHeadingCl
 import AppSelect from "./AppSelect.jsx";
 import Pagination from "./Pagination.jsx";
 import { auditReadableRows, auditLocalDate, auditResponsible } from "../helpers/auditPresentation.js";
-import { auditAvailablePages, auditEmptyFilters, auditFilterValidationMessage, auditQueryFromSearch, auditQueryToSearch } from "../helpers/auditNavigation.js";
+import { auditEmptyFilters, auditFilterValidationMessage, auditQueryFromSearch, auditQueryToSearch } from "../helpers/auditNavigation.js";
 
 export default function ProductAuditHistory() {
   const location = useLocation(), navigate = useNavigate();
-  const compatibleSize = !new URLSearchParams(location.search).has("limit") || new URLSearchParams(location.search).get("limit") === "10";
-  const query = useMemo(() => { const parsed = auditQueryFromSearch(location.search); return { ...parsed, limit: "10", cursor: parsed.limit === "10" ? parsed.cursor : null }; }, [location.search]);
-  const back = compatibleSize && Array.isArray(location.state?.auditBack) ? location.state.auditBack.filter(v => v === null || typeof v === "string") : [];
-  const pages = compatibleSize && Array.isArray(location.state?.auditPages) ? location.state.auditPages.filter(v => v === null || typeof v === "string") : [];
-  const load = useCallback((next, previous, { automatic = false, pages = [] } = {}) => navigate({ pathname: location.pathname, search: auditQueryToSearch(next) }, { replace: automatic, state: { auditBack: previous, auditPages: automatic ? [null] : pages } }), [location.pathname, navigate]);
-  return <AuditQuery query={query} back={back} knownPages={pages} onNavigate={load} />;
+  const query = useMemo(() => auditQueryFromSearch(location.search), [location.search]);
+  const load = useCallback((next, { automatic = false } = {}) => navigate({ pathname: location.pathname, search: auditQueryToSearch(next) }, { replace: automatic, state: null }), [location.pathname, navigate]);
+  return <AuditQuery query={query} onNavigate={load} />;
 }
-function AuditQuery({ query, back, knownPages, onNavigate }) {
+function AuditQuery({ query, onNavigate }) {
   const [draftState, setDraftState] = useState({ query, filters: query, incomplete: {} });
   if (draftState.query !== query) setDraftState({ query, filters: query, incomplete: {} });
   const draft = draftState.filters;
@@ -27,15 +25,13 @@ function AuditQuery({ query, back, knownPages, onNavigate }) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(() => new Set());
-  const [pageHeight, setPageHeight] = useState(0);
   const listId = useId();
   const operationId = `${listId}-operation`;
   const dateHelpId = `${listId}-dates`;
-  const results = useRef(null);
   const apply = useCallback((filters, incomplete = {}) => {
     if (auditFilterValidationMessage(filters, incomplete)) return;
-    const next = { ...filters, cursor: null };
-    if (auditQueryToSearch(next) !== auditQueryToSearch({ ...query, cursor: null })) { setPageHeight(0); onNavigate(next, [], { automatic: true }); }
+    const next = { ...filters, page: "1" };
+    if (auditQueryToSearch(next) !== auditQueryToSearch({ ...query, page: "1" })) onNavigate(next, { automatic: true });
   }, [query, onNavigate]);
   useEffect(() => {
     const timer = window.setTimeout(() => apply(draft, draftState.incomplete), 450);
@@ -69,14 +65,12 @@ function AuditQuery({ query, back, knownPages, onNavigate }) {
     if (key === "operation") apply(filters, incomplete);
   };
   const field = key => ({ value: draft[key], onChange: e => changeField(key, e.target.value, Boolean(e.target.validity?.badInput)) });
-  const page = back.length + 1;
+  const page = response?.page || 1;
   const ready = !busy && !error && response?.query === query;
-  const pages = ready ? auditAvailablePages(query.cursor, back, knownPages, response.nextCursor) : knownPages.length ? knownPages : [...back, query.cursor];
+  const totalPages = response?.totalPages || 1;
   const goToPage = nextPage => {
-    if (!ready || nextPage === page || !Number.isInteger(nextPage) || nextPage < 1 || nextPage > pages.length) return;
-    // Keep the table/footer in place while loading or showing a shorter final page.
-    setPageHeight(current => Math.max(current, results.current?.getBoundingClientRect().height || 0));
-    onNavigate({ ...query, cursor: pages[nextPage - 1] }, pages.slice(0, nextPage - 1), { pages });
+    if (!ready || nextPage === page || !Number.isInteger(nextPage) || nextPage < 1 || nextPage > totalPages) return;
+    onNavigate({ ...query, page: String(nextPage) });
   };
   return <div className="grid min-w-0 gap-3">
       <form onSubmit={e => { e.preventDefault(); apply(draft, draftState.incomplete); }} className="grid min-w-0 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -85,17 +79,17 @@ function AuditQuery({ query, back, knownPages, onNavigate }) {
         <div className="grid min-w-0 content-start gap-1"><label className="grid min-w-0 gap-1 text-sm">ID de familia<input aria-describedby="audit-family-help" type="number" min="1" max="2147483647" step="1" {...field("familyId")} /></label><p id="audit-family-help" className="m-0 text-xs font-normal text-slate-500">Agrupa las variantes de un producto</p></div>
         <label className="grid min-w-0 gap-1 text-sm">Desde<input type="date" aria-describedby={dateHelpId} {...field("from")} /></label>
         <label className="grid min-w-0 gap-1 text-sm">Hasta<input type="date" aria-describedby={dateHelpId} min={draft.from || undefined} {...field("to")} /></label>
-        <div className="audit-page-controls grid min-w-0 self-end"><button type="button" className={`${secondaryButtonClass} mr-0! w-full justify-center`} onClick={() => { setPageHeight(0); setDraftState({ query, filters: auditEmptyFilters, incomplete: {} }); if (query.cursor) onNavigate({ ...auditEmptyFilters, cursor: null }, [], { automatic: true }); else apply(auditEmptyFilters); }}>Limpiar filtros</button></div>
+        <div className="audit-page-controls grid min-w-0 self-end"><button type="button" className={`${secondaryButtonClass} mr-0! w-full justify-center`} onClick={() => { setDraftState({ query, filters: auditEmptyFilters, incomplete: {} }); const next = { ...auditEmptyFilters, page: "1" }; if (auditQueryToSearch(next) !== auditQueryToSearch(query)) onNavigate(next, { automatic: true }); }}><RotateCcw size={17} aria-hidden="true" />Limpiar filtros</button></div>
         <p id={dateHelpId} className="m-0 text-xs text-slate-500 sm:col-span-2 lg:col-span-3">Desde y Hasta filtran días completos en UTC; Hasta incluye todo el día. La hora de los eventos se muestra en America/Santiago (Chile).</p>
       </form>
       {validationError && <p role="alert" className="m-0 text-sm text-critical-600">{validationError} Se conservan los últimos filtros aplicados.</p>}
       <section className={`${tablePanelClass} audit-events-panel`} aria-label="Eventos administrativos" aria-busy={busy}>
-        <header className={tableHeadingClass}><p role="status" className="table-result-count">{busy ? "Cargando cambios administrativos…" : !error ? `Mostrando ${response?.items.length || 0} cambios administrativos · Página ${page}` : "Consulta no disponible"}{busy && response && <span className="sr-only"> Se conservan los registros anteriores mientras se actualiza la consulta.</span>}</p></header>
+        <header className={tableHeadingClass}><p role="status" className="table-result-count">{busy ? "Cargando cambios administrativos…" : !error ? `Mostrando ${response?.items.length || 0} de ${response?.totalItems || 0} cambios administrativos` : "Consulta no disponible"}{busy && response && <span className="sr-only"> Se conservan los registros anteriores mientras se actualiza la consulta.</span>}</p></header>
         {error && <div role="alert" className="m-3 rounded border border-critical-600 bg-critical-50 p-3 text-sm text-critical-600"><p className="m-0 break-words">{error}</p><button type="button" className={secondaryButtonClass} onClick={() => { setBusy(true); setError(""); setReload(v => v + 1); }}>Reintentar consulta</button></div>}
-        <div ref={results} className="audit-table-content" style={{ minHeight: pageHeight || undefined }}>
+        <div className="audit-table-content">
         {!response?.items.length ? !busy && !error && <p className="m-0 p-5 text-center text-sm text-slate-500">No hay cambios registrados para estos filtros.</p> : <div className={tableScrollClass}>
         <table className="fyf-data-table audit-events-table w-full" aria-label="Historial de cambios administrativos">
-          <thead className="max-[1023px]:sr-only"><tr>{["Fecha y hora", "Operación", "Producto / familia", "Responsable", "Motivo", "Detalle"].map(label => <th scope="col" className={label === "Detalle" ? "text-center" : undefined} key={label}>{label}</th>)}</tr></thead>
+          <thead className="max-[1023px]:sr-only"><tr>{["Fecha y hora", "Operación", "Producto / familia", "Responsable", "Motivo", "Acciones"].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
           <tbody>{response.items.map(event => <Fragment key={event.id}>
           <tr className="audit-event-summary">
             <td data-label="Fecha y hora" className={dateCellClass}><time dateTime={event.at}>{auditLocalDate(event.at)}</time></td>
@@ -103,7 +97,7 @@ function AuditQuery({ query, back, knownPages, onNavigate }) {
             <td data-label="Producto / familia">{event.subject.productId ? `Producto #${event.subject.productId}` : ""}{event.subject.productId && event.subject.familyId ? " · " : ""}{event.subject.familyId ? `Familia #${event.subject.familyId}` : ""}{!event.subject.productId && !event.subject.familyId ? "Entidad no registrada" : ""}</td>
             <td data-label="Responsable">{auditResponsible(event)}</td>
             <td data-label="Motivo" className="table-description-cell"><span className="line-clamp-2">{event.reason || "No registrado"}</span></td>
-            <td className="text-center"><button type="button" disabled={!ready} className={`${secondaryButtonClass} ${tableActionButtonClass} audit-detail-action`} aria-expanded={expanded.has(event.id)} aria-controls={`${listId}-${event.id}`} aria-label={`${expanded.has(event.id)?"Ocultar":"Ver"} detalle: ${event.label}`} onClick={()=>setExpanded(current=>{const next=new Set(current);if(next.has(event.id))next.delete(event.id);else next.add(event.id);return next;})}>{expanded.has(event.id)?"Ocultar":"Ver detalle"}</button></td>
+            <td className="text-center"><button type="button" disabled={!ready} className={`${tableActionButtonClass} audit-detail-action`} aria-expanded={expanded.has(event.id)} aria-controls={`${listId}-${event.id}`} aria-label={`${expanded.has(event.id)?"Ocultar":"Ver"} detalle: ${event.label}`} onClick={()=>setExpanded(current=>{const next=new Set(current);if(next.has(event.id))next.delete(event.id);else next.add(event.id);return next;})}><Eye size={15} aria-hidden="true" />{expanded.has(event.id)?"Ocultar":"Ver detalle"}</button></td>
           </tr>
           <tr id={`${listId}-${event.id}`} hidden={!expanded.has(event.id)} className="audit-event-detail"><td colSpan={6} className="table-description-cell">
             <div className="grid min-w-0 gap-3 border-t border-slate-200 mt-2 pt-3 text-sm">
@@ -114,7 +108,7 @@ function AuditQuery({ query, back, knownPages, onNavigate }) {
           </td></tr>
         </Fragment>)}</tbody></table></div>}
         </div>
-        <div className="audit-history-pagination"><Pagination page={page} pageSize={10} totalPages={pages.length} onPageChange={goToPage} disabled={!ready} alwaysVisible ariaLabel="Páginas del historial de cambios" /></div>
+        <div className="audit-history-pagination"><Pagination page={page} pageSize={10} totalItems={response?.totalItems} totalPages={totalPages} onPageChange={goToPage} disabled={!ready} alwaysVisible ariaLabel="Páginas del historial de cambios" /></div>
       </section>
     </div>;
 }

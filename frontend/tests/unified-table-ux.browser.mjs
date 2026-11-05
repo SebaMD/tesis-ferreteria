@@ -31,9 +31,9 @@ try {
         let data;
         if (url.pathname === '/api/product-audits') {
           await new Promise(resolve => setTimeout(resolve, 160));
-          const offset = Number(url.searchParams.get('cursor')?.split('_').at(-1) || 0);
-          const all = url.searchParams.get('productId') === '999' ? [] : Array.from({ length: 32 }, (_, i) => ({ id: `event-${i}`, at: '2026-11-05T12:00:00Z', operation: 'PRODUCT_NAME_CORRECTION', label: 'Corrección de nombre individual', subject: { productId: 99, familyId: 18 }, actor: { name: 'Administrador de prueba' }, reason: 'Corrección descriptiva registrada para verificar el centrado de la tabla', affectedProductIds: [99], changes: [{ field: 'Nombre', before: 'Anterior', after: 'Corregido' }] }));
-          data = { items: all.slice(offset, offset + 10), nextCursor: offset + 10 < all.length ? `page_${offset + 10}` : null, operations: { PRODUCT_NAME_CORRECTION: 'Corrección de nombre individual' } };
+          const all = url.searchParams.get('productId') === '999' ? [] : Array.from({ length: 202 }, (_, i) => ({ id: `event-${i}`, at: '2026-11-05T12:00:00Z', operation: 'PRODUCT_NAME_CORRECTION', label: 'Corrección de nombre individual', subject: { productId: 99, familyId: 18 }, actor: { name: 'Administrador de prueba' }, reason: 'Corrección descriptiva registrada para verificar la legibilidad de la tabla', affectedProductIds: [99], changes: [{ field: 'Nombre', before: 'Anterior', after: 'Corregido' }] }));
+          const totalPages = Math.max(1, Math.ceil(all.length / 10)), requestedPage = Number(url.searchParams.get('page') || 1), page = Math.min(requestedPage, totalPages), offset = (page - 1) * 10;
+          data = { items: all.slice(offset, offset + 10), page, requestedPage, pageSize: 10, totalItems: all.length, totalPages, operations: { PRODUCT_NAME_CORRECTION: 'Corrección de nombre individual' } };
         } else if (url.pathname === '/api/products') data = [{ id: 99, name: item.productName, price: 3000, currentStock: 10, availableStock: 10, minimumStock: 2, categoryId: 1, categoryName: 'Herramientas de prueba', unitMeasure: 'unidad', status: true }];
         else if (url.pathname === '/api/sales') data = sales;
         else if (/^\/api\/sales\/\d+$/.test(url.pathname)) data = sales.find(s => s.id === Number(url.pathname.split('/').at(-1)));
@@ -56,6 +56,7 @@ try {
     return { page, context, calls };
   }
   const idle = page => page.waitForFunction(() => document.querySelector('[aria-label="Eventos administrativos"]')?.getAttribute('aria-busy') === 'false');
+  const actionStyle = locator => locator.evaluate(button => { const style = getComputedStyle(button); return Object.fromEntries(['height','paddingTop','paddingBottom','paddingLeft','paddingRight','borderRadius','borderWidth','borderColor','backgroundColor','color','gap','alignItems','justifyContent'].map(key=>[key,style[key]])); });
   async function centered(page) {
     const bad = await page.locator('table.fyf-data-table:visible').evaluateAll(tables => tables.flatMap(table => [...table.querySelectorAll('th, td')].filter(cell => cell.getClientRects().length && getComputedStyle(cell).textAlign !== (cell.tagName === 'TD' && cell.classList.contains('table-description-cell') ? 'left' : 'center')).map(cell => cell.textContent)));
     assert.deepEqual(bad, [], 'Headers, amounts and actions stay centered; opted-in descriptions read from the left');
@@ -69,28 +70,37 @@ try {
     const panel = p.getByRole('region', { name: 'Eventos administrativos' });
     const pager = panel.getByRole('navigation', { name: 'Páginas del historial de cambios' });
     const next = pager.getByRole('button', { name: 'Siguiente', exact: true });
-    for (let pageNumber = 2; pageNumber <= 4; pageNumber++) {
+    assert.equal(await p.getByRole('columnheader',{name:'Acciones',exact:true}).count(),1);
+    assert.equal(await p.getByRole('button',{name:'Limpiar filtros',exact:true}).locator('svg.lucide-rotate-ccw').count(),1);
+    const auditActionStyle = width >= 1024 ? await actionStyle(p.locator('.audit-detail-action').first()) : null;
+    assert.ok(await pager.getByRole('button', { name: 'Ir a la página 21', exact: true }).isVisible(), 'Last page available without discovery requests');
+    for (const pageNumber of [2, 21]) {
       await pager.scrollIntoViewIfNeeded(); await p.waitForTimeout(80);
       const y = await p.evaluate(() => scrollY);
       const response = p.waitForResponse(r => new URL(r.url()).pathname === '/api/product-audits');
-      await next.click();
+      const countBefore = audit.calls.length;
+      await (pageNumber === 2 ? next : pager.getByRole('button', { name: 'Ir a la página 21', exact: true })).click();
       await p.waitForFunction(() => document.querySelector('[aria-label="Eventos administrativos"]')?.getAttribute('aria-busy') === 'true');
       assert.equal(await p.locator('.audit-event-summary').count(), 10, 'Previous rows remain mounted during load');
       assert.ok(Math.abs(await p.evaluate(() => scrollY) - y) < 3, 'No loading jump');
       assert.ok(await next.isDisabled());
       await response; await idle(p);
-      assert.ok(Math.abs(await p.evaluate(() => scrollY) - y) < 3, 'No result/focus jump, including short last page');
+      assert.equal(audit.calls.length, countBefore + 1, 'A distant jump requires exactly one request');
+      assert.equal(audit.calls.at(-1).page, String(pageNumber));
+      if (pageNumber === 2) assert.ok(Math.abs(await p.evaluate(() => scrollY) - y) < 3, 'Same-height pages retain their scroll position');
+      const geometry = await panel.evaluate(section => { const content=section.querySelector('.audit-table-content'), rows=section.querySelectorAll('.audit-event-summary'); return {height:content.getBoundingClientRect().height,minHeight:getComputedStyle(content).minHeight,gap:section.querySelector('.audit-history-pagination').getBoundingClientRect().top-rows[rows.length-1].getBoundingClientRect().bottom}; });
+      assert.equal(geometry.minHeight,'0px','No artificial reserved height');
+      assert.ok(geometry.gap >= -1 && geometry.gap <= 18, 'Pagination follows the final visible row');
+      if (pageNumber === 2) p.fullAuditHeight = geometry.height;
+      else { assert.equal(await p.locator('.audit-event-summary').count(),2); assert.ok(geometry.height < p.fullAuditHeight / 2, 'Short last page shrinks on desktop and mobile'); if ([390,1280].includes(width)) await panel.screenshot({path:path.join(shots,`audit-short-${width}-${theme}.png`)}); }
       assert.equal(await pager.getByRole('button', { name: `Ir a la página ${pageNumber}`, exact: true }).getAttribute('aria-current'), 'page');
-      assert.equal(await panel.getByRole('status').innerText(), `Mostrando ${pageNumber === 4 ? 2 : 10} cambios administrativos · Página ${pageNumber}`);
+      assert.equal(await panel.getByRole('status').innerText(), `Mostrando ${pageNumber === 21 ? 2 : 10} de 202 cambios administrativos`);
     }
     assert.ok(await next.isDisabled());
-    const y = await p.evaluate(() => scrollY);
     await Promise.all([p.waitForResponse(r => r.url().includes('/api/product-audits')), pager.getByRole('button', { name: 'Anterior', exact: true }).click()]); await idle(p);
-    assert.ok(Math.abs(await p.evaluate(() => scrollY) - y) < 3);
     await Promise.all([p.waitForResponse(r => r.url().includes('/api/product-audits')), pager.getByRole('button', { name: 'Ir a la página 1', exact: true }).click()]); await idle(p);
-    assert.ok(Math.abs(await p.evaluate(() => scrollY) - y) < 3);
-    assert.ok(audit.calls.every(c => c.limit === '10'));
-    assert.equal(await panel.getByRole('status').innerText(), 'Mostrando 10 cambios administrativos · Página 1');
+    assert.ok(audit.calls.every(c => c.limit === '10' && c.page && !c.cursor));
+    assert.equal(await panel.getByRole('status').innerText(), 'Mostrando 10 de 202 cambios administrativos');
     await p.getByRole('button', { name: /^Ver detalle:/ }).first().click();
     const detail = p.locator('.audit-event-detail:not([hidden])');
     const misaligned = await detail.locator('td, p, strong, dt, dd, dl, [data-change-kind]').evaluateAll(elements => elements.filter(element => getComputedStyle(element).textAlign !== 'left').map(element => element.textContent));
@@ -101,7 +111,7 @@ try {
     if ([390, 1280].includes(width)) await panel.screenshot({ path: path.join(shots, `audit-${width}-${theme}.png`) });
     await p.getByLabel('ID de producto', { exact: true }).fill('999');
     await p.getByText('No hay cambios registrados para estos filtros.', { exact: true }).waitFor();
-    assert.equal(await panel.getByRole('status').innerText(), 'Mostrando 0 cambios administrativos · Página 1');
+    assert.equal(await panel.getByRole('status').innerText(), 'Mostrando 0 de 0 cambios administrativos');
     assert.ok(await next.isDisabled());
     await audit.context.close();
     for (const mode of ['sales', 'users', 'reports', 'orders', 'payment', 'tracking']) {
@@ -123,6 +133,8 @@ try {
         await page.getByRole('dialog').getByRole('table').waitFor(); await centered(page); await page.keyboard.press('Escape');
       }
       if (mode === 'orders' && width >= 1000) {
+        assert.equal(await page.getByRole('columnheader',{name:'Acciones',exact:true}).count(),1);
+        assert.deepEqual(await actionStyle(page.getByRole('button',{name:'Ver detalle',exact:true}).first()),auditActionStyle,'Audit and logistics use the same detail button appearance');
         await page.getByRole('button', { name: 'Ver detalle', exact: true }).first().click();
         await page.getByRole('dialog').getByRole('table').waitFor(); await centered(page);
         await page.getByRole('button', { name: 'Ficha administrativa para registro manual' }).click();
@@ -132,7 +144,7 @@ try {
       if ([390, 1280].includes(width)) await page.screenshot({ path: path.join(shots, `${mode}-${width}-${theme}.png`), fullPage: true });
       await run.context.close();
     }
-    console.log(`PASS unified tables ${width}px ${theme}: cursor scroll, fixed 10, short final page, integrated panel, sales/users/reports/logistics`);
+    console.log(`PASS unified tables ${width}px ${theme}: direct page 21, stable scroll, fixed 10, short final page, integrated panel, sales/users/reports/logistics`);
   }
   const legacy = await open('audit', 1280, 'light');
   await idle(legacy.page);
@@ -140,7 +152,15 @@ try {
   await idle(legacy.page);
   assert.equal(legacy.calls.at(-1).limit, '10');
   assert.ok(!legacy.calls.at(-1).cursor, 'A link using the old page size cannot reuse its incompatible cursor');
-  assert.equal(await legacy.page.getByRole('status').innerText(), 'Mostrando 10 cambios administrativos · Página 1');
+  assert.equal(await legacy.page.getByRole('status').innerText(), 'Mostrando 10 de 202 cambios administrativos');
+  for (const requested of [11, 999999]) {
+    const count = legacy.calls.length;
+    await legacy.page.goto(`http://127.0.0.1:5184/products/administrative-changes?page=${requested}`);
+    await idle(legacy.page);
+    assert.equal(legacy.calls.length,count+1);
+    assert.equal(await legacy.page.getByRole('button',{name:`Ir a la página ${requested === 11 ? 11 : 21}`,exact:true}).getAttribute('aria-current'),'page');
+    assert.equal(await legacy.page.getByRole('status').innerText(),`Mostrando ${requested === 11 ? 10 : 2} de 202 cambios administrativos`);
+  }
   await legacy.context.close();
   assert.deepEqual(errors, []);
   console.log('PASS read-only intercepted APIs; screenshots:', shots);

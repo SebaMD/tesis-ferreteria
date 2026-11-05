@@ -8,10 +8,10 @@ test('normal client and guest purchases hide legacy request links while compatib
  assert.match(await read('App.jsx'),/path="\/delivery-quotes\/:id\?"/);
  assert.match(await read('pages/ClientOrdersPage.jsx'),/to="\/catalog"/);
 });
-test('audit default is ten, explicit historic page sizes and cursor navigation remain valid',()=>{
+test('audit UI fixes ten rows and replaces legacy cursor URLs with numbered navigation',()=>{
  assert.equal(auditQueryFromSearch('').limit,'10');
  const query=auditQueryFromSearch('?limit=25&cursor=opaque&familyId=24');
- assert.equal(query.limit,'25');assert.deepEqual(auditQueryFromSearch(auditQueryToSearch(query)),query);
+ assert.equal(query.limit,'10');assert.equal(query.page,'1');assert.ok(!auditQueryToSearch(query).includes('cursor'));assert.deepEqual(auditQueryFromSearch(auditQueryToSearch(query)),query);
 });
 test('compact audit actions have independent accessible expansion without hiding original details',async()=>{
  const audit=await read('components/ProductAuditHistory.jsx');

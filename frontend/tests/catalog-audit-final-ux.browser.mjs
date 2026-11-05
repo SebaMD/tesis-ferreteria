@@ -55,8 +55,8 @@ try {
           ].filter(event => (!url.searchParams.has('productId') || event.subject.productId === Number(url.searchParams.get('productId')))
             && (!url.searchParams.has('familyId') || event.subject.familyId === Number(url.searchParams.get('familyId')))
             && (!url.searchParams.has('operation') || event.operation === url.searchParams.get('operation')));
-          const offset = Number(url.searchParams.get('cursor')?.split('_').at(-1) || 0), limit = Number(url.searchParams.get('limit') || 10);
-          data = { items: url.searchParams.get('productId') === '1' ? [{ ...auditEvent, label: 'Respuesta antigua sin vigencia' }] : entries.slice(offset, offset + limit), nextCursor: offset + limit < entries.length ? `test_offset_${offset + limit}` : null, operations: auditOperations };
+          const totalPages = Math.max(1, Math.ceil(entries.length / 10)), page = Math.min(Number(url.searchParams.get('page') || 1), totalPages), offset = (page - 1) * 10;
+          data = { items: url.searchParams.get('productId') === '1' ? [{ ...auditEvent, label: 'Respuesta antigua sin vigencia' }] : entries.slice(offset, offset + 10), page, totalItems: entries.length, totalPages, operations: auditOperations };
         } else if (url.pathname === '/api/products') data = [{ ...product, familyName: 'Familia de prueba', minimumStock: 5 }, { ...product, id: 100, familyId: null, name: 'Producto simple', minimumStock: 2 }];
         else if (url.pathname === '/api/categories') data = [{ id: 1, name: 'Prueba' }];
         else if (url.pathname === '/api/inventory') data = [{ id: 1, productId: 99, productName: product.name, categoryId: 1, categoryName: 'Prueba', movementType: 'ENTRY', quantity: 5, date: '2026-11-04T12:00:00Z', userNames: 'Admin', userSurnames: 'Prueba', reason: 'Entrada simulada', historicalIdentity: { origin: 'ORIGINAL', capturedAt: '2026-11-04T12:00:00Z', identity: { family: { attributes: [{ name: 'Medida', label: '3,7 × 1 1/2 pulgadas' }] } } } }];
@@ -177,14 +177,14 @@ try {
     await p.getByRole('table').waitFor(); assert.ok(await id.evaluate(e => e === document.activeElement));
     await p.getByRole('button', { name: /^Ver detalle:/ }).first().click(); assert.match(await p.locator('.audit-event-detail:not([hidden])').innerText(), /Nombre corregido/);
     if (width < 1024) assert.ok(await p.locator('.audit-event-detail:not([hidden])').evaluate(row => row.getBoundingClientRect().bottom >= row.querySelector('td').getBoundingClientRect().bottom), 'Expanded detail fits its mobile row');
-    await Promise.all([p.waitForResponse(response => new URL(response.url()).pathname === '/api/product-audits' && new URL(response.url()).searchParams.has('cursor')), p.getByRole('button', { name: 'Siguiente', exact: true }).click()]); await p.getByRole('table').waitFor(); assert.ok(audit.auditCalls.at(-1).cursor);
+    await waitAudit(() => p.getByRole('button', { name: 'Siguiente', exact: true }).click()); assert.equal(audit.auditCalls.at(-1).page, '2');
     const pager = p.getByRole('navigation', { name: 'Páginas del historial de cambios' });
     assert.equal(await pager.getByRole('button', { name: 'Ir a la página 2', exact: true }).getAttribute('aria-current'), 'page');
-    await Promise.all([p.waitForResponse(response => new URL(response.url()).searchParams.get('cursor') === 'test_offset_20'), pager.getByRole('button', { name: 'Ir a la página 3', exact: true }).click()]);
+    await waitAudit(() => pager.getByRole('button', { name: width <= 480 ? 'Siguiente' : 'Ir a la página 3', exact: true }).click());
     await p.getByRole('table').waitFor();
-    await Promise.all([p.waitForResponse(response => new URL(response.url()).pathname === '/api/product-audits' && !new URL(response.url()).searchParams.has('cursor')), pager.getByRole('button', { name: 'Ir a la página 1', exact: true }).click()]);
+    await waitAudit(() => pager.getByRole('button', { name: 'Ir a la página 1', exact: true }).click());
     await p.getByRole('table').waitFor();
-    assert.equal(await pager.getByRole('button', { name: 'Ir a la página 4', exact: true }).count(), 1, 'Known forward range remains accessible through the shared compact page window');
+    assert.ok(await pager.getByRole('button', { name: 'Ir a la página 8', exact: true }).isVisible(), 'Real last page available in both pagination windows');
     const operation = p.getByRole('combobox', { name: 'Operación', exact: true });
     await operation.scrollIntoViewIfNeeded();
     await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -198,7 +198,7 @@ try {
     await searchOperation.fill('desactivacion');
     assert.equal(await p.getByRole('listbox').getByRole('option').count(), 1);
     await waitAudit(() => searchOperation.press('Enter'));
-    await p.getByRole('table').waitFor(); assert.equal(audit.auditCalls.at(-1).operation, 'FAMILY_DEACTIVATE'); assert.ok(!audit.auditCalls.at(-1).cursor);
+    await p.getByRole('table').waitFor(); assert.equal(audit.auditCalls.at(-1).operation, 'FAMILY_DEACTIVATE'); assert.equal(audit.auditCalls.at(-1).page, '1');
     await operation.focus(); await operation.press('ArrowDown'); await searchOperation.waitFor(); await searchOperation.press('Escape');
     assert.equal(await p.getByRole('listbox').count(), 0); await p.waitForFunction(() => document.activeElement?.getAttribute('role') === 'combobox');
     await operation.click(); await p.getByRole('heading', { name: 'Historial de cambios administrativos' }).click(); assert.equal(await p.getByRole('listbox').count(), 0);

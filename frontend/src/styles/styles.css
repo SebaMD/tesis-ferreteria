@@ -961,11 +961,11 @@
 @media(max-width:400px) { .inventory-data-panel .mobile-filter-label { display: none; } }
 .audit-events-table { table-layout: fixed; }
 .audit-events-table td, .audit-events-table th { overflow-wrap: anywhere; }
-.audit-events-table th:last-child { width: 120px; }
+.audit-events-table th:last-child { width: 144px; }
 @media(min-width:1024px) {
   .audit-events-panel .audit-event-summary > td { padding-block: 4px; }
 }
-.audit-detail-action { width: 96px; min-height: 44px; margin: 0; padding-inline: 6px; font-size: 12px; justify-self: end; }
+.audit-detail-action { margin: 0; }
 @media(max-width:1023px) {
   .audit-events-panel .audit-table-content { padding: 8px; }
   .audit-events-panel .audit-events-table { display: block; min-width: 0; }
@@ -978,7 +978,7 @@
   .audit-events-table .audit-event-detail:not([hidden]) { display: block; height: auto; }
   .dark .audit-events-table .audit-event-summary { background: #171e28; border-color: #374453; }
   .dark .audit-events-table { border: 0; }
-  .audit-detail-action { width: 100%; justify-self: stretch; }
+  .audit-detail-action { width: 100%; min-height: 44px; justify-self: stretch; }
 }
 @media(max-width:620px) {
   .audit-events-table .audit-event-summary { grid-template-columns: minmax(0,1fr); }

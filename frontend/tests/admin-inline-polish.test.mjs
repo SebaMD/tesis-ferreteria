@@ -5,9 +5,9 @@ const read = path => readFile(new URL('../src/' + path, import.meta.url), 'utf8'
 
 test('audit detail expands full width only on mobile without changing its toggle', async () => {
   const css = await read('styles/styles.css');
-  assert.match(css, /\.audit-detail-action \{ width: 96px;/);
+  assert.match(css, /\.audit-detail-action \{ margin: 0; \}/);
   assert.match(css, /@media\(max-width:1023px\)/);
-  assert.match(css, /\.audit-detail-action \{ width: 100%; justify-self: stretch; \}/);
+  assert.match(css, /\.audit-detail-action \{ width: 100%; min-height: 44px; justify-self: stretch; \}/);
   const audit = await read('components/ProductAuditHistory.jsx');
   assert.match(audit, /<table className="fyf-data-table audit-events-table/);
   assert.match(audit, /aria-expanded=\{expanded.has\(event.id\)\}/);

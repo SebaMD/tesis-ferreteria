@@ -24,10 +24,15 @@ test('all 14 reviewed native tables opt into centering without changing mobile c
 
 test('audit panel keeps rows mounted, fixes page size and does not focus/scroll results on page changes', async () => {
   const audit = await read('components/ProductAuditHistory.jsx');
-  assert.match(audit, /limit: "10", cursor: parsed.limit === "10" \? parsed.cursor : null/);
+  assert.match(await read('helpers/auditNavigation.js'), /limit: "10", page: params.get\("page"\) \?\? "1"/);
   assert.match(audit, /className=\{`\$\{tablePanelClass\} audit-events-panel`\}/);
-  assert.match(audit, /Mostrando \$\{response\?\.items.length \|\| 0\} cambios administrativos · Página \$\{page\}/);
-  assert.match(audit, /style=\{\{ minHeight: pageHeight \|\| undefined \}\}/);
+  assert.match(audit, /Mostrando \$\{response\?\.items.length \|\| 0\} de \$\{response\?\.totalItems \|\| 0\} cambios administrativos/);
+  assert.doesNotMatch(audit, /pageHeight|setPageHeight|style=\{\{ minHeight|useRef|results.current/);
+  assert.match(audit, /"Motivo", "Acciones"/);
+  assert.match(audit, /className=\{`\$\{tableActionButtonClass\} audit-detail-action`\}/);
+  assert.match(audit, /<Eye size=\{15\} aria-hidden="true"/);
+  assert.match(audit, /<RotateCcw size=\{17\} aria-hidden="true" \/>Limpiar filtros/);
+  assert.match(await read('pages/OnlineOrdersManagementPage.jsx'), /<th>Acciones<\/th>/);
   assert.match(audit, /<Pagination[^>]*pageSize=\{10\}[^>]*alwaysVisible/);
   assert.doesNotMatch(audit, /Eventos por página|Las páginas siguientes se habilitan|heading.current|focusResults|scrollTo\(|!busy && !error && <section/);
   assert.ok(audit.indexOf('<section className={`${tablePanelClass} audit-events-panel`}') < audit.indexOf('<div className="audit-history-pagination"'));

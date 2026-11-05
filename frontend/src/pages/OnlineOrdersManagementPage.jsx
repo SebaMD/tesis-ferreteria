@@ -591,7 +591,7 @@ export default function OnlineOrdersManagementPage() {
           desktop={(
         <div className={tableScrollClass}>
           <table className="fyf-data-table">
-            <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acción</th></tr></thead>
+            <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acciones</th></tr></thead>
             <tbody>
               {ordersPagination.paginatedItems.map((order) => {
                 const orderStatus = getOnlineOrderStatus(order.status);

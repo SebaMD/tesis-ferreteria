@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { auditAvailablePages, auditEmptyFilters, auditFilterValidationMessage, auditQueryFromSearch, auditQueryToSearch } from '../src/helpers/auditNavigation.js';
+import { auditEmptyFilters, auditFilterValidationMessage, auditQueryFromSearch, auditQueryToSearch } from '../src/helpers/auditNavigation.js';
 
 test('audit IDs remain independent, combine without coercion and omit empty fields', () => {
   const filters = { ...auditEmptyFilters, productId: '22', familyId: '22' };
   const search = new URLSearchParams(auditQueryToSearch(filters));
   assert.equal(search.get('productId'), '22');
   assert.equal(search.get('familyId'), '22');
-  assert.deepEqual(auditQueryFromSearch(auditQueryToSearch(filters)), { ...filters, cursor: null });
+  assert.deepEqual(auditQueryFromSearch(auditQueryToSearch(filters)), { ...filters, page: '1' });
   assert.equal(new URLSearchParams(auditQueryToSearch(auditEmptyFilters)).has('productId'), false);
   assert.equal(new URLSearchParams(auditQueryToSearch(auditEmptyFilters)).has('familyId'), false);
   for (const key of ['productId', 'familyId']) for (const value of ['0', '-1', '022', '1.5', '1e2', '2147483648']) {
@@ -16,15 +16,12 @@ test('audit IDs remain independent, combine without coercion and omit empty fiel
   }
 });
 
-test('numbered audit pages use only discovered cursors and invalidate changed forward ranges', () => {
-  assert.deepEqual(auditAvailablePages(null, [], [], 'a'), [null, 'a']);
-  assert.deepEqual(auditAvailablePages('a', [null], [null, 'a'], 'b'), [null, 'a', 'b']);
-  const known = [null, 'a', 'b', 'c'];
-  assert.deepEqual(auditAvailablePages(null, [], known, 'a'), known);
-  assert.deepEqual(auditAvailablePages('a', [null], known, 'new-b'), [null, 'a', 'new-b']);
-  assert.deepEqual(auditAvailablePages('a', [null], known, null), [null, 'a']);
-  assert.deepEqual(auditAvailablePages('direct', [], [], 'next'), ['direct', 'next']);
-  assert.deepEqual(known, [null, 'a', 'b', 'c']);
+test('numbered audit pages are direct, bounded and independent of cursor history', () => {
+  const filters={...auditEmptyFilters,page:'21'};
+  assert.deepEqual(auditQueryFromSearch(auditQueryToSearch(filters)),filters);
+  assert.equal(auditFilterValidationMessage(filters),'');
+  for(const page of ['0','-1','1.5','01','1e2','1000001']) assert.ok(auditFilterValidationMessage({...filters,page}));
+  assert.equal(auditQueryFromSearch('?cursor=legacy').page,'1');
 });
 
 test('audit date labels preserve UTC day boundaries and Chilean event display', async () => {
@@ -49,5 +46,5 @@ test('table centering and shared pagination remain opt-in, including descriptive
   assert.match(audit, /<AppSelect[^>]*searchable/);
   assert.match(audit, /<Pagination page=\{page\}/);
   assert.match(pagination, /disabled=\{disabled \|\| page === totalPages\}/);
-  assert.doesNotMatch(audit, /totalItems=|totalPages=\{response\./);
+  assert.match(audit, /totalItems=\{response\?\.totalItems\} totalPages=\{totalPages\}/);
 });

@@ -40,7 +40,7 @@ test('table centering and shared pagination remain opt-in, including descriptive
   const read = file => readFile(new URL('../src/' + file, import.meta.url), 'utf8');
   const [inventory, history, audit, pagination] = await Promise.all(['components/GroupedInventoryTable.jsx', 'pages/ProductsPage.jsx', 'components/ProductAuditHistory.jsx', 'components/Pagination.jsx'].map(read));
   for (const label of ['Precio', 'Stock', 'Mínimo', 'Acciones']) assert.ok(inventory.includes(`<th>${label}</th>`));
-  assert.match(inventory, /table-row-actions flex flex-nowrap gap-1.5/);
+  assert.match(inventory, /table-row-actions inventory-row-actions/);
   assert.match(history, /<th className="text-center">Cantidad<\/th>/);
   assert.match(history, /numericCellClass\} text-center`\}>\{movement.quantity\}/);
   assert.match(audit, /<AppSelect[^>]*searchable/);

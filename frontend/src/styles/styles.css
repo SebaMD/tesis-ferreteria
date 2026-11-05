@@ -2,6 +2,10 @@
 
 .inventory-status-action { width: 145px; min-height: 36px; white-space: normal; flex-shrink: 0; }
 .inventory-edit-action { width: 82px; min-height: 36px; flex-shrink: 0; }
+.fyf-data-table .inventory-row-actions { display: grid; grid-template-columns: 82px 145px; gap: 6px; justify-content: center; align-items: stretch; }
+.inventory-individual-notice { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 145px; min-height: 36px; padding: 4px 6px; border: 1px solid var(--color-slate-300); border-radius: 5px; background: var(--color-slate-100); color: var(--color-slate-600); box-shadow: 0 1px 2px rgb(16 21 31 / 8%); font-size: 11px; line-height: 1.35; text-align: center; }
+.dark .inventory-individual-notice { background: #202936; color: #bcc5d0; border-color: #465260; }
+@media(max-width:999px) { .inventory-mobile-actions .inventory-individual-notice { width: 100%; min-width: 0; min-height: 44px; } }
 .inventory-filter-button { min-height: 36px; margin-right: 0; padding: 6px 12px; font-size: 12px; border-color: var(--color-slate-300); background: var(--color-surface); color: var(--color-ink-950); }
 .inventory-filter-button[aria-pressed="true"] { background: var(--color-rust-500); color: white; border-color: var(--color-rust-600); }
 .dark .inventory-filter-button { background: #202936; color: #eef1f4; border-color: #465260; }

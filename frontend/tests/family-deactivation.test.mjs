@@ -2,7 +2,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {r
 const read=p=>readFile(new URL('../src/'+p,import.meta.url),'utf8');
 test('table family action uses actual family ID and unfiltered SKU states; simple status and editor remain individual',async()=>{
  const [table,page,editor]=await Promise.all(['components/GroupedInventoryTable.jsx','pages/ProductsPage.jsx','components/ProductBundleEditor.jsx'].map(read));
- assert.match(table,/onFamilyStatus\(group.representative.familyId\)/);assert.match(table,/allProducts.filter/);assert.match(table,/Desactivar familia/);assert.match(table,/Activación individual en Editar/);assert.doesNotMatch(table,/Activar familia/);
+ assert.match(table,/onFamilyStatus\(group.representative.familyId\)/);assert.match(table,/allProducts.filter/);assert.match(table,/Desactivar familia/);assert.match(table,/Activación individual<\/span>\{" "\}<span>en Editar/);assert.match(table,/check\.eligible/);
  assert.match(page,/allProducts=\{products\}/);assert.match(table,/onStatus\(product\)/);assert.match(editor,/deactivateProductRequest\(statusTarget.id,statusTarget.updatedAt\)/);
 });
 test('family confirmation preserves independent revision, cancel, reason, uncertain recovery and original inactive counts',async()=>{
@@ -11,4 +11,8 @@ test('family confirmation preserves independent revision, cancel, reason, uncert
 });
 test('family deactivation audit is a reversible availability change, never physical deletion or SKU addition',()=>{
  const rows=auditReadableRows({operation:'FAMILY_DEACTIVATE',changes:[{field:'Disponibilidad de variantes',before:[{id:1,name:'SKU',active:true},{id:2,name:'Inactiva',active:false}],after:[{id:1,name:'SKU',active:false},{id:2,name:'Inactiva',active:false}]}]});assert.equal(rows.length,1);assert.equal(rows[0].before,'Activo');assert.equal(rows[0].after,'Desactivado (no eliminado)');
+});
+test('selective family activation audit describes only false-to-true SKU and links its source',()=>{
+ const rows=auditReadableRows({operation:'FAMILY_ACTIVATE',changes:[{field:'Desactivación de origen',after:99},{field:'Disponibilidad de variantes',before:[{id:1,name:'SKU',active:false},{id:3,name:'Inactiva previa',active:false}],after:[{id:1,name:'SKU',active:true},{id:3,name:'Inactiva previa',active:false}]}]});
+ assert.equal(rows.length,2);assert.equal(rows[0].after,'99');assert.equal(rows[1].before,'Inactivo');assert.equal(rows[1].after,'Activo');assert.ok(!JSON.stringify(rows).includes('Inactiva previa'));
 });

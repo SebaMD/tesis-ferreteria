@@ -1,6 +1,10 @@
 import api from "../api/httpClient.js";
 import { resolveProductListAssets } from "../helpers/productAssets.js";
 
+export async function getFamilyActivationEligibilityRequest(id, signal) {
+  return (await api.get(`/product-families/${id}/activation-eligibility`, { signal })).data.data;
+}
+
 export async function getProductConversionRequest(id) {
   const data = (await api.get(`/product-families/conversion/${id}`)).data.data;
   return { ...data, product: resolveProductListAssets([data.product], api.defaults.baseURL)[0] };

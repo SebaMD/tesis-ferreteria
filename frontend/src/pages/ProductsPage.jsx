@@ -177,6 +177,7 @@ export default function ProductsPage() {
   const [inventoryScannerOpen, setInventoryScannerOpen] = useState(false);
   const [productStatusTarget, setProductStatusTarget] = useState(null);
   const [familyStatusTarget, setFamilyStatusTarget] = useState(null);
+  const [familyActivationTarget, setFamilyActivationTarget] = useState(null);
   const [linkedRegistration, setLinkedRegistration] = useState(null);
   const reviewEntry = activeForm === "ENTRY" && linkedRegistration?.returnToReview;
   const quickReviewEntry = activeForm === "ENTRY" && linkedRegistration?.step === "ENTRY"
@@ -1386,6 +1387,7 @@ export default function ProductsPage() {
       </div>
 
       {canManage && familyStatusTarget && <FamilyDeactivationDialog familyId={familyStatusTarget} userId={user.id} onClose={() => setFamilyStatusTarget(null)} onSaved={async () => { setFamilyStatusTarget(null); await loadData(); }} />}
+      {canManage && familyActivationTarget && <FamilyDeactivationDialog activate familyId={familyActivationTarget} userId={user.id} onClose={() => setFamilyActivationTarget(null)} onSaved={async () => { setFamilyActivationTarget(null); await loadData(); }} />}
       <AppModal
         open={inventoryScannerOpen}
         title="Escanear producto"
@@ -1947,9 +1949,9 @@ export default function ProductsPage() {
         </div>
         {(showInactiveProducts || lowStockOnly || outOfStockOnly) && <p className="m-0 px-4 py-2 text-xs text-slate-600">Se incluyen los artículos que cumplen cualquiera de los estados seleccionados. El selector familiar también permite consultar variantes desactivadas a usuarios autorizados; no se suman a los resultados ni a la exportación si no coinciden con los filtros.</p>}
         <GroupedInventoryTable key={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}`}
-          groups={productsPagination.paginatedItems} allProducts={products} role={user?.role} canManage={canManage} canViewMinimum={canViewAdministrativeStock}
+          groups={productsPagination.paginatedItems} allProducts={products} role={user?.role} userId={user?.id} canManage={canManage} canViewMinimum={canViewAdministrativeStock}
           search={normalizedSearch}
-          onEdit={startEditing} onStatus={openProductStatusModal} onFamilyStatus={setFamilyStatusTarget}
+          onEdit={startEditing} onStatus={openProductStatusModal} onFamilyStatus={setFamilyStatusTarget} onFamilyActivate={setFamilyActivationTarget}
           />
         <Pagination
           page={productsPagination.page}

@@ -5,6 +5,7 @@ export const auditOperations = {
   FAMILY_BRAND_CORRECTION: "Corrección de marca familiar",
   FAMILY_CATEGORY_CHANGE: "Reclasificación de categoría familiar",
   FAMILY_DEACTIVATE: "Desactivación de variantes de la familia",
+  FAMILY_ACTIVATE: "Activación selectiva de variantes de la familia",
   ATTRIBUTE_RENAME: "Renombrado de atributo",
   OPTION_LABEL_CORRECTION: "Corrección de etiqueta compartida",
   DIMENSION_ADD: "Incorporación de dimensión",
@@ -82,6 +83,9 @@ export function auditDTO(row: AuditRow) {
       }));
       if (prev.family) { const f = obj(prev.family); add("Metadatos familiares anteriores", { id: id(f.id), name: auditText(f.name, 150), brand: auditText(f.brand, 100), categoryId: id(f.categoryId) }, null); }
       break;
+    case "FAMILY_ACTIVATE":
+      add("Desactivación de origen", null, id(next.sourceEventId));
+    // Both operations expose availability only, never raw command/revision payloads.
     case "FAMILY_DEACTIVATE":
       add("Disponibilidad de variantes", array(prev.variants).map(product), array(next.variants).map(product));
       add("Familia", null, { id: row.family_id, name: auditText(next.familyName, 150) });

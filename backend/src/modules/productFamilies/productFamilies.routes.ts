@@ -11,9 +11,24 @@ import { familyBrandOperation } from "./familyBrand.service.js";
 import { optionLabelOperation } from "./familyOptionLabel.service.js";
 import { UnitChangeError } from "./productUnitEligibility.service.js";
 import { familyDeactivationOperation } from "./familyDeactivation.service.js";
+import { familyActivationOperation, getFamilyActivationEligibility } from "./familyActivation.service.js";
 
 const router = Router();
 router.use(authenticateJwt, verifyRoles(["ADMIN"]));
+router.get("/:id/activation-eligibility", async (req: AuthenticatedRequest,res)=>{
+  res.setHeader("Cache-Control","no-store");
+  try { return handleSuccess(res,200,"Elegibilidad de activación",await getFamilyActivationEligibility(Number(req.params.id),req.user!.id)); }
+  catch(e) { if(e instanceof FamilyError) return handleErrorClient(res,e.statusCode,e.message); return handleErrorServer(res,500,"No se pudo verificar la activación",e); }
+});
+router.post("/:id/activations", async(req:AuthenticatedRequest,res)=>{
+  try { return handleSuccess(res,200,"Familia activada",await familyActivationOperation(Number(req.params.id),req.user!.id,req.body)); }
+  catch(e) { if(e instanceof FamilyError) return handleErrorClient(res,e.statusCode,e.message); return handleErrorServer(res,500,"No se pudo confirmar la activación. Consulta su resultado antes de reintentar.",e); }
+});
+router.get("/:id/activations/:key",async(req:AuthenticatedRequest,res)=>{
+  res.setHeader("Cache-Control","no-store");
+  try { return handleSuccess(res,200,"Resultado de activación",await familyActivationOperation(Number(req.params.id),req.user!.id,undefined,String(req.params.key))); }
+  catch(e) { if(e instanceof FamilyError) return handleErrorClient(res,e.statusCode,e.message); return handleErrorServer(res,500,"No se pudo consultar la activación",e); }
+});
 router.post("/:id/deactivations", async (req: AuthenticatedRequest, res) => {
   try { return handleSuccess(res, 200, "Familia desactivada", await familyDeactivationOperation(Number(req.params.id), req.user!.id, req.body)); }
   catch (e) { if (e instanceof FamilyError) return handleErrorClient(res, e.statusCode, e.message); return handleErrorServer(res, 500, "No se pudo confirmar la desactivación. Consulta su resultado antes de reintentar.", e); }

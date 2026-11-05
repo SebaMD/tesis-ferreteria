@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getFamilyActivationEligibilityRequest } from "../services/productFamilies.service.js";
 import { ChevronDown, Pencil, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "./ResponsiveTableView.jsx";
 import AppSelect from "./AppSelect.jsx";
@@ -21,7 +22,25 @@ function VariantPicker({ group, product, role, onSelect }) {
     renderOption={option => <span className="grid gap-1 py-2"><span className="break-words text-xs font-semibold">{option.label}</span><span className="break-words text-xs text-slate-500">{inventoryVariantLabel(option.product)}</span><StockBadge product={option.product} role={role} alert /></span>} />;
 }
 
-export default function GroupedInventoryTable({ groups, allProducts = [], role, canManage, canViewMinimum, onEdit, onStatus, onFamilyStatus, search = "" }) {
+function IndividualActivationNotice() {
+  return <span className="inventory-individual-notice"><span>Activación individual</span>{" "}<span>en Editar</span></span>;
+}
+function hasPendingActivation(userId, familyId) {
+  try { const command=JSON.parse(sessionStorage.getItem(`fyf-family-activation-${userId}-${familyId}`)); return command?.confirmed===true && Number.isSafeInteger(command.sourceEventId) && /^[a-zA-Z0-9-]{20,80}$/.test(command.operationKey); }
+  catch { return false; }
+}
+function FamilyActivationAction({ familyId, revisionKey, onActivate }) {
+  const [check, setCheck] = useState(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    getFamilyActivationEligibilityRequest(familyId,controller.signal).then(value=>{if(!controller.signal.aborted)setCheck({revisionKey,eligible:value.eligible===true});}).catch(()=>{if(!controller.signal.aborted)setCheck({revisionKey,eligible:false});});
+    return ()=>controller.abort();
+  },[familyId,revisionKey]);
+  return check?.revisionKey===revisionKey && check.eligible
+    ? <button type="button" className={`${secondaryButtonClass} ${tableActionButtonClass} inventory-status-action mr-0!`} onClick={()=>onActivate(familyId)}><CheckCircle size={16}/>Activar familia</button>
+    : <IndividualActivationNotice />;
+}
+export default function GroupedInventoryTable({ groups, allProducts = [], role, userId, canManage, canViewMinimum, onEdit, onStatus, onFamilyStatus, onFamilyActivate, search = "" }) {
   const [selectedIds, setSelectedIds] = useState({});
   const pickerGroup = group => ({ ...group, products: inventoryPickerProducts(group, allProducts, role) });
   const selected = group => selectedInventoryProduct(pickerGroup(group), selectedIds[group.key], search);
@@ -33,9 +52,11 @@ export default function GroupedInventoryTable({ groups, allProducts = [], role, 
   };
   const actions = (product, group) => <>
     <button type="button" title={`Editar ${product.name}`} className={`${secondaryButtonClass} ${tableActionButtonClass} inventory-edit-action`} onClick={() => onEdit(product)}><Pencil size={16} aria-hidden="true"/>Editar</button>
-    {group.kind === "family" ? familyCounts(group).active > 0
+    {group.kind === "family" ? hasPendingActivation(userId,group.representative.familyId)
+      ? <button type="button" className={`${secondaryButtonClass} ${tableActionButtonClass} inventory-status-action mr-0!`} onClick={()=>onFamilyActivate(group.representative.familyId)}>Consultar activación</button>
+      : familyCounts(group).active > 0
       ? <button type="button" className={`${dangerButtonClass} ${tableActionButtonClass} inventory-status-action mr-0!`} onClick={() => onFamilyStatus(group.representative.familyId)}><XCircle size={16} />Desactivar familia</button>
-      : <span className="max-w-40 text-xs text-slate-500">Activación individual en Editar</span>
+      : <FamilyActivationAction familyId={group.representative.familyId} revisionKey={JSON.stringify((allProducts.length?allProducts:group.products).filter(p=>p.familyId===group.representative.familyId).map(p=>[p.id,p.updatedAt,p.status]))} onActivate={onFamilyActivate} />
       : <button type="button" className={`${product.status === false ? secondaryButtonClass : dangerButtonClass} ${tableActionButtonClass} inventory-status-action mr-0!`} onClick={() => onStatus(product)}>{product.status === false ? <CheckCircle size={16} /> : <XCircle size={16} />}{product.status === false ? "Activar" : "Desactivar"}</button>}
   </>;
   const details = (product, group) => <><MobileDetailGrid>
@@ -54,7 +75,7 @@ export default function GroupedInventoryTable({ groups, allProducts = [], role, 
       {groups.map(group => { const product = selected(group); return <tr key={group.key}>
         <td className="font-mono whitespace-nowrap">{inventoryGroupIdentity(group)}</td><td className="table-description-cell w-72 min-w-48 max-w-80">{picker(group)}</td>
         <td className="font-mono">{product.barcode || "Sin código"}</td><td className="table-description-cell">{product.categoryName}</td><td className="font-mono">{formatClp(product.price)}</td><td className="font-mono">{product.currentStock}</td><td>{product.unitMeasure}</td>
-        {canViewMinimum && <td className="font-mono">{product.minimumStock}</td>}<td><StockBadge product={product} role={role} /></td>{canManage && <td><div className="table-row-actions flex flex-nowrap gap-1.5">{actions(product, group)}</div></td>}
+        {canViewMinimum && <td className="font-mono">{product.minimumStock}</td>}<td><StockBadge product={product} role={role} /></td>{canManage && <td><div className="table-row-actions inventory-row-actions">{actions(product, group)}</div></td>}
       </tr>; })}
       {groups.length === 0 && <tr><td colSpan={8 + Number(canViewMinimum) + Number(canManage)} className="py-8! text-center">No se encontraron productos con los filtros seleccionados.</td></tr>}
     </tbody></table></div>} />;

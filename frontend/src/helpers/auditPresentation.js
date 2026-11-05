@@ -28,14 +28,16 @@ export const auditResponsible = event => event.actor?.name || "Responsable no re
 // Original values and references remain untouched in the DTO; never render raw payloads.
 export function auditReadableRows(event) {
   const changes = event.changes || [];
-  if (event.operation === "FAMILY_DEACTIVATE") {
+  if (["FAMILY_DEACTIVATE", "FAMILY_ACTIVATE"].includes(event.operation)) {
+    const activating = event.operation === "FAMILY_ACTIVATE";
     const status = changes.find(c => c.field === "Disponibilidad de variantes");
     const previous = Array.isArray(status?.before) ? status.before : [];
     const family = changes.find(c => c.field === "Familia");
     return [
       ...(family?.after?.name ? [{ kind: "context", label: "Familia", after: family.after.name }] : []),
-      ...(Array.isArray(status?.after) ? status.after.flatMap(p => previous.find(old => old.id === p.id)?.active === true && p.active === false
-        ? [{ kind: "change", label: productLabel(p), before: "Activo", after: "Desactivado (no eliminado)" }] : []) : []),
+      ...(activating ? [{kind:"context",label:"Desactivación de origen",after:auditReadableValue(changes.find(c=>c.field==="Desactivación de origen")?.after)}] : []),
+      ...(Array.isArray(status?.after) ? status.after.flatMap(p => previous.find(old => old.id === p.id)?.active === !activating && p.active === activating
+        ? [{ kind: "change", label: productLabel(p), before: activating ? "Inactivo" : "Activo", after: activating ? "Activo" : "Desactivado (no eliminado)" }] : []) : []),
     ];
   }
   if (event.operation === "DIMENSION_ADD") {

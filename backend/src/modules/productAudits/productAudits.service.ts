@@ -5,7 +5,7 @@ import { auditDTO, auditOperations, type AuditRow } from "./productAudits.dto.js
 export class AuditError extends Error { constructor(message: string, public statusCode = 400) { super(message); } }
 const positive = (v: unknown, max = 2147483647) => typeof v === "string" && /^[1-9]\d*$/.test(v) && Number(v) <= max ? Number(v) : null;
 export function validateAuditQuery(input: Record<string, unknown>) {
-  if (Object.keys(input).some(k => !["operation", "productId", "familyId", "from", "to", "limit", "cursor"].includes(k))) throw new AuditError("Filtro de auditoría desconocido");
+  if (Object.keys(input).some(k => !["operation", "productId", "familyId", "from", "to", "limit", "cursor", "page"].includes(k))) throw new AuditError("Filtro de auditoría desconocido");
   const operation = input.operation === undefined ? null : typeof input.operation === "string" && Object.hasOwn(auditOperations, input.operation) ? input.operation : undefined;
   if (operation === undefined) throw new AuditError("Operación de auditoría inválida");
   const number = (key: string, max?: number) => { if (input[key] === undefined) return null; const n = positive(input[key], max); if (!n) throw new AuditError(`${key} inválido`); return n; };
@@ -13,6 +13,10 @@ export function validateAuditQuery(input: Record<string, unknown>) {
     if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || v.startsWith("0000") || !Number.isFinite(Date.parse(v)) || new Date(v).toISOString().slice(0, 10) !== v) throw new AuditError("Fecha inválida; utilice AAAA-MM-DD (UTC)"); return v; };
   const from = date("from"), to = date("to");
   if (from && to && from > to) throw new AuditError("El inicio no puede ser posterior al fin");
+  const page = number("page", 1000000);
+  const limit = number("limit", 100) ?? (page === null ? 25 : 10);
+  if (page !== null && input.cursor !== undefined) throw new AuditError("No combine page con cursor");
+  if (page !== null && limit !== 10) throw new AuditError("La paginación numerada utiliza 10 registros por página");
   let cursor: { at: string; id: number } | null = null;
   if (input.cursor !== undefined) {
     try {
@@ -22,7 +26,7 @@ export function validateAuditQuery(input: Record<string, unknown>) {
       cursor = { at: c.at, id: c.id };
     } catch { throw new AuditError("Cursor de auditoría inválido"); }
   }
-  return { operation, productId: number("productId"), familyId: number("familyId"), from, to, limit: number("limit", 100) ?? 25, cursor };
+  return { operation, productId: number("productId"), familyId: number("familyId"), from, to, limit, cursor, page };
 }
 
 export async function listProductAudits(actorId: number, input: Record<string, unknown>) {
@@ -32,7 +36,7 @@ export async function listProductAudits(actorId: number, input: Record<string, u
     const q = validateAuditQuery(input);
     // No advisory/row locks, writes, audit inserts or operational side effects.
     // Group only explicitly linked authorizations/command keys. Unlinked events remain visible.
-    const rows = await tx.execute<AuditRow>(sql`
+    const filtered = sql`
       with raw as (
         select e.*, coalesce(e.next->>'operation', 'ASSOCIATION') operation
         from product_family_events e
@@ -47,7 +51,7 @@ export async function listProductAudits(actorId: number, input: Record<string, u
             and conversion.family_id=e.family_id and conversion.user_id=e.user_id
             and conversion.next->>'operationKey'=e.next->>'operationKey'
         ))
-      ), page as (
+      ), filtered as (
         select e.* from visible e
         where (${q.operation}::text is null or case when e.operation in (${sql.join(Object.keys(auditOperations).filter(k => k !== "OTHER").map(k => sql`${k}`), sql`,`)}) then e.operation else 'OTHER' end=${q.operation})
           and (${q.familyId}::integer is null or e.family_id=${q.familyId})
@@ -55,8 +59,23 @@ export async function listProductAudits(actorId: number, input: Record<string, u
             or (e.operation='CONVERT_SIMPLE' and exists(select 1 from raw b where b.operation='BUNDLE_SAVE' and b.family_id=e.family_id and b.user_id=e.user_id and b.next->>'operationKey'=e.next->>'operationKey' and b.next->'productIds' @> jsonb_build_array(${q.productId}::integer))))
           and (${q.from}::text is null or e.created_at >= ${q.from}::date::timestamp at time zone 'UTC')
           and (${q.to}::text is null or e.created_at < (${q.to}::date + 1)::timestamp at time zone 'UTC')
-          and (${q.cursor?.at ?? null}::text is null or (e.created_at,e.id)<(${q.cursor?.at ?? null}::timestamptz,${q.cursor?.id ?? null}::integer))
-        order by e.created_at desc,e.id desc limit ${q.limit + 1}
+      )
+    `;
+    // Count the same visible, filtered commands as the page; both reads share one snapshot.
+    // Separate numbered requests use fresh snapshots: concurrent inserts may shift offsets.
+    let pagination: { requestedPage: number; page: number; pageSize: number; totalItems: number; totalPages: number } | null = null;
+    if (q.page !== null) {
+      const count = await tx.execute<{ total: number }>(sql`${filtered} select count(*)::integer total from filtered`);
+      const totalItems = count.rows[0].total;
+      const totalPages = Math.max(1, Math.ceil(totalItems / q.limit));
+      pagination = { requestedPage: q.page, page: Math.min(q.page, totalPages), pageSize: q.limit, totalItems, totalPages };
+    }
+    const rows = await tx.execute<AuditRow>(sql`
+      ${filtered}, page as (
+        select e.* from filtered e
+        where (${q.cursor?.at ?? null}::text is null or (e.created_at,e.id)<(${q.cursor?.at ?? null}::timestamptz,${q.cursor?.id ?? null}::integer))
+        order by e.created_at desc,e.id desc
+        limit ${pagination ? q.limit : q.limit + 1} offset ${pagination ? (pagination.page - 1) * q.limit : 0}
       )
       select p.id,p.product_id,p.family_id,p.user_id,p.previous,p.next,p.reason,p.operation,
         to_char(p.created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') created_at,
@@ -69,6 +88,7 @@ export async function listProductAudits(actorId: number, input: Record<string, u
         )), '[]'::jsonb) related
       from page p left join users u on u.id=p.user_id order by p.created_at desc,p.id desc
     `);
+    if (pagination) return { items: rows.rows.map(auditDTO), ...pagination, limit: q.limit, operations: auditOperations };
     const hasMore = rows.rows.length > q.limit, page = rows.rows.slice(0, q.limit), last = page.at(-1);
     return { items: page.map(auditDTO), nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ at: last.created_at, id: last.id })).toString("base64url") : null,
       limit: q.limit, operations: auditOperations };

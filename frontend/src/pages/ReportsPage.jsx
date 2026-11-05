@@ -449,7 +449,7 @@ export default function ReportsPage() {
           )}
           desktop={(
         <div className={tableScrollClass}>
-          <table>
+          <table className="fyf-data-table">
             <thead>
               <tr>
                 <th>ID</th>

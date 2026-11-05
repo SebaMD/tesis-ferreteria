@@ -12,7 +12,7 @@ import BackToTop from "../components/BackToTop.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import CatalogNoticeCarousel from "../components/CatalogNoticeCarousel.jsx";
 import CatalogPagination from "../components/CatalogPagination.jsx";
-import { CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, validatePriceRange } from "../helpers/catalogFilters.js";
+import { ADDITIONAL_CATALOG_FILTER_KEYS, CATALOG_SORT_OPTIONS, EMPTY_CATALOG_FILTERS, mergeAdditionalCatalogFilters, validatePriceRange } from "../helpers/catalogFilters.js";
 import { readCatalogRestoration, readCatalogEntry, rememberCatalogEntry } from "../helpers/catalogNavigation.js";
 import { getCatalogProductsRequest } from "../services/catalog.service.js";
 import useAuth from '../hooks/useAuth.js';
@@ -35,6 +35,7 @@ function CatalogContents({ owner }) {
   const restoredSnapshot = initialRestoration?.snapshot;
   const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState(() => restoredSnapshot?.filters || EMPTY_CATALOG_FILTERS);
+  const [draftFilters, setDraftFilters] = useState(() => restoredSnapshot?.filters || EMPTY_CATALOG_FILTERS);
   const [debouncedSearch, setDebouncedSearch] = useState(() => search.trim());
   const [order, setOrder] = useState(() => restoredSnapshot?.order || "name-asc");
   const [page, setPage] = useState(() => restoredSnapshot?.page || 1);
@@ -157,13 +158,24 @@ function CatalogContents({ owner }) {
   const categories = facets.categories;
   const brands = facets.brands;
   const activeCount = Object.entries(filters).filter(([key, value]) => value !== EMPTY_CATALOG_FILTERS[key]).length + (search.trim() ? 1 : 0);
-  const advancedFilterCount = ["minPrice", "maxPrice", "brand", "availability", "percentageDiscount", "buy2Pay1"]
+  const advancedFilterCount = ADDITIONAL_CATALOG_FILTER_KEYS
     .filter((key) => filters[key] !== EMPTY_CATALOG_FILTERS[key]).length;
   const updateFilters = (next) => {
     setFilters(next);
     setPage(1);
   };
-  const filterProps = { filters, onChange: updateFilters, onClear: () => updateFilters(EMPTY_CATALOG_FILTERS), brands };
+  const applyAdditionalFilters = () => {
+    if (!validatePriceRange(draftFilters.minPrice, draftFilters.maxPrice).valid) return;
+    if (ADDITIONAL_CATALOG_FILTER_KEYS.some(key => draftFilters[key] !== filters[key])) {
+      updateFilters(mergeAdditionalCatalogFilters(filters, draftFilters));
+    }
+    setFiltersOpen(false);
+  };
+  const clearFilters = () => {
+    setDraftFilters(EMPTY_CATALOG_FILTERS);
+    updateFilters(EMPTY_CATALOG_FILTERS);
+  };
+  const filterProps = { filters: draftFilters, onChange: setDraftFilters, onApply: applyAdditionalFilters, onClear: clearFilters, brands };
   const setFilterValue = (field, value) => updateFilters({ ...filters, [field]: value });
   const changeOrder = (value) => {
     setOrder(value);
@@ -221,7 +233,7 @@ function CatalogContents({ owner }) {
                 Ordenar por
                 <AppSelect className="text-xs" value={order} onChange={changeOrder} ariaLabel="Ordenar catálogo" options={CATALOG_SORT_OPTIONS.map(([value, label]) => ({ value, label }))} />
               </label>
-              <button className="min-h-10 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden max-[620px]:col-span-2" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+              <button className="min-h-10 shrink-0 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:hidden max-[620px]:col-span-2" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => { setDraftFilters(filters); setFiltersOpen(true); }}>
                 <SlidersHorizontal size={17} /> Filtrar{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
               </button>
             </div>
@@ -265,7 +277,7 @@ function CatalogContents({ owner }) {
         </div>
       </section>
       </CatalogLoadingScope>
-      <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small" footer={<button type="button" onClick={() => setFiltersOpen(false)}>Ver {pagination.totalItems} resultados</button>}><CatalogFilters {...filterProps} /></AppModal>
+      <AppModal open={filtersOpen} title="Filtrar productos" onClose={() => setFiltersOpen(false)} size="small"><CatalogFilters {...filterProps} /></AppModal>
       <BackToTop />
     </main>
     </CatalogLoadingScope>

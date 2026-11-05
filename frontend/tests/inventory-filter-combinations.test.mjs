@@ -43,7 +43,7 @@ test('page counts and exports use filtered SKUs, group pagination is last; compa
  assert.match(table,/product.status === false \? "Desactivado"/);
  assert.match(css,/\.inventory-status-action \{ width: 145px/);
  assert.match(page,/Movimientos de unidades de inventario/);
- assert.match(audit,/audit-filter-action/);assert.match(audit,/audit-history-pagination/);
- assert.match(css,/\.audit-history-pagination > button:last-child \{ justify-self: end/);
- assert.match(audit,/aria-current="page"/);
+ assert.doesNotMatch(audit,/audit-filter-action|>Filtrar<\/button>/);assert.match(audit,/audit-history-pagination/);
+ assert.match(audit,/<Pagination page=\{page\}/);
+ assert.match(await read('components/Pagination.jsx'),/aria-current=\{pageItem === page \? "page"/);
 });

@@ -42,7 +42,7 @@ test('empty cart has no redundant header return and quick-entry presentation is 
   const cart = await read('pages/ClientCartPage.jsx');
   assert.match(cart, /items.length > 0 && <div[^\n]+<CompactBackLink/);
   assert.match(cart, /Explorar catálogo/);
-  assert.match(cart, /onClick=\{clearProducts\}><Trash2 size=\{16\} aria-hidden="true" \/>Limpiar carrito/);
+  assert.match(cart, /onClick=\{clearProducts\} aria-label="Limpiar carrito" title="Limpiar carrito"><Trash2 size=\{18\} aria-hidden="true" \/><span>Limpiar carrito<\/span>/);
   const navbar = await read('components/ClientNavbar.jsx');
   assert.doesNotMatch(navbar, /Mis compras|>Pedidos</);
   assert.match(await read('pages/GuestDeviceOrdersPage.jsx'), /Mis pedidos en este dispositivo/);

@@ -231,12 +231,12 @@ export default function GuestOrderTrackingPage() {
                 )}
                 desktop={(
               <div className="w-full max-w-full overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="fyf-data-table w-full text-sm">
                   <thead><tr><th>Producto</th><th className="text-right">Cantidad</th><th className="text-right">Precio unitario</th><th className="text-right">Subtotal</th></tr></thead>
                   <tbody>
                     {(order.items || []).map((item) => (
                       <tr key={`${item.productId}-${item.productName}`}>
-                        <td>{item.productName}<OrderItemPromotion item={item} compact /></td>
+                        <td className="table-description-cell">{item.productName}<OrderItemPromotion item={item} compact /></td>
                         <td className="text-right font-mono">{item.quantity}</td>
                         <td className="text-right font-mono">{formatClp(item.unitPrice)}</td>
                         <td className="text-right font-mono font-bold">{formatClp(item.subtotal)}</td>

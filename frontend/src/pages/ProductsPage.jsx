@@ -2016,13 +2016,13 @@ export default function ProductsPage() {
             )}
             desktop={(
           <div className={tableScrollClass}>
-            <table>
+            <table className="fyf-data-table">
             <thead>
               <tr>
                 <th>Fecha</th>
                 <th>Producto</th>
                 <th>Tipo</th>
-                <th>Cantidad</th>
+                <th className="text-center">Cantidad</th>
                 <th>Usuario</th>
                 <th>Motivo</th>
               </tr>
@@ -2031,19 +2031,19 @@ export default function ProductsPage() {
               {movementsPagination.paginatedItems.map((movement) => (
                 <tr key={movement.id}>
                   <td className={dateCellClass}>{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</td>
-                  <td>{movement.productName}<HistoricalIdentityNote capture={movement.historicalIdentity}/></td>
+                  <td className="table-description-cell">{movement.productName}<HistoricalIdentityNote capture={movement.historicalIdentity}/></td>
                   <td>
                     <span className={badgeClass(getMovementTone(movement))}>
                       {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
                     </span>
                   </td>
-                  <td className={numericCellClass}>{movement.quantity}</td>
+                  <td className={`${numericCellClass} text-center`}>{movement.quantity}</td>
                   <td>
                     {movement.userNames || movement.userSurnames
                       ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim()
                       : "Sistema"}
                   </td>
-                  <td>{movement.reason || "Sin motivo"}</td>
+                  <td className="table-description-cell">{movement.reason || "Sin motivo"}</td>
                 </tr>
               ))}
               {filteredMovements.length === 0 && (

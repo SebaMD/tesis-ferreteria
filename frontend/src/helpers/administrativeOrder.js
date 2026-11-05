@@ -85,8 +85,8 @@ export function printAdministrativeOrder(model) {
       dl{display:grid;grid-template-columns:1fr 1fr;gap:6pt 14pt;margin:0}dl>div{break-inside:avoid}
       dt{font-size:8pt;color:#555}dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
       table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt}thead{display:table-header-group}
-      th,td{border-bottom:1px solid #ccc;padding:6pt 4pt;text-align:right;vertical-align:top;overflow-wrap:anywhere}
-      th{background:#f1f3f5}th:first-child,td:first-child{width:40%;text-align:left}tr{break-inside:avoid}
+      th,td{border-bottom:1px solid #ccc;padding:6pt 4pt;text-align:center;vertical-align:top;overflow-wrap:anywhere}
+      th{background:#f1f3f5}th:first-child,td:first-child{width:40%}tr{break-inside:avoid}
       .promotion{display:block;font-size:8pt;color:#555;margin-top:3pt}.totals{grid-template-columns:repeat(3,1fr);font-weight:bold}`;
     // Construir solo campos autorizados con textContent, nunca interpolar datos en HTML.
     const node = (tag, text, className) => {

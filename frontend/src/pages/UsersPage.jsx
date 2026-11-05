@@ -800,7 +800,7 @@ export default function UsersPage() {
           )}
           desktop={(
         <div className={tableScrollClass}>
-          <table className="min-w-315">
+          <table className="fyf-data-table min-w-315">
             <thead>
               <tr>
                 <th>ID</th>
@@ -832,7 +832,7 @@ export default function UsersPage() {
                   </td>
                   <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
                   <td className="min-w-44 whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="table-row-actions flex items-center gap-1.5">
                       <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`} type="button" onClick={() => startEditing(user)}>
                         <Pencil size={17} />
                         Editar

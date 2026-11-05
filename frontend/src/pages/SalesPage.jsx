@@ -963,7 +963,7 @@ export default function SalesPage() {
       )}
       {canReviewCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && (
         <button
-          className={`${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-return-action border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
           type="button"
           onClick={() => openReviewModal(sale)}
           disabled={submitting}
@@ -973,7 +973,7 @@ export default function SalesPage() {
       )}
       {canCancel && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && (
         <button
-          className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
+          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-return-action border-rust-500 text-rust-600`}
           type="button"
           onClick={() => openDirectReturnModal(sale)}
           disabled={submitting}
@@ -1346,7 +1346,7 @@ export default function SalesPage() {
                 }}
                 desktop={(
               <div className={tableScrollClass}>
-                <table className="min-w-205">
+                <table className="fyf-data-table min-w-205">
                   <thead>
                     <tr>
                       <th aria-label="Seleccionar producto" />
@@ -1380,7 +1380,7 @@ export default function SalesPage() {
                               aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`}
                             />
                           </td>
-                          <td>
+                          <td className="table-description-cell">
                             <div className="grid gap-0.5">
                               <strong className="text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                               <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
@@ -1571,7 +1571,7 @@ export default function SalesPage() {
               )}
               desktop={(
             <div className={tableScrollClass}>
-              <table>
+              <table className="fyf-data-table">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -1587,7 +1587,7 @@ export default function SalesPage() {
                   {(requestToReview?.details || []).map((detail) => (
                     <tr key={`${requestToReview.id}-${detail.productId}`}>
                       <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                      <td>{detail.productName || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
+                      <td className="table-description-cell">{detail.productName || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                       <td className={numericCellClass}>{detail.soldQuantity}</td>
                       <td className={numericCellClass}>{detail.returnedQuantity}</td>
                       <td className={numericCellClass}>{detail.requestedQuantity}</td>
@@ -1728,7 +1728,7 @@ export default function SalesPage() {
                   )}
                   desktop={(
                 <div className={tableScrollClass}>
-                  <table>
+                  <table className="fyf-data-table">
                     <thead>
                       <tr>
                         <th>ID</th>
@@ -1744,7 +1744,7 @@ export default function SalesPage() {
                       {getSaleDetails(saleDetail).map((detail) => (
                         <tr key={`${detail.saleId}-${detail.productId}`}>
                           <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                          <td>{detail.productName || detail.name || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
+                          <td className="table-description-cell">{detail.productName || detail.name || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                           <td className={numericCellClass}>{detail.quantity}</td>
                           <td className={numericCellClass}>{detail.returnedQuantity || 0}</td>
                           <td className={numericCellClass}>{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</td>
@@ -2230,7 +2230,7 @@ export default function SalesPage() {
               )}
               desktop={(
             <div className={tableScrollClass}>
-              <table>
+              <table className="fyf-data-table">
                 <thead>
                   <tr>
                     <th>Folio</th>
@@ -2269,7 +2269,7 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className="text-left">
-                        <div className="flex flex-wrap items-center gap-1.5">{saleActionsFor(sale)}</div>
+                        <div className="table-row-actions flex flex-wrap items-center gap-1.5">{saleActionsFor(sale)}</div>
                       </td>
                     </tr>
                   ))}

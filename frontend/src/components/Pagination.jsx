@@ -30,7 +30,7 @@ function getCompactVisiblePages(page, totalPages) {
   return [1, "ellipsis-start", page, "ellipsis-end", totalPages];
 }
 
-function PageItems({ page, pageItems, onPageChange, compact = false }) {
+function PageItems({ page, pageItems, onPageChange, compact = false, disabled = false }) {
   return pageItems.map((pageItem) => {
     if (typeof pageItem === "string") {
       return (
@@ -54,6 +54,7 @@ function PageItems({ page, pageItems, onPageChange, compact = false }) {
         type="button"
         key={pageItem}
         onClick={() => onPageChange(pageItem)}
+        disabled={disabled}
         aria-current={pageItem === page ? "page" : undefined}
         aria-label={`Ir a la página ${pageItem}`}
       >
@@ -63,35 +64,35 @@ function PageItems({ page, pageItems, onPageChange, compact = false }) {
   });
 }
 
-export default function Pagination({ page, pageSize, totalItems, totalPages, onPageChange }) {
-  if (totalItems <= pageSize) return null;
+export default function Pagination({ page, pageSize, totalItems, totalPages, onPageChange, disabled = false, alwaysVisible = false, ariaLabel = "Paginación" }) {
+  if (!alwaysVisible && (totalPages <= 1 || (totalItems !== undefined && totalItems <= pageSize))) return null;
 
   const visiblePages = getVisiblePages(page, totalPages);
   const compactVisiblePages = getCompactVisiblePages(page, totalPages);
 
   return (
-    <nav className="flex min-h-12.25 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto border-t border-slate-200 px-4 py-2 max-[480px]:gap-0.5 max-[480px]:px-2" aria-label="Paginación">
+    <nav className="flex min-h-12.25 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto border-t border-slate-200 px-4 py-2 max-[480px]:gap-0.5 max-[480px]:px-2" aria-label={ariaLabel}>
       <button
         className="shrink-0 min-h-8 border-slate-300 bg-white px-2.75 text-xs text-ink-700 hover:border-rust-500 hover:bg-rust-50 hover:text-rust-600 max-[480px]:min-h-7 max-[480px]:px-2 max-[480px]:text-[11px]"
         type="button"
         onClick={() => onPageChange(page - 1)}
-        disabled={page === 1}
+        disabled={disabled || page === 1}
       >
         Anterior
       </button>
 
       <span className="contents max-[480px]:hidden">
-        <PageItems page={page} pageItems={visiblePages} onPageChange={onPageChange} />
+        <PageItems page={page} pageItems={visiblePages} onPageChange={onPageChange} disabled={disabled} />
       </span>
       <span className="hidden max-[480px]:contents">
-        <PageItems page={page} pageItems={compactVisiblePages} onPageChange={onPageChange} compact />
+        <PageItems page={page} pageItems={compactVisiblePages} onPageChange={onPageChange} compact disabled={disabled} />
       </span>
 
       <button
         className="shrink-0 min-h-8 border-slate-300 bg-white px-2.75 text-xs text-ink-700 hover:border-rust-500 hover:bg-rust-50 hover:text-rust-600 max-[480px]:min-h-7 max-[480px]:px-2 max-[480px]:text-[11px]"
         type="button"
         onClick={() => onPageChange(page + 1)}
-        disabled={page === totalPages}
+        disabled={disabled || page === totalPages}
       >
         Siguiente
       </button>

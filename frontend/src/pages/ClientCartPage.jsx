@@ -79,13 +79,13 @@ export default function ClientCartPage() {
   return (
     <main className="mx-auto grid w-full max-w-280 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <LoadingOverlay active={loading} />
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1.5">
+      <header className="cart-page-header grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1.5">
         <h1 className="m-0 flex items-center gap-2 text-2xl font-bold text-ink-950 max-[620px]:text-xl"><ShoppingCart className="shrink-0" size={24} /> Carrito</h1>
-        {items.length > 0 && <div className="col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2"><CompactBackLink {...back} />
-          <button className="col-start-2 row-start-1 row-span-2 self-end border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:row-span-1 max-[620px]:self-center max-[620px]:px-3 max-[620px]:text-xs" type="button" onClick={clearProducts}><Trash2 size={16} aria-hidden="true" />Limpiar carrito</button>
+        {items.length > 0 && <div className="cart-header-actions col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2"><CompactBackLink {...back} />
+          <button className="cart-clear-action border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={clearProducts} aria-label="Limpiar carrito" title="Limpiar carrito"><Trash2 size={18} aria-hidden="true" /><span>Limpiar carrito</span></button>
         </div>}
         <p className="col-start-1 row-start-2 mt-0 mb-0 text-sm text-slate-500 max-[620px]:col-span-2">Revisa tus productos antes de reservar stock e iniciar el pago.</p>
-      </div>
+      </header>
 
       {items.length === 0 ? (
         <section className="grid min-h-70 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">

@@ -2,14 +2,14 @@ import { useId } from "react";
 import { validatePriceRange } from "../helpers/catalogFilters.js";
 import AppSelect from "./AppSelect.jsx";
 
-export default function CatalogFilters({ filters, onChange, onClear, brands }) {
+export default function CatalogFilters({ filters, onChange, onClear, onApply, brands }) {
   const errorId = useId();
   const range = validatePriceRange(filters.minPrice, filters.maxPrice);
   const change = (field) => (event) => onChange({ ...filters, [field]: event.target.value });
   const select = (field) => (value) => onChange({ ...filters, [field]: value });
   return (
-    <div className="grid min-w-0 gap-4 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="m-0 text-base font-bold">Filtros adicionales</h2><button type="button" className="min-h-10 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100" onClick={onClear}>Limpiar filtros</button></div>
+    <form className="grid min-w-0 gap-4 text-sm" onSubmit={event => { event.preventDefault(); if (range.valid) onApply(); }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 min-[1024px]:grid min-[1024px]:grid-cols-1"><h2 className="m-0 text-base font-bold">Filtros adicionales</h2><button type="button" className="min-h-10 border-slate-300 bg-white px-3 text-xs text-ink-700 hover:bg-slate-100 min-[1024px]:w-full min-[1024px]:justify-center" onClick={onClear}>Limpiar filtros</button></div>
       <fieldset className="m-0 grid min-w-0 grid-cols-2 gap-2 border-0 p-0"><legend className="mb-1.5">Precio</legend>
         <label className="grid min-w-0 gap-1 text-xs">Mínimo<input type="text" inputMode="decimal" value={filters.minPrice} onChange={change("minPrice")} placeholder="$ desde" aria-invalid={!range.valid} aria-describedby={!range.valid ? errorId : undefined} /></label>
         <label className="grid min-w-0 gap-1 text-xs">Máximo<input type="text" inputMode="decimal" value={filters.maxPrice} onChange={change("maxPrice")} placeholder="$ hasta" aria-invalid={!range.valid} aria-describedby={!range.valid ? errorId : undefined} /></label>
@@ -29,6 +29,7 @@ export default function CatalogFilters({ filters, onChange, onClear, brands }) {
           <span className="min-w-0">Promociones 2x1</span>
         </label>
       </fieldset>
-    </div>
+      <button type="submit" className="product-positive-action w-full">Aplicar filtros</button>
+    </form>
   );
 }

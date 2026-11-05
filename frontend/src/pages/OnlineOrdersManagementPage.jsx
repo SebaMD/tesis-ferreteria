@@ -590,7 +590,7 @@ export default function OnlineOrdersManagementPage() {
           }}
           desktop={(
         <div className={tableScrollClass}>
-          <table>
+          <table className="fyf-data-table">
             <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acción</th></tr></thead>
             <tbody>
               {ordersPagination.paginatedItems.map((order) => {
@@ -749,9 +749,9 @@ export default function OnlineOrdersManagementPage() {
                 )}
                 desktop={(
               <div className={tableScrollClass}>
-                <table>
+                <table className="fyf-data-table">
                   <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
-                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="font-semibold text-ink-950">{item.productName}<OrderItemPromotion item={item} compact /></td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
+                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="table-description-cell font-semibold text-ink-950">{item.productName}<OrderItemPromotion item={item} compact /></td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
                 </table>
               </div>
                 )}

@@ -93,7 +93,8 @@ test("mobile table counts, composable quick filters and compact commerce layouts
   assert.doesNotMatch(sales, /disabled=\{salesFilter === "cancelled"\} aria-pressed=\{salesFilter === "partial"\}>\{salesFilter/);
   assert.match(orderCard, /max-\[680px\]:size-20/);
   assert.match(orderCard, /max-\[430px\]:size-\[68px\]/);
-  assert.match(cart, /col-start-2 row-start-1 row-span-2/);
+  assert.match(cart, /cart-header-actions col-start-2 row-start-1/);
+  assert.match(cart, /aria-label="Limpiar carrito"/);
 });
 
 test("product detail keeps its quantity and purchase actions in one aligned column", async () => {

@@ -61,8 +61,10 @@ export default function ProductDetailPage() {
             <span className="text-xs font-extrabold text-rust-600">{product.categoryName}</span>
             <div className="flex items-start justify-between gap-3"><h1 className="mt-2 mb-2 min-w-0 text-3xl font-bold text-ink-950 max-[620px]:text-2xl">{product.name}</h1><FavoriteButton product={product} /></div>
             {product.brand && <p className="text-sm text-slate-500">Marca: {product.brand}</p>}
-            {product.familyId && <Link to={`/catalog/families/${product.familyId}?variant=${product.id}`} state={location.state} className="text-sm font-bold">Ver otras opciones de esta familia</Link>}
-            <ProductPromotionPrice product={product} size="detail" />
+            <div className="grid min-w-0 justify-items-start gap-3">
+              <ProductPromotionPrice product={product} size="detail" />
+              {product.familyId && <Link to={`/catalog/families/${product.familyId}?variant=${product.id}`} state={location.state} className="family-options-link inline-flex min-h-11 max-w-full items-center rounded-[5px] border border-slate-300 px-4 py-2 text-sm font-bold text-ink-700 no-underline hover:border-rust-500 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-500">Ver otras opciones de esta familia</Link>}
+            </div>
           </div>
           <p className="m-0 leading-7 text-slate-600">{product.description || "Este producto no tiene una descripción disponible."}</p>
           <div className="product-availability-panel grid gap-2 rounded-[5px] border border-slate-200 bg-slate-50 p-4 text-sm">

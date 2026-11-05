@@ -9,7 +9,7 @@ test('audit history has ADMIN-only direct route and shared navigation, separate 
 });
 test('audit UI has server filters/cursors, persistent errors, empty/loading states and accessible read-only details',async()=>{
  const ui=await readFile(new URL('src/components/ProductAuditHistory.jsx',root),'utf8');
- for(const text of ['useLocation','useNavigate','auditQueryFromSearch','auditBack','AbortController','controller.abort()','nextCursor','Desde (UTC)','Hasta (UTC, inclusive)','role="alert"','role="status"','No hay cambios registrados','<details','<summary','No registrado','event.reason','Anterior','Nuevo'])assert.ok(ui.includes(text),text);
+ for(const text of ['useLocation','useNavigate','auditQueryFromSearch','auditBack','AbortController','controller.abort()','nextCursor','>Desde<input','>Hasta<input','días completos en UTC','role="alert"','role="status"','No hay cambios registrados','<details','<summary','No registrado','event.reason','<Pagination','Nuevo'])assert.ok(ui.includes(text),text);
  assert.doesNotMatch(ui,/AppModal|JSON.stringify|Ver detalles técnicos|Alcance de la información registrada/);
  assert.ok(!ui.includes('dangerouslySetInnerHTML'));assert.ok(!ui.includes('api.post'));assert.ok(!ui.includes('api.delete'));
  const service=await readFile(new URL('src/services/productAudits.service.js',root),'utf8');assert.match(service,/api.get\("\/product-audits", \{ params, signal \}\)/);

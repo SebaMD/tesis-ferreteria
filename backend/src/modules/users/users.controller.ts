@@ -18,6 +18,7 @@ import {
   updateClientProfileService,
 } from "./users.service.js";
 import { validateCashierScheduleBody, validateClientDeactivationBody, validateClientProfileBody, validateCreateUserBody, validateEditUserBody } from "./users.validation.js";
+import { UserSecurityError } from "./userSecurity.repository.js";
 
 function parseId(id: unknown) {
   if (typeof id !== "string") return null;
@@ -195,6 +196,7 @@ export async function editUser(req: AuthenticatedRequest, res: Response) {
     const updatedUser = await editUserService(userId, validation.value, req.user?.id);
     return handleSuccess(res, 200, "Usuario actualizado exitosamente", updatedUser);
   } catch (error) {
+    if (error instanceof UserSecurityError) return handleErrorClient(res, error.statusCode, error.message);
     const message = getErrorMessage(error);
 
     if (message === "Usuario no encontrado") {
@@ -234,19 +236,16 @@ export async function updateCashierSchedule(req: Request, res: Response) {
     }
 
     const updatedUser = await updateCashierScheduleService(userId, validation.value);
-    return handleSuccess(res, 200, "Horario de cajero actualizado exitosamente", updatedUser);
+    return handleSuccess(res, 200, "Horario de trabajador actualizado exitosamente", updatedUser);
   } catch (error) {
+    if (error instanceof UserSecurityError) return handleErrorClient(res, error.statusCode, error.message);
     const errorMessage = getErrorMessage(error);
 
     if (errorMessage === "Usuario no encontrado") {
       return handleErrorClient(res, 404, errorMessage);
     }
 
-    if (errorMessage === "El horario solo puede configurarse para usuarios cajeros") {
-      return handleErrorClient(res, 400, errorMessage);
-    }
-
-    return handleErrorServer(res, 500, "Error al actualizar horario de cajero", errorMessage);
+    return handleErrorServer(res, 500, "Error al actualizar horario del trabajador", errorMessage);
   }
 }
 
@@ -266,13 +265,14 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response) {
 
     return handleSuccess(res, 200, "Usuario eliminado exitosamente");
   } catch (error) {
+    if (error instanceof UserSecurityError) return handleErrorClient(res, error.statusCode, error.message);
     const message = getErrorMessage(error);
 
     if (databaseError(error)?.code === "23503") {
       return handleErrorClient(
         res,
         409,
-        "No se puede eliminar este usuario porque tiene ventas, movimientos de inventario o solicitudes de cancelación asociadas",
+        "No se puede eliminar este usuario porque conserva referencias protegidas en el historial comercial o administrativo. Esto no significa necesariamente que tenga tareas pendientes. Puedes evaluar su desactivación sin borrar el historial.",
       );
     }
 

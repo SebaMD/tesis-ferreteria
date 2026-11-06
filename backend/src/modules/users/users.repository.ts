@@ -39,8 +39,8 @@ export async function findUsers() {
         .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id));
 }
 
-export async function findRoleById(id: number) {
-    const [role] = await db
+export async function findRoleById(id: number, executor: typeof db | DbTransaction = db) {
+    const [role] = await executor
         .select({
         id: rolesTable.id,
         name: rolesTable.name,
@@ -62,8 +62,8 @@ export async function findRoles() {
         .from(rolesTable);
 }
 
-export async function findUserById(id: number) {
-    const [user] = await db
+export async function findUserById(id: number, executor: typeof db | DbTransaction = db) {
+    const [user] = await executor
         .select(publicUserColumns)
         .from(usersTable)
         .innerJoin(rolesTable, eq(usersTable.roleId, rolesTable.id))
@@ -73,12 +73,12 @@ export async function findUserById(id: number) {
     return user;
 }
 
-export async function findOtherUserByRut(rut: string, excludedUserId?: number) {
+export async function findOtherUserByRut(rut: string, excludedUserId?: number, executor: typeof db | DbTransaction = db) {
     const normalizedCondition = eq(
         sql<string>`regexp_replace(upper(${usersTable.rut}), '[.\\s-]', '', 'g')`,
         compactRut(rut),
     );
-    const [user] = await db
+    const [user] = await executor
         .select({ id: usersTable.id })
         .from(usersTable)
         .where(excludedUserId ? and(normalizedCondition, ne(usersTable.id, excludedUserId)) : normalizedCondition)
@@ -97,8 +97,8 @@ export async function createUser(data: NewUser) {
     return findUserById(createdUser.id);
 }
 
-export async function updateUserById(id: number, data: Partial<NewUser>) {
-    const [updatedUser] = await db
+export async function updateUserById(id: number, data: Partial<NewUser>, executor: typeof db | DbTransaction = db) {
+    const [updatedUser] = await executor
         .update(usersTable)
         .set({
         ...data,
@@ -111,14 +111,15 @@ export async function updateUserById(id: number, data: Partial<NewUser>) {
 
     if (!updatedUser) return null;
 
-    return findUserById(updatedUser.id);
+    return findUserById(updatedUser.id, executor);
 }
 
 export async function updateUserByIdAndInvalidateSessions(
     id: number,
     data: Partial<NewUser>,
+    executor: typeof db | DbTransaction = db,
 ) {
-    const [updatedUser] = await db
+    const [updatedUser] = await executor
         .update(usersTable)
         .set({
         ...data,
@@ -129,7 +130,7 @@ export async function updateUserByIdAndInvalidateSessions(
         .returning({ id: usersTable.id });
 
     if (!updatedUser) return null;
-    return findUserById(updatedUser.id);
+    return findUserById(updatedUser.id, executor);
 }
 
 export async function findClientForDeactivation(tx: DbTransaction, userId: number) {
@@ -210,12 +211,13 @@ export async function invalidateClientTemporaryCredentials(
 export async function updateUserWorkScheduleById(
     id: number,
     data: Pick<NewUser, "workShift" | "shiftStartTime" | "shiftEndTime" | "shiftNote">,
+    executor: typeof db | DbTransaction = db,
 ) {
-    return updateUserById(id, data);
+    return updateUserById(id, data, executor);
 }
 
-export async function countActiveAdminUsers() {
-    const admins = await db
+export async function countActiveAdminUsers(executor: typeof db | DbTransaction = db) {
+    const admins = await executor
         .select({
         id: usersTable.id,
         })
@@ -226,8 +228,8 @@ export async function countActiveAdminUsers() {
     return admins.length;
 }
 
-export async function deleteUserById(id: number) {
-    const [deletedUser] = await db
+export async function deleteUserById(id: number, executor: typeof db | DbTransaction = db) {
+    const [deletedUser] = await executor
         .delete(usersTable)
         .where(eq(usersTable.id, id))
         .returning({

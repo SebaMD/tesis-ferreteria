@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Edit3,Truck} from 'lucide-react';
+import DeliveryAnnouncementText from './DeliveryAnnouncementText.jsx';
 import useCustomerNotice from '../hooks/useCustomerNotice.js';
 import {getApiError} from '../api/httpClient.js';
 import {saveDeliveryNoticeImageRequest} from '../services/customerNotice.service.js';
@@ -30,8 +31,7 @@ export default function DeliveryNoticeImage({announcement,onSaved}){
      <span className="grid size-10 shrink-0 place-items-center rounded-md bg-rust-500 text-white"><Truck size={19} aria-hidden="true"/></span>
      <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-ink-950">Información de despacho</strong><span className="rounded-full bg-rust-50 px-2 py-1 text-[11px] font-bold text-rust-600">Automático</span></div>
-      <p className="mt-1 mb-0 break-words text-xs font-bold text-ink-700">{content.title}</p>
-      <p className="mt-1 mb-0 break-words whitespace-pre-wrap text-xs leading-5 text-slate-600">{content.message}</p>
+      <DeliveryAnnouncementText announcement={content}/>
      </div>
     </div>
     <button type="button" title="Editar" aria-label="Editar imagen del aviso automático de despacho" aria-expanded={editing} onClick={()=>setEditing(true)} className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0"><Edit3 size={16}/><span className="max-[620px]:sr-only">Editar</span></button>

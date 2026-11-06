@@ -11,7 +11,17 @@ export async function findActiveUserForPasswordReset(email: string) {
 }
 
 export async function lockPasswordResetUser(tx: DbTransaction, userId: number) {
+  // Shared lock order with administrative edits: user first, reset tokens second.
+  const [user] = await tx.select({ id: usersTable.id, correo: usersTable.correo, status: usersTable.status })
+    .from(usersTable).where(eq(usersTable.id, userId)).for("update");
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`password-reset:${userId}`}, 0))`);
+  return user ?? null;
+}
+
+export async function findPasswordResetOwner(tx: DbTransaction, hash: string) {
+  const [token] = await tx.select({ userId: passwordResetTokensTable.userId }).from(passwordResetTokensTable)
+    .where(eq(passwordResetTokensTable.tokenHash, hash)).limit(1);
+  return token ?? null;
 }
 
 export async function countRecentPasswordResetRequests(

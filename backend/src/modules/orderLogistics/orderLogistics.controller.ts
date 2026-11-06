@@ -2,6 +2,7 @@ import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { ImageFileError } from "../../utils/imageFiles.js";
+import { UserSecurityError } from "../users/userSecurity.repository.js";
 import {
   getDeliveryProofFileService,
   getAdministrativeOrderSummaryService,
@@ -40,7 +41,7 @@ function routeTask(req: AuthenticatedRequest) {
 }
 
 function handleControllerError(res: Response, error: unknown, fallback: string) {
-  if (error instanceof OrderLogisticsError || error instanceof ImageFileError) {
+  if (error instanceof OrderLogisticsError || error instanceof ImageFileError || error instanceof UserSecurityError) {
     return handleErrorClient(res, error.statusCode, error.message);
   }
   return handleErrorServer(

@@ -33,11 +33,22 @@ test("local setting checkboxes are compact native controls with clickable enclos
   assert.match(settings, /<span>Habilitar despacho gratuito por monto<\/span><\/label>/);
   assert.match(settings, /\["ADMIN", "MANAGER"\]\.includes\(role\)/);
   assert.match(settings, /fieldset disabled=\{loading\|\|Boolean\(error\)\}/);
-  assert.match(settings, /if \(!review\)\{setReview\(true\);return;\}/);
+  assert.match(settings, /if \(!review\)\{const \{data\}=await api.post\('\/delivery-settings\/preview',payload\(\),\{timeout:15000\}\);setPreview\(data.data\);setReview\(true\);return;\}/);
   assert.match(settings, /expectedRevisionId:current\?\.id\?\?null/);
   assert.match(settings, /type="button" disabled=\{loading\} onClick=\{\(\)=>setOpen\(false\)\}>Cancelar/);
   assert.match(settings, /form.freeShippingFrom!==null&&<label>Umbral/);
   const css = await read("styles/styles.css");
   assert.match(css, /\.delivery-settings-checkbox \{[^}]*display: flex;[^}]*align-items: center;[^}]*justify-content: flex-start;/s);
   assert.match(css, /\.delivery-settings-checkbox > input\[type="checkbox"\] \{[^}]*width: 16px;[^}]*height: 16px;[^}]*min-height: 16px;/s);
+});
+
+test("delivery review shares the automatic notice renderer and separates administrative information", async () => {
+  const settings = await read("components/DeliverySettingsManager.jsx");
+  const notice = await read("components/DeliveryNoticeImage.jsx");
+  assert.match(settings, /<DeliveryAnnouncementText announcement=\{preview\}/);
+  assert.match(notice, /<DeliveryAnnouncementText announcement=\{content\}/);
+  assert.match(settings, /aria-label="Vista previa del aviso al cliente"/);
+  assert.match(settings, /aria-label="Información de la revisión"/);
+  assert.match(settings, /setReview\(false\);setPreview\(null\)/);
+  assert.doesNotMatch(settings, /Revisa:|<textarea/);
 });

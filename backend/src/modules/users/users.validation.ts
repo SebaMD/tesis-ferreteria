@@ -273,6 +273,12 @@ export function validateCashierScheduleBody(body: unknown): ValidationResult<Cas
     return { success: false, error: "La hora de inicio debe ser menor a la hora de termino" };
   }
 
+  const bounds = input.workShift === "MORNING" ? ["08:00", "13:30"]
+    : input.workShift === "AFTERNOON" ? ["14:00", "20:00"] : ["08:00", "20:00"];
+  if ([input.shiftStartTime, input.shiftEndTime].some(time => time < bounds[0]! || time > bounds[1]! || !["00", "30"].includes(time.slice(3)))) {
+    return { success: false, error: "Selecciona horas en intervalos de 30 minutos dentro del turno elegido" };
+  }
+
   let shiftNote: string | null = null;
   if (input.shiftNote !== undefined && input.shiftNote !== null && input.shiftNote !== "") {
     if (typeof input.shiftNote !== "string") {

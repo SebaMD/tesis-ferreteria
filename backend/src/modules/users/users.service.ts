@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { db } from "../../db/index.js";
-import type { NewUser } from "../../db/schema/index.js";
+import { usersTable, type NewUser } from "../../db/schema/index.js";
+import { eq } from "drizzle-orm";
 import {
   countActiveAdminUsers,
   createUser,
@@ -20,6 +21,7 @@ import {
 } from "./users.repository.js";
 import type { CashierScheduleBody, ClientDeactivationBody, ClientProfileBody, CreateUserBody, EditUserBody } from "./users.validation.js";
 import { createSessionForUserId } from "../auth/auth.service.js";
+import { assertNoExclusiveLogistics, invalidateUserPasswordResets, lockAdministrativeUsers, UserSecurityError } from "./userSecurity.repository.js";
 
 export async function getUsersService() {
   return findUsers();
@@ -68,65 +70,69 @@ export async function editUserService(id: number, data: EditUserBody, authentica
     throw new Error("Usuario autenticado no valido");
   }
 
-  const user = await findUserById(id);
+  return db.transaction(async tx => {
+    await lockAdministrativeUsers(tx, authenticatedUserId, id);
+    const user = await findUserById(id, tx);
+    if (!user) throw new Error("Usuario no encontrado");
+    const userData: Partial<NewUser> = { ...data };
+    const nextRole = userData.roleId ? await findRoleById(userData.roleId, tx) : null;
 
-  if (!user) {
-    throw new Error("Usuario no encontrado");
-  }
+    if (userData.roleId && !nextRole) {
+      throw new Error("Debe seleccionar un rol valido");
+    }
 
-  const userData: Partial<NewUser> = { ...data };
-  const nextRole = userData.roleId ? await findRoleById(userData.roleId) : null;
+    const isEditingOwnAdmin = id === authenticatedUserId && user.roleName === "ADMIN";
 
-  if (userData.roleId && !nextRole) {
-    throw new Error("Debe seleccionar un rol valido");
-  }
+    if (isEditingOwnAdmin && nextRole && nextRole.name !== "ADMIN") {
+      throw new Error("No puedes cambiar tu propio rol de administrador");
+    }
 
-  const isEditingOwnAdmin = id === authenticatedUserId && user.roleName === "ADMIN";
+    if (isEditingOwnAdmin && userData.status !== undefined && userData.status !== user.status) {
+      throw new Error("No puedes cambiar el estado de tu propia cuenta de administrador");
+    }
 
-  if (isEditingOwnAdmin && nextRole && nextRole.name !== "ADMIN") {
-    throw new Error("No puedes cambiar tu propio rol de administrador");
-  }
+    const nextStatus = userData.status ?? user.status;
+    if (user.roleName !== "ADMIN" && nextRole?.name === "ADMIN" && nextStatus === "INACTIVE") {
+      throw new Error("No se puede cambiar el estado de un usuario administrador");
+    }
 
-  if (isEditingOwnAdmin && userData.status !== undefined && userData.status !== user.status) {
-    throw new Error("No puedes cambiar el estado de tu propia cuenta de administrador");
-  }
+    if (userData.password) {
+      userData.password = await bcrypt.hash(userData.password, 10);
+    }
 
-  const nextStatus = userData.status ?? user.status;
-  if (user.roleName !== "ADMIN" && nextRole?.name === "ADMIN" && nextStatus === "INACTIVE") {
-    throw new Error("No se puede cambiar el estado de un usuario administrador");
-  }
+    const targetRole = nextRole?.name ?? user.roleName;
+    if (user.roleName === "ADMIN" && user.status === "ACTIVE" && (targetRole !== "ADMIN" || nextStatus !== "ACTIVE") && await countActiveAdminUsers(tx) <= 1) {
+      throw new UserSecurityError("No se puede dejar el sistema sin administradores activos");
+    }
+    if (user.roleName === "WAREHOUSE" && (targetRole !== "WAREHOUSE" || nextStatus !== "ACTIVE")) await assertNoExclusiveLogistics(tx, id);
+    const emailChanged = userData.correo !== undefined && userData.correo !== user.correo;
+    if (userData.rut !== undefined && userData.rut !== user.rut && await findOtherUserByRut(userData.rut, id, tx)) {
+      throw new Error("El RUT ya está registrado");
+    }
+    if (emailChanged) {
+      Object.assign(userData, { emailVerifiedAt: targetRole === "ADMIN" ? new Date() : null });
+    }
 
-  if (userData.password) {
-    userData.password = await bcrypt.hash(userData.password, 10);
-  }
+    const roleChanged = userData.roleId !== undefined && userData.roleId !== user.roleId;
+    const statusChanged = userData.status !== undefined && userData.status !== user.status;
+    const passwordChanged = Boolean(userData.password);
+    const invalidateSessions = roleChanged || statusChanged || passwordChanged || emailChanged;
 
-  const targetRole = nextRole?.name ?? user.roleName;
-  const emailChanged = userData.correo !== undefined && userData.correo !== user.correo;
-  if (userData.rut !== undefined && userData.rut !== user.rut && await findOtherUserByRut(userData.rut, id)) {
-    throw new Error("El RUT ya está registrado");
-  }
-  if (emailChanged) {
-    Object.assign(userData, { emailVerifiedAt: targetRole === "ADMIN" ? new Date() : null });
-  }
+    if (userData.status !== undefined) {
+      userData.selfDeactivatedAt = null;
+    }
 
-  const roleChanged = userData.roleId !== undefined && userData.roleId !== user.roleId;
-  const statusChanged = userData.status !== undefined && userData.status !== user.status;
-  const passwordChanged = Boolean(userData.password);
-  const invalidateSessions = roleChanged || statusChanged || passwordChanged || emailChanged;
+    const updatedUser = invalidateSessions
+      ? await updateUserByIdAndInvalidateSessions(id, userData, tx)
+      : await updateUserById(id, userData, tx);
+    if (invalidateSessions) await invalidateUserPasswordResets(tx, id);
 
-  if (userData.status !== undefined) {
-    userData.selfDeactivatedAt = null;
-  }
+    if (!updatedUser) {
+      throw new Error("Usuario no encontrado");
+    }
 
-  const updatedUser = invalidateSessions
-    ? await updateUserByIdAndInvalidateSessions(id, userData)
-    : await updateUserById(id, userData);
-
-  if (!updatedUser) {
-    throw new Error("Usuario no encontrado");
-  }
-
-  return updatedUser;
+    return updatedUser;
+  });
 }
 
 export class ClientAccountError extends Error {
@@ -171,23 +177,26 @@ export async function updateClientProfileService(userId: number, data: ClientPro
 }
 
 export async function updateCashierScheduleService(id: number, data: CashierScheduleBody) {
-  const user = await findUserById(id);
+  return db.transaction(async tx => {
+    await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, id)).for("update");
+    const user = await findUserById(id, tx);
 
-  if (!user) {
-    throw new Error("Usuario no encontrado");
-  }
+    if (!user) {
+      throw new Error("Usuario no encontrado");
+    }
 
-  if (user.roleName !== "CASHIER") {
-    throw new Error("El horario solo puede configurarse para usuarios cajeros");
-  }
+    if (!["CASHIER", "WAREHOUSE"].includes(user.roleName)) {
+      throw new UserSecurityError("El horario solo puede configurarse para cajeros y bodegueros", 400);
+    }
 
-  const updatedUser = await updateUserWorkScheduleById(id, data);
+    const updatedUser = await updateUserWorkScheduleById(id, data, tx);
 
-  if (!updatedUser) {
-    throw new Error("Usuario no encontrado");
-  }
+    if (!updatedUser) {
+      throw new Error("Usuario no encontrado");
+    }
 
-  return updatedUser;
+    return updatedUser;
+  });
 }
 
 export async function deleteUserService(id: number, authenticatedUserId?: number) {
@@ -199,20 +208,24 @@ export async function deleteUserService(id: number, authenticatedUserId?: number
     throw new Error("No puedes eliminar tu propio usuario");
   }
 
-  const user = await findUserById(id);
+  return db.transaction(async tx => {
+    await lockAdministrativeUsers(tx, authenticatedUserId, id);
+    const user = await findUserById(id, tx);
 
-  if (!user) {
-    return false;
-  }
-
-  if (user.roleName === "ADMIN" && user.status === "ACTIVE") {
-    const activeAdminCount = await countActiveAdminUsers();
-
-    if (activeAdminCount <= 1) {
-      throw new Error("No se puede eliminar este administrador porque el sistema quedaria sin administradores activos");
+    if (!user) {
+      return false;
     }
-  }
 
-  const deletedUser = await deleteUserById(id);
-  return Boolean(deletedUser);
+    if (user.roleName === "ADMIN" && user.status === "ACTIVE") {
+      const activeAdminCount = await countActiveAdminUsers(tx);
+
+      if (activeAdminCount <= 1) {
+        throw new Error("No se puede eliminar este administrador porque el sistema quedaria sin administradores activos");
+      }
+    }
+
+    if (user.roleName === "WAREHOUSE") await assertNoExclusiveLogistics(tx, id);
+    const deletedUser = await deleteUserById(id, tx);
+    return Boolean(deletedUser);
+  });
 }

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
 import { deliveryPolicyRevisionsTable as revisions, deliverySettingsTable as settings, usersTable } from "../../db/schema/index.js";
-import { DeliveryPolicyError } from "./deliveryPricing.js";
+import { deliveryAnnouncement, DeliveryPolicyError } from "./deliveryPricing.js";
 
 export async function currentDeliveryPolicy(tx: DbTransaction) {
   // Shared across quoting/checkout; saving takes the exclusive counterpart.
@@ -41,6 +41,12 @@ export function validateDeliverySettings(body: unknown) {
     pickupEnabled: true, deliveryEnabled: input.deliveryEnabled as boolean,
     isDemo: input.isDemo as boolean, flatFee: amount("flatFee")!,
     minimumProductsTotal: null, freeShippingFrom: amount("freeShippingFrom", true),...(input.pricingMode==="LOCAL_FIXED"?{pricingMode:"LOCAL_FIXED"}: {}) };
+}
+
+export function previewDeliveryAnnouncement(body: unknown) {
+  const values = validateDeliverySettings(body);
+  if (values.pricingMode !== "LOCAL_FIXED") throw new DeliveryPolicyError("La vista previa requiere la configuración local", 400);
+  return deliveryAnnouncement(values);
 }
 
 export async function saveDeliverySettings(actorId: number, body: unknown) {

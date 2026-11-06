@@ -60,7 +60,7 @@ export function deliveryBenefit(_policy: DeliveryPolicy, _type: string, _product
 }
 
 // Explicit public projection: never serialize the administrative policy/actor.
-export function deliveryAnnouncement(policy: DeliveryPolicy | null) {
+export function deliveryAnnouncement(policy: Pick<DeliveryPolicy, "deliveryEnabled" | "pricingMode" | "flatFee" | "freeShippingFrom" | "conditionalFreeEnabled" | "conditionalFreeFrom"> | null) {
   if (!policy) return null;
   if (!policy.deliveryEnabled) return { kind: "SUSPENDED", title: "El despacho no está disponible por ahora", message: "Puedes elegir retiro en tienda.", isDemo: false };
   if(policy.pricingMode==="LOCAL_FIXED")return {kind:"LOCAL_FIXED",title:"Despacho local en Santa Juana",message:`Tarifa $${Number(policy.flatFee).toLocaleString("es-CL")}.${policy.freeShippingFrom===null?"":` Gratis si los productos, después de descuentos, superan $${Number(policy.freeShippingFrom).toLocaleString("es-CL")}.`} Retiro en tienda sin costo.`,isDemo:false};

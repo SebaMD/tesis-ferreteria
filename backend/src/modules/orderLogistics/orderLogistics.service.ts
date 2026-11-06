@@ -1,4 +1,5 @@
 import { db } from "../../db/index.js";
+import { lockActiveWarehouseUser } from "../users/userSecurity.repository.js";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import { normalizeName } from "../auth/auth.validation.js";
 import { isValidRut, normalizeRut } from "../../utils/rut.js";
@@ -308,6 +309,7 @@ export async function transitionLogisticsOrderService(
 
   try {
     const transitionResult = await db.transaction(async (tx) => {
+      await lockActiveWarehouseUser(tx, warehouseUserId);
       const task = await findLogisticsTaskForUpdate(tx, origin, taskId);
       if (!task) throw new OrderLogisticsError("Compra no encontrada", 404);
 

@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { build } from "vite";
+import { deliveryAnnouncement } from "../../backend/dist/modules/deliverySettings/deliveryPricing.js";
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.FYF_PLAYWRIGHT_MODULE || "playwright");
 const bundle = await build({ root: fileURLToPath(new URL("..", import.meta.url)), define: { "import.meta.env.VITE_API_URL": JSON.stringify("/api") }, build: { write: false, rollupOptions: { input: fileURLToPath(new URL("./fixtures/academic-ux-stage2.jsx", import.meta.url)) } } });
@@ -36,7 +37,8 @@ try {
       const endpoint = url.pathname;
       if (endpoint.startsWith("/api/")) {
         let data;
-        if (endpoint.endsWith('/delivery-settings')) {
+        if (endpoint.endsWith('/delivery-settings/preview')) data = deliveryAnnouncement(route.request().postDataJSON());
+        else if (endpoint.endsWith('/delivery-settings')) {
           if (route.request().method() === 'PUT') { const body = route.request().postDataJSON(); settingsWrites.push(body); policy = { ...policy, ...body, id: policy.id + 1 }; }
           data = policy;
         }

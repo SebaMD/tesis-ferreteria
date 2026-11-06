@@ -52,11 +52,11 @@ test('only opted-in descriptive cells and expanded audit details use left alignm
   assert.doesNotMatch(audit, /registros de esta página|Más recientes primero/);
 });
 
-test('sale secondary return actions have a common desktop width, while warehouse schedule remains unavailable', async () => {
+test('sale secondary return actions keep their width; cashier and warehouse schedules are informational', async () => {
   const sales = await read('pages/SalesPage.jsx');
   assert.match(sales, /sale-return-action[^`]*`\}[\s\S]*?openReviewModal\(sale\)/);
   assert.match(sales, /sale-return-action[^`]*`\}[\s\S]*?openDirectReturnModal\(sale\)/);
   const users = await read('pages/UsersPage.jsx');
-  assert.match(users, /user.roleName === "CASHIER" && \([\s\S]*?openScheduleForm\(user\)/);
-  assert.doesNotMatch(users, /\["CASHIER", "WAREHOUSE"\]\.includes\(user.roleName\)/);
+  assert.match(users, /\["CASHIER", "WAREHOUSE"\]\.includes\(user.roleName\) && \([\s\S]*?openScheduleForm\(user\)/);
+  assert.match(users, /No restringe el acceso ni interrumpe sus tareas/);
 });

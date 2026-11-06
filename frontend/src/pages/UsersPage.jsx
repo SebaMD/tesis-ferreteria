@@ -491,11 +491,11 @@ export default function UsersPage() {
         shiftEndTime: scheduleForm.shiftEndTime,
         shiftNote: scheduleForm.shiftNote.trim() || null,
       });
-      toast.success("Horario de cajero actualizado exitosamente");
+      toast.success("Horario de trabajador actualizado exitosamente");
       resetScheduleForm();
       await loadUsers();
     } catch (err) {
-      toast.error(getApiError(err, "No se pudo actualizar el horario del cajero"));
+      toast.error(getApiError(err, "No se pudo actualizar el horario del trabajador"));
     } finally {
       setSubmitting(false);
     }
@@ -694,8 +694,8 @@ export default function UsersPage() {
 
       <AppModal
         open={Boolean(scheduleUser)}
-        title={scheduleUser ? `Horario de ${scheduleUser.names} ${scheduleUser.surnames}` : "Horario de cajero"}
-        description="Esta configuración aplica solo a usuarios con rol Cajero."
+        title={scheduleUser ? `Horario de ${scheduleUser.names} ${scheduleUser.surnames}` : "Horario de trabajador"}
+        description="Horario informativo para Cajeros y Bodegueros. No restringe el acceso ni interrumpe sus tareas."
         onClose={closeScheduleForm}
       >
         <form className="grid gap-3.75" onSubmit={handleScheduleSubmit}>
@@ -704,7 +704,7 @@ export default function UsersPage() {
             <AppSelect
               value={scheduleForm.workShift}
               onChange={handleScheduleShiftChange}
-              ariaLabel="Turno del cajero"
+              ariaLabel="Turno del trabajador"
               options={WORK_SHIFT_OPTIONS}
             />
           </label>
@@ -731,7 +731,7 @@ export default function UsersPage() {
           <label>
             Observación
             <textarea
-              className="min-h-24 resize-y px-4 py-3 leading-[1.45] outline-none focus:border-rust-500 focus:ring-2 focus:ring-rust-100"
+              className="min-h-24 w-full resize-y rounded-[5px] border border-slate-300 bg-white px-4 py-3 leading-[1.45] text-ink-950 focus:border-rust-500 focus:ring-2 focus:ring-rust-100"
               rows="3"
               value={scheduleForm.shiftNote}
               onChange={(event) => setScheduleForm((current) => ({ ...current, shiftNote: event.target.value }))}
@@ -786,11 +786,11 @@ export default function UsersPage() {
                 <MobileDetailField label="Correo" wide><span className="break-all">{user.correo}</span></MobileDetailField>
                 <MobileDetailField label="Teléfono">{user.phone || "-"}</MobileDetailField>
                 <MobileDetailField label="Creado">{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</MobileDetailField>
-                {user.roleName === "CASHIER" && <MobileDetailField label="Horario" wide>{formatWorkSchedule(user)}</MobileDetailField>}
+                {["CASHIER", "WAREHOUSE"].includes(user.roleName) && <MobileDetailField label="Horario" wide>{formatWorkSchedule(user)}</MobileDetailField>}
               </MobileDetailGrid>
               <MobileRowActions>
                 <button className={secondaryButtonClass} type="button" onClick={() => startEditing(user)}><Pencil size={17} /> Editar</button>
-                {user.roleName === "CASHIER" && (
+                {["CASHIER", "WAREHOUSE"].includes(user.roleName) && (
                   <button className={secondaryButtonClass} type="button" onClick={() => openScheduleForm(user)}>
                     <Clock3 size={16} /> {user.workShift ? "Modificar horario" : "Configurar horario"}
                   </button>
@@ -824,7 +824,7 @@ export default function UsersPage() {
                   <td>{user.correo}</td>
                   <td className="whitespace-nowrap">{user.phone || "-"}</td>
                   <td>{ROLE_NAMES[user.roleName] || user.roleName}</td>
-                  <td>{user.roleName === "CASHIER" ? formatWorkSchedule(user) : "-"}</td>
+                  <td>{["CASHIER", "WAREHOUSE"].includes(user.roleName) ? formatWorkSchedule(user) : "-"}</td>
                   <td>
                     <span className={badgeClass(user.status === "ACTIVE" ? "success" : "neutral")}>
                       {user.status === "ACTIVE" ? "Activo" : "Inactivo"}
@@ -832,12 +832,12 @@ export default function UsersPage() {
                   </td>
                   <td>{formatDate(user.createdAt, USER_DATE_OPTIONS, "-")}</td>
                   <td className="min-w-44 whitespace-nowrap">
-                    <div className="table-row-actions flex items-center gap-1.5">
-                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`} type="button" onClick={() => startEditing(user)}>
+                    <div className="table-row-actions flex w-full items-center gap-1.5">
+                      <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0! ${["CASHIER", "WAREHOUSE"].includes(user.roleName) ? "" : "w-full"}`} type="button" onClick={() => startEditing(user)}>
                         <Pencil size={17} />
                         Editar
                       </button>
-                      {user.roleName === "CASHIER" && (
+                      {["CASHIER", "WAREHOUSE"].includes(user.roleName) && (
                         <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`} type="button" onClick={() => openScheduleForm(user)}>
                           <Clock3 size={16} />
                           {user.workShift ? "Modificar horario" : "Configurar horario"}

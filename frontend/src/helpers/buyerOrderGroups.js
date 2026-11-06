@@ -9,11 +9,15 @@ const OPERATIONAL_STATUSES = new Set([
 const PAYMENT_STATUSES = new Set(["PENDING_PAYMENT", "PAYMENT_REVIEW"]);
 const INCOMPLETE_STATUSES = new Set(["PAYMENT_FAILED", "CANCELLED", "EXPIRED"]);
 
+export function isIncompleteOrder(order) {
+  return INCOMPLETE_STATUSES.has(order?.status);
+}
+
 export function groupBuyerOrders(orders) {
   return {
     payments: orders.filter((order) => PAYMENT_STATUSES.has(order.status)),
     active: orders.filter((order) => OPERATIONAL_STATUSES.has(order.status)),
     delivered: orders.filter((order) => order.status === "DELIVERED"),
-    incomplete: orders.filter((order) => INCOMPLETE_STATUSES.has(order.status)),
+    incomplete: orders.filter(isIncompleteOrder),
   };
 }

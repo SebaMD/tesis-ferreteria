@@ -58,6 +58,20 @@ test("los intentos de pago no se clasifican como pedidos operativos", () => {
   assert.deepEqual(grouped.delivered.map(({ id }) => id), [9]);
 });
 
+test("las tarjetas normales no ofrecen ocultar; los modales y la restauración local lo conservan", async () => {
+  const [client, guest, card] = await Promise.all([
+    read("src/pages/ClientOrdersPage.jsx"), read("src/pages/GuestDeviceOrdersPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
+  ]);
+  assert.doesNotMatch(client, /afterDetailActions=/);
+  assert.match(client, /actions=\{selectedOrder \? actionsFor\(selectedOrder\)/);
+  const incompleteSection = guest.split('<OrdersSection title="No completados"')[1].split("/>")[0];
+  assert.doesNotMatch(incompleteSection, /renderAfterDetail/);
+  assert.match(guest, /title="Intentos ocultos"[^\n]*renderAfterDetail=\{visibilityActionFor\}/);
+  assert.match(guest, /actions=\{selectedOrder \? <>\{actionsFor\(selectedOrder\)\}\{visibilityActionFor\(selectedOrder\)\}/);
+  assert.match(card, /isOnlineOrderPaid\(order.status\) && order.status !== "DELIVERED"/);
+  assert.match(card, /max-\[680px\]:row-start-1/);
+});
+
 test("cada intento no completado conserva un mensaje acorde a su estado real", () => {
   const cancelled = getOnlineOrderStatus("CANCELLED");
   const expired = getOnlineOrderStatus("EXPIRED");
@@ -94,7 +108,9 @@ test("cliente e invitado comparten la clasificación y no reciben navegación lo
   assert.match(clientOrders, /Ocultar/);
   assert.match(guestOrders, /retryGuestDeviceOrderPaymentRequest/);
   assert.match(guestOrders, /Reintentar pago/);
-  assert.doesNotMatch(guestOrders, /Ocultar/);
+  assert.match(guestOrders, /Mostrar ocultos/);
+  assert.match(guestOrders, /writeHiddenGuestOrderIds\(sessionStorage, next\)/);
+  assert.doesNotMatch(guestOrders, /archiveOnlineOrderRequest|restoreArchivedOnlineOrderRequest/);
   assert.match(guestTracking, /isPaid && order\.buyerEmail/);
   assert.match(paymentResult, /retryOnlineOrderPaymentRequest/);
   assert.match(paymentResult, /Reintentar pago/);

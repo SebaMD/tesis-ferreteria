@@ -20,7 +20,8 @@ import { readCheckoutIntent, resolveCheckoutItems, checkoutReturn } from "../hel
 import { formatClp } from "../helpers/formatters.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getOnlineAvailableStock, submitWebpayForm } from "../helpers/onlineOrders.js";
-import { readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
+import { getOrCreateGuestSessionId, readGuestOrderAccessToken, saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
+import { guestCheckoutEmailIsVerified } from "../helpers/checkoutEmailVerification.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
@@ -121,9 +122,7 @@ function CheckoutForm({ draftStore }) {
     emailConfirmation: "",
     phone: "",
   });
-  const [clientEmailVerified, setClientEmailVerified] = useState(
-    Boolean(user?.emailVerifiedAt || user?.emailVerified),
-  );
+  const clientEmailVerified = Boolean(user?.emailVerifiedAt || user?.emailVerified);
   const [guestEmailVerification, setGuestEmailVerification] = useState(initialDraft?.guestEmailVerification || null);
   const submittingRef = useRef(false);
   const refreshingRef = useRef(false);
@@ -139,6 +138,16 @@ function CheckoutForm({ draftStore }) {
     draftStore.write(checkoutScope, { checkoutKey, deliveryType, destination, addressMode, alternativeDestination: alternativeDestination.current, touched: destinationTouched.current,
       guestData, guestEmailVerification, acceptedSignature: quoteState.acceptedSignature, requireAcceptance: quoteState.requireAcceptance });
   }, [draftStore, checkoutScope, checkoutKey, deliveryType, destination, addressMode, guestData, guestEmailVerification, quoteState.acceptedSignature, quoteState.requireAcceptance]);
+
+  useEffect(() => {
+    if (isClient || !guestEmailVerification) return undefined;
+    const timer = window.setTimeout(() => setGuestEmailVerification(null), Math.max(0, new Date(guestEmailVerification.expiresAt).getTime() - Date.now()));
+    const sessionChanged = () => {
+      if (guestEmailVerification.sessionId !== getOrCreateGuestSessionId()) setGuestEmailVerification(null);
+    };
+    window.addEventListener("storage", sessionChanged);
+    return () => { window.clearTimeout(timer); window.removeEventListener("storage", sessionChanged); };
+  }, [isClient, guestEmailVerification]);
 
   useEffect(() => {
     if (!isClient) return undefined;
@@ -273,11 +282,7 @@ function CheckoutForm({ draftStore }) {
     && normalizedGuestEmail === guestData.emailConfirmation.trim().toLowerCase();
   const emailVerifiedForCheckout = isClient
     ? clientEmailVerified
-    : Boolean(
-      guestEmailVerification?.verified
-      && guestEmailVerification.email === normalizedGuestEmail
-      && guestEmailVerification.purpose === deliveryType,
-    );
+    : guestCheckoutEmailIsVerified(guestEmailVerification, { email: normalizedGuestEmail, checkoutKey, sessionId: getOrCreateGuestSessionId() });
   const canStartPayment = !loading
     && destinationValid
     && !pendingOrderLoading
@@ -315,6 +320,11 @@ function CheckoutForm({ draftStore }) {
 
   const handlePayment = async () => {
     if (!canStartPayment || submittingRef.current) return;
+    if (!isClient && !guestCheckoutEmailIsVerified(guestEmailVerification, { email: normalizedGuestEmail, checkoutKey, sessionId: getOrCreateGuestSessionId() })) {
+      setGuestEmailVerification(null);
+      toast.error("La verificación del correo venció. Solicita un nuevo código antes de pagar.");
+      return;
+    }
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -358,6 +368,7 @@ function CheckoutForm({ draftStore }) {
       redirectStarted = true;
     } catch (error) {
       toast.error(getApiError(error, "No se pudo iniciar el pago con Webpay"));
+      if (!isClient && error?.response?.status === 403) setGuestEmailVerification(null);
       if (error?.response?.data?.code === "QUOTE_CHANGED") {
         setQuoteState(previous => ({ ...previous, requireAcceptance: true, needsAcceptance: true }));
       }
@@ -506,7 +517,10 @@ function CheckoutForm({ draftStore }) {
                       required
                       type="email"
                       value={guestData.email}
-                      onChange={(event) => setGuestData((current) => ({ ...current, email: event.target.value }))}
+                      onChange={(event) => {
+                        if (event.target.value.trim().toLowerCase() !== normalizedGuestEmail) setGuestEmailVerification(null);
+                        setGuestData((current) => ({ ...current, email: event.target.value }));
+                      }}
                       placeholder="correo@ejemplo.cl"
                     />
                   </label>
@@ -547,7 +561,6 @@ function CheckoutForm({ draftStore }) {
                   verifyCode={verifyClientEmail}
                   onVerified={(session) => {
                     replaceSession(session);
-                    setClientEmailVerified(true);
                   }}
                   title="Verifica el correo de tu cuenta"
                   description="Solo debes hacerlo una vez antes de iniciar tu próxima compra."
@@ -556,16 +569,19 @@ function CheckoutForm({ draftStore }) {
               {!isClient && !pendingOrder && (
                 guestEmailFieldsAreValid ? (
                   <EmailVerificationPanel
-                    key={`guest-${normalizedGuestEmail}-${deliveryType}`}
+                    key={`guest-${normalizedGuestEmail}-${guestEmailVerification?.challengeId || "pending"}`}
                     email={normalizedGuestEmail}
                     requestCode={() => requestGuestEmailVerification(normalizedGuestEmail)}
                     verifyCode={verifyGuestEmail}
-                    verified={emailVerifiedForCheckout && guestEmailVerification?.purpose === deliveryType}
-                    onVerified={(result) => setGuestEmailVerification({
+                    verified={emailVerifiedForCheckout}
+                    onVerified={(result, challenge) => setGuestEmailVerification({
                       challengeId: result.challengeId,
                       email: result.email,
                       verified: true,
-                      purpose: deliveryType,
+                      purpose: "GUEST_CHECKOUT",
+                      expiresAt: challenge.expiresAt,
+                      checkoutKey,
+                      sessionId: getOrCreateGuestSessionId(),
                     })}
                     title="Verifica el correo de esta compra"
                     description="Debes confirmar el correo antes de iniciar Webpay."

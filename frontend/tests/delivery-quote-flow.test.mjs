@@ -8,7 +8,9 @@ test("legacy request form remains isolated, but new checkout uses normal payment
   assert.doesNotMatch(form,/submitWebpayForm|createOnlineOrder|inventory/);
   for(const field of ["recipientName","phone","address","commune","reference","nonUrgent"])assert.ok(form.includes(field));
   assert.doesNotMatch(checkout,/quotePinRequest|DeliveryQuoteRequestForm/);assert.match(checkout,/requestGuestEmailVerification\(normalizedGuestEmail\)/);
-  assert.match(checkout,/guestEmailVerification.purpose === deliveryType/);
+  assert.match(checkout,/guestCheckoutEmailIsVerified\(guestEmailVerification/);
+  assert.match(checkout,/purpose: "GUEST_CHECKOUT"/);
+  assert.doesNotMatch(checkout,/guestEmailVerification.purpose === deliveryType/);
   assert.match(checkout,/quoteFingerprint: quote.quoteFingerprint/);
 });
 test("acceptance includes both backend signatures and never submits client freight",async()=>{

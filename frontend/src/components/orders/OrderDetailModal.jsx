@@ -196,18 +196,13 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
           requestProof={requestDeliveryProof}
         />
 
-        {actions && (
-          <section className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-            {actions}
-          </section>
-        )}
-
         <OrderAmounts order={order} />
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-200 pt-4">
           <div>
             <span className="block text-xs font-bold text-slate-500">Fecha de compra</span>
             <span className="mt-1 block text-sm text-ink-950">{formatDate(order.paidAt || order.createdAt, { dateStyle: "long", timeStyle: "short" })}</span>
           </div>
+          {actions && <div className="flex flex-wrap justify-end gap-2 max-[520px]:w-full max-[520px]:[&>button]:min-h-11 max-[520px]:[&>button]:flex-1">{actions}</div>}
         </footer>
       </div>
     </AppModal>

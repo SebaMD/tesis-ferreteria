@@ -1,5 +1,5 @@
 import { CheckCircle2, Mail, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 
@@ -26,6 +26,12 @@ export default function EmailVerificationPanel({
   );
   const [resendAvailableAt, setResendAvailableAt] = useState(initialChallenge?.resendAvailableAt || null);
   const [remaining, setRemaining] = useState(() => secondsUntil(initialChallenge?.resendAvailableAt));
+  const active = useRef(false);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!resendAvailableAt || remaining <= 0) return undefined;
@@ -52,12 +58,14 @@ export default function EmailVerificationPanel({
     setError("");
     try {
       const nextChallenge = await requestCode();
+      if (!active.current) return;
       setChallenge(nextChallenge);
       setResendAvailableAt(nextChallenge.resendAvailableAt);
       setRemaining(secondsUntil(nextChallenge.resendAvailableAt));
       setPin("");
       toast.success("Codigo enviado. Revisa tu correo.");
     } catch (requestError) {
+      if (!active.current) return;
       const message = getApiError(requestError, "No se pudo enviar el codigo");
       const retryAfter = Number(requestError?.response?.data?.details?.retryAfterSeconds || 0);
       if (retryAfter > 0) {
@@ -67,7 +75,7 @@ export default function EmailVerificationPanel({
       setError(message);
       toast.error(message);
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 
@@ -78,14 +86,16 @@ export default function EmailVerificationPanel({
     setError("");
     try {
       const result = await verifyCode({ challengeId: challenge.challengeId, pin });
+      if (!active.current) return;
       await onVerified?.(result, challenge);
       toast.success("Correo verificado correctamente");
     } catch (verifyError) {
+      if (!active.current) return;
       const message = getApiError(verifyError, "No se pudo verificar el codigo");
       setError(message);
       toast.error(message);
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 

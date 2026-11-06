@@ -8,7 +8,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import AppModal from "../components/AppModal.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
-import { groupBuyerOrders } from "../helpers/buyerOrderGroups.js";
+import { groupBuyerOrders, isIncompleteOrder } from "../helpers/buyerOrderGroups.js";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import { dangerButtonClass } from "../helpers/uiClasses.js";
 import {
@@ -153,25 +153,25 @@ export default function ClientOrdersPage() {
     }
   };
 
-  const actionsFor = (order) => {
+  const actionsFor = (order, { payment = true, archive = true } = {}) => {
     const isProcessing = paymentActionOrderIds.has(order.id);
     const isArchiving = archivingOrderId === order.id;
     if (!order.canContinuePayment && !order.canRetryPayment && !order.canArchive) return null;
     return (
       <>
-        {order.canContinuePayment && (
+        {payment && order.canContinuePayment && (
           <button type="button" onClick={() => handlePaymentAction(order, "continue")} disabled={isProcessing || isArchiving}>
             {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <CreditCard size={16} />}
             {isProcessing ? "Abriendo Webpay..." : "Continuar pago"}
           </button>
         )}
-        {order.canRetryPayment && (
+        {payment && order.canRetryPayment && (
           <button type="button" onClick={() => handlePaymentAction(order, "retry")} disabled={isProcessing || isArchiving}>
             {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <CreditCard size={16} />}
             {isProcessing ? "Iniciando..." : "Reintentar pago"}
           </button>
         )}
-        {order.canArchive && (
+        {archive && order.canArchive && (
           <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => setArchiveCandidate(order)} disabled={isArchiving || isProcessing}>
             {isArchiving ? <RefreshCw className="animate-spin" size={16} /> : <EyeOff size={16} />}
             {isArchiving ? "Ocultando..." : "Ocultar"}
@@ -186,7 +186,7 @@ export default function ClientOrdersPage() {
       key={order.id}
       order={order}
       onView={setSelectedOrder}
-      actions={actionsFor(order)}
+      actions={actionsFor(order, { archive: !isIncompleteOrder(order) })}
       requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}
       secondary={secondary}
     />

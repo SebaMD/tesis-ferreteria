@@ -27,7 +27,7 @@ const ORDER_STATUS = {
   PAYMENT_REVIEW: {
     label: "Pago en revisión",
     tone: "warning",
-    description: "Webpay autorizó el pago, pero el pedido requiere revisión. No realices un nuevo pago.",
+    description: "El resultado del pago o la entrega del pedido requiere revisión. No realices un nuevo pago.",
   },
   PREPARING: {
     label: "Preparando pedido",

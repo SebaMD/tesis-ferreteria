@@ -73,12 +73,13 @@ try {
     return result;
   };
   for(const page of [1,2,11,20,21,999999]) await check({},page);
-  for(const filters of [{operation:'ATTRIBUTE_RENAME'},{productId:'22'},{familyId:'22'},{productId:'22',familyId:'7'},{operation:'PRODUCT_NAME_CORRECTION',productId:'33',familyId:'22',from:'2026-11-04',to:'2026-11-04'}]) {
+  for(const filters of [{operation:'ATTRIBUTE_RENAME'},{productId:'22'},{familyId:'22'},{productId:'22',familyId:'7'},{operation:'PRODUCT_NAME_CORRECTION',productId:'33',familyId:'22',from:'2026-11-03',to:'2026-11-04'}]) {
     const expected=records.filter(r=>(!filters.operation||r.operation===filters.operation)&&(!filters.productId||r.productId===Number(filters.productId))&&(!filters.familyId||r.familyId===Number(filters.familyId)));
     await check(filters,1,expected); await check(filters,999999,expected);
   }
   await check({from:'2026-11-05'},500,[]);
-  await check({from:'2026-11-04',to:'2026-11-04'},1);
+  await check({from:'2026-11-03',to:'2026-11-04'},1);
+  await call('page=1&from=2026-11-04&to=2026-11-04','ADMIN',400);
   await check({to:'2026-11-03'},1,[]);
   assert.equal(await digest(),baseline,'All history reads preserve stored events');
   const cursorFirst=await call('limit=10');
@@ -88,17 +89,17 @@ try {
   const cursorNext=await call('limit=10&cursor='+cursorFirst.nextCursor);
   assert.deepEqual(cursorNext.items.map(r=>r.id),records.slice(-20,-10).reverse().map(r=>r.id),'Cursor mode keeps its existing insertion behavior');
   assert.equal((await call('page=1')).totalItems,206,'Numbered queries reflect new committed records');
-  for(const at of ['2026-11-03T23:59:59.999999Z','2026-11-04T00:00:00.000000Z','2026-11-04T23:59:59.999999Z','2026-11-05T00:00:00.000000Z']) await pool.query("insert into product_family_events(user_id,next,created_at) values(1,'{\"operation\":\"UNRECOGNIZED_TEST\"}',$1)",[at]);
-  assert.equal((await call('page=1&operation=OTHER&from=2026-11-04&to=2026-11-04')).totalItems,2,'UTC end day includes its last microsecond, not the next midnight');
+  for(const at of ['2026-11-02T23:59:59.999999Z','2026-11-03T00:00:00.000000Z','2026-11-04T23:59:59.999999Z','2026-11-05T00:00:00.000000Z']) await pool.query("insert into product_family_events(user_id,next,created_at) values(1,'{\"operation\":\"UNRECOGNIZED_TEST\"}',$1)",[at]);
+  assert.equal((await call('page=1&operation=OTHER&from=2026-11-03&to=2026-11-04')).totalItems,2,'UTC range includes its first midnight and final microsecond, not the next midnight');
   const insertLinked = async (next) => (await pool.query("insert into product_family_events(user_id,family_id,previous,next,created_at) values(1,22,'{}',$1,'2001-01-01T00:00:00Z') returning id",[next])).rows[0].id;
   const authId=await insertLinked({operation:'FAMILY_BRAND_AUTHORIZATION',operationKey:'linked-test'});
   const resultId=await insertLinked({operation:'FAMILY_BRAND_CORRECTION',operationKey:'linked-test',authorizationId:authId,brand:'Nueva'});
   await insertLinked({operation:'BUNDLE_SAVE',operationKey:'convert-test',productIds:[44]});
   const conversionId=await insertLinked({operation:'CONVERT_SIMPLE',operationKey:'convert-test'});
-  const grouped=await call('page=1&from=2001-01-01&to=2001-01-01');
+  const grouped=await call('page=1&from=2000-12-31&to=2001-01-01');
   assert.equal(grouped.totalItems,2,'Count grouped commands, not hidden authorizations or companion saves');
   assert.deepEqual(grouped.items.map(r=>r.id),[conversionId,resultId]);
-  assert.equal((await call('page=1&productId=44&from=2001-01-01&to=2001-01-01')).totalItems,1,'Conversion filter includes its linked variant');
+  assert.equal((await call('page=1&productId=44&from=2000-12-31&to=2001-01-01')).totalItems,1,'Conversion filter includes its linked variant');
   const finalDigest=await digest();
   await call('page=999999'); await call('limit=100');
   assert.equal(await digest(),finalDigest);

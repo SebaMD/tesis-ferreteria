@@ -26,8 +26,9 @@ test("cotización actualizada requiere aceptación explícita, incluso tras erro
   assert.equal(receiveCheckoutQuote(state, "change-C", { commercialSignature: "C" }).needsAcceptance, true);
   assert.equal(receiveCheckoutQuote({}, "missing-contract", {}).needsAcceptance, true);
   const checkout = await read("pages/CheckoutPage.jsx");
-  assert.match(checkout, /&& !quoteState.needsAcceptance/);
-  assert.match(checkout, /Aceptar resumen actualizado/);
+  assert.doesNotMatch(checkout, /&& !quoteState.needsAcceptance|Aceptar resumen actualizado/);
+  assert.match(checkout, /setQuoteState\(previous => acceptCheckoutQuote\(previous, quoteKey, quote.commercialSignature\)\)/);
+  assert.match(checkout, /Al pulsar Pagar aceptas este resumen/);
   assert.match(checkout, /code === "QUOTE_CHANGED"/);
   assert.doesNotMatch(checkout, /Actualizar cotización/);
   assert.match(checkout, /Retiro en tienda/);

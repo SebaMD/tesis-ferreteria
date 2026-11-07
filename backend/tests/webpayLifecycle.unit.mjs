@@ -8,8 +8,9 @@ const [controller, service, routes] = await Promise.all([
   read("src/modules/onlineOrders/onlineOrders.routes.ts"),
 ]);
 
-assert.match(controller, /tbkToken \|\| \(!tokenWs && buyOrder && sessionId\)/);
-assert.match(controller, /req\.method === "GET" \? "expired" : tokenWs \? "failed" : "cancelled"/);
+assert.match(controller, /classifyWebpayReturn\(req.body, req.query\)/);
+assert.doesNotMatch(controller, /req\.method === "GET" \? "expired"/);
+assert.match(controller, /inspectWebpayReturnService\(returned\)/);
 assert.match(service, /data\.outcome === "expired"[\s\S]*\? "EXPIRED"[\s\S]*data\.outcome === "failed" \? "FAILED" : "CANCELLED"/);
 assert.match(service, /data\.outcome === "expired"[\s\S]*\? "EXPIRED"[\s\S]*data\.outcome === "failed" \? "PAYMENT_FAILED" : "CANCELLED"/);
 assert.match(service, /retryOnlineOrderPaymentService[\s\S]*preparePaymentAttempt/);

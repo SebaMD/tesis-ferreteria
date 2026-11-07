@@ -67,6 +67,7 @@ import {
   findPendingOrderForClient,
   findPendingOrderForGuestSession,
   findPendingOrderDetailsForGuestSession,
+  findUnresolvedPaymentForOrder,
   markPaymentProcessing,
   markPaymentLaunchFailed,
   resetOrderReservation,
@@ -205,7 +206,6 @@ const WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS = WEBPAY_TIMEOUT_MS + 15_000;
 const RECONCILIATION_EXTENSION_MILLISECONDS = 5 * 60_000;
 const PAYMENT_REVIEW_AFTER_MILLISECONDS = 60 * 60_000;
 const RECONCILIATION_STALE_MARGIN_MILLISECONDS = 15_000;
-const SUPERSEDED_PROCESSING_EXPIRATION_MILLISECONDS = 10 * 60_000;
 const PAYMENT_SETTLED_ORDER_STATUSES = [
   "PAID",
   "PAYMENT_REVIEW",
@@ -615,6 +615,9 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
     if (!["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(order.status)) {
       throw new OnlineOrderError("Este pedido no permite reintentar el pago", 409);
     }
+    if (await findUnresolvedPaymentForOrder(tx, order.id)) {
+      throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
+    }
     if (await findPendingOrderForClient(tx, clientId, orderId)) {
       throw new OnlineOrderError(
         "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de reintentar otro pedido.",
@@ -692,13 +695,10 @@ export async function continueOnlineOrderPaymentService(clientId: number, orderI
       );
     }
 
-    return {
-      orderId: order.id,
-      paymentId: payment.id,
-      token: payment.token,
-      url: payment.redirectUrl,
-      total: Number(payment.amount),
-    };
+    throw new OnlineOrderError(
+      "La sesión Webpay ya fue iniciada y no se reenviará su token. Revisa el estado del pedido; cuando se confirme el vencimiento o fallo podrás reintentar.",
+      409,
+    );
   });
 }
 
@@ -767,7 +767,7 @@ export async function continueGuestPaymentByTokenService(accessToken:string) {
   const orderId=await guestOrderIdFromAccessToken(accessToken);
   const order=await db.transaction(tx=>findOrderForGuestUpdate(tx,orderId));
   if(!order?.guestSessionHash)throw new OnlineOrderError("Pedido no encontrado",404);
-  return {...await continueGuestPaymentForSession(order.guestSessionHash,orderId),guestAccessToken:accessToken};
+  return continueGuestPaymentForSession(order.guestSessionHash,orderId);
 }
 
 async function continueGuestPaymentForSession(guestSessionHash:string,expectedOrderId?:number) {
@@ -803,13 +803,10 @@ async function continueGuestPaymentForSession(guestSessionHash:string,expectedOr
       );
     }
 
-    return {
-      orderId: order.id,
-      paymentId: payment.id,
-      token: payment.token,
-      url: payment.redirectUrl,
-      total: Number(payment.amount),
-    };
+    throw new OnlineOrderError(
+      "La sesión Webpay ya fue iniciada y no se reenviará su token. Revisa el seguimiento del pedido; cuando se confirme el vencimiento o fallo podrás reintentar.",
+      409,
+    );
   });
 }
 
@@ -867,6 +864,7 @@ export async function getGuestDeviceOrdersService(guestDeviceId: string) {
     throw new OnlineOrderError("El dispositivo invitado no es valido", 400);
   }
 
+  await reconcileDueOnlinePaymentsService({ guestDeviceHash });
   const orders = await findOrdersByGuestDeviceHash(guestDeviceHash);
   return orders.map((order) => {
     const {
@@ -914,6 +912,9 @@ async function retryGuestOrderPayment(
     await expirePendingOrdersForGuestSession(tx, order.guestSessionHash);
     if (!["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(order.status)) {
       throw new OnlineOrderError("Este pedido no permite reintentar el pago", 409);
+    }
+    if (await findUnresolvedPaymentForOrder(tx, order.id)) {
+      throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
     }
     if (await findPendingOrderForGuestSession(tx, order.guestSessionHash, order.id)) {
       throw new OnlineOrderError(
@@ -1084,7 +1085,7 @@ async function finishProviderResponse(data: {
 
     const authorized = isAuthorizedResponse(data.response);
     if (!authorized) {
-      if (!isDefinitiveFailureResponse(data.response, data.source)) {
+      if (!isDefinitiveFailureResponse(data.response, data.source) || !responseMatchesPayment(data.response, payment)) {
         return { orderId: order.id, orderStatus: order.status, becamePaid: false };
       }
 
@@ -1096,12 +1097,15 @@ async function finishProviderResponse(data: {
       }
 
       const latestPayment = await findLatestPaymentForOrder(tx, order.id);
-      if (latestPayment?.id === payment.id && order.status === "PENDING_PAYMENT") {
+      const unresolvedReview = order.status === "PAYMENT_REVIEW"
+        && ["CREATED", "PROCESSING"].includes(payment.status)
+        && responseMatchesPayment(data.response, payment);
+      if (latestPayment?.id === payment.id && (order.status === "PENDING_PAYMENT" || unresolvedReview)) {
         const updated = await updateOrderStatus(
           tx,
           order.id,
           "PAYMENT_FAILED",
-          ["PENDING_PAYMENT"],
+          ["PENDING_PAYMENT", "PAYMENT_REVIEW"],
         );
         return {
           orderId: order.id,
@@ -1295,6 +1299,29 @@ export async function confirmWebpayPaymentService(token: string) {
   });
 }
 
+// An error page is not a financial rejection. Only the provider's correlated result can settle it.
+export async function inspectWebpayReturnService(data: { token?: string; buyOrder?: string; sessionId?: string }) {
+  const payment = await findPaymentByReturnIdentifiers(data);
+  if (!payment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
+  if (payment.token) {
+    try {
+      const response = await getWebpayTransactionStatus(payment.token);
+      if (responseMatchesPayment(response, payment) && (isAuthorizedResponse(response) || isDefinitiveFailureResponse(response, "status"))) {
+        return finishProviderResponse({ locatedPayment: payment, response, source: "status" });
+      }
+    } catch { /* Keep the unresolved attempt; this return must never create or re-launch a payment. */ }
+  }
+  return paymentOrderState(payment.orderId);
+}
+
+async function paymentOrderState(orderId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    if (!order) throw new OnlineOrderError("Pedido no encontrado", 404);
+    return { orderId: order.id, orderStatus: order.status };
+  });
+}
+
 export async function cancelWebpayPaymentService(data: {
   token?: string;
   buyOrder?: string;
@@ -1304,9 +1331,11 @@ export async function cancelWebpayPaymentService(data: {
   const locatedPayment = await findPaymentByReturnIdentifiers(data);
   if (!locatedPayment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
 
-  if (data.token) {
+  if (!locatedPayment.token) return paymentOrderState(locatedPayment.orderId);
+  if (locatedPayment.token) {
     try {
-      const response = await getWebpayTransactionStatus(data.token);
+      const response = await getWebpayTransactionStatus(locatedPayment.token);
+      if (!responseMatchesPayment(response, locatedPayment)) return paymentOrderState(locatedPayment.orderId);
       if (
         isAuthorizedResponse(response)
         || isDefinitiveFailureResponse(response, "status")
@@ -1314,7 +1343,8 @@ export async function cancelWebpayPaymentService(data: {
         return finishProviderResponse({ locatedPayment, response, source: "status" });
       }
     } catch {
-      // Un retorno de aborto puede no permitir consultar el token.
+      // A failed status lookup is not evidence that an in-flight payment failed.
+      return paymentOrderState(locatedPayment.orderId);
     }
   }
 
@@ -1435,31 +1465,6 @@ async function protectAmbiguousPayment(
   });
 }
 
-async function expireReconciledPayment(
-  candidate: Awaited<ReturnType<typeof findPaymentsNeedingReconciliation>>[number],
-) {
-  await db.transaction(async (tx) => {
-    const order = await findOrderForUpdate(tx, candidate.orderId);
-    if (!order || order.status !== "PENDING_PAYMENT") return;
-
-    const payment = await findPaymentForUpdateById(tx, candidate.paymentId);
-    if (
-      !payment
-      || payment.orderId !== order.id
-      || payment.status !== "CREATED"
-      || payment.updatedAt.getTime() !== candidate.paymentUpdatedAt.getTime()
-    ) return;
-
-    const latestPayment = await findLatestPaymentForOrder(tx, order.id);
-    if (latestPayment?.id !== payment.id || order.reservationExpiresAt.getTime() > Date.now()) {
-      return;
-    }
-
-    await updatePaymentResult(tx, payment.id, { status: "EXPIRED" });
-    await updateOrderStatus(tx, order.id, "EXPIRED", ["PENDING_PAYMENT"]);
-  });
-}
-
 async function reconcilePaymentCandidate(
   candidate: Awaited<ReturnType<typeof findPaymentsNeedingReconciliation>>[number],
 ) {
@@ -1506,14 +1511,11 @@ async function reconcilePaymentCandidate(
     candidate.paymentStatus === "PROCESSING"
     && candidate.orderStatus !== "PENDING_PAYMENT"
   ) {
-    const canExpire = response.status === "INITIALIZED"
-      && Date.now() - candidate.paymentCreatedAt.getTime()
-        >= SUPERSEDED_PROCESSING_EXPIRATION_MILLISECONDS;
     await deferSupersededProcessingPayment(
       candidate.orderId,
       candidate.paymentId,
       candidate.paymentUpdatedAt,
-      canExpire,
+      false,
     );
     return;
   }
@@ -1523,7 +1525,8 @@ async function reconcilePaymentCandidate(
       response.status === "INITIALIZED"
       && candidate.reservationExpiresAt.getTime() <= Date.now()
     ) {
-      await expireReconciledPayment(candidate);
+      // INITIALIZED and an expired stock lease do not prove a financial timeout.
+      await protectAmbiguousPayment(candidate);
     } else if (response.status !== "INITIALIZED") {
       await protectAmbiguousPayment(candidate);
     }
@@ -1567,6 +1570,7 @@ async function reconcilePaymentCandidate(
 export async function reconcileDueOnlinePaymentsService(scope: {
   clientId?: number;
   guestSessionHash?: string;
+  guestDeviceHash?: string;
   orderId?: number;
 } = {}) {
   const processingStaleBefore = new Date(
@@ -1586,7 +1590,7 @@ export async function reconcileDueOnlinePaymentsService(scope: {
 
   if (scope.guestSessionHash !== undefined) {
     await db.transaction((tx) => expirePendingOrdersForGuestSession(tx, scope.guestSessionHash!));
-  } else if (scope.orderId === undefined) {
+  } else if (scope.orderId === undefined && scope.guestDeviceHash === undefined) {
     await db.transaction((tx) => expirePendingOrdersForClient(tx, scope.clientId));
   }
 }

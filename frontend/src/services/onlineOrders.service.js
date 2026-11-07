@@ -34,8 +34,8 @@ export async function restoreArchivedOnlineOrderRequest(orderId) {
   return response.data.data;
 }
 
-export async function getMyOnlineOrdersRequest() {
-  const response = await api.get("/online-orders");
+export async function getMyOnlineOrdersRequest({ signal } = {}) {
+  const response = await api.get("/online-orders", { signal });
   return resolveOrderListProductAssets(response.data.data);
 }
 
@@ -124,8 +124,8 @@ export async function retryGuestOnlineOrderPaymentRequest(accessToken) {
   return response.data.data;
 }
 
-export async function getGuestDeviceOrdersRequest() {
-  const response = await api.get("/online-orders/guest/device-orders");
+export async function getGuestDeviceOrdersRequest({ signal } = {}) {
+  const response = await api.get("/online-orders/guest/device-orders", { signal });
   return resolveOrderListProductAssets(response.data.data);
 }
 

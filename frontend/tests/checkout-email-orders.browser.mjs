@@ -79,7 +79,7 @@ try {
     return { page, context, records };
   }
   const noOverflow = async page => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal overflow");
-  const pay = page => page.getByRole("button", { name: "Pagar con Webpay Plus", exact: true });
+  const pay = page => page.getByRole("button", { name: /^Pagar con Webpay Plus/ });
   const waitPay = async page => {
     try {
       await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent.includes("Pagar con Webpay Plus") && !button.disabled));
@@ -118,21 +118,22 @@ try {
     assert.equal(records.codes, 1); assert.equal(records.verifies, 1);
     assert.equal(await page.getByRole("button", { name: "Enviar codigo", exact: true }).count(), 0);
     await pay(page).click();
-    await page.getByRole("button", { name: "Aceptar resumen actualizado" }).waitFor();
-    assert.equal(await pay(page).isDisabled(), true, "commercial rejection still blocks payment");
+    await page.getByText(/El resumen cambió\./).waitFor(); await waitPay(page);
+    assert.equal(await page.getByRole("button", { name: /Aceptar resumen actualizado/ }).count(), 0);
+    assert.equal(records.requests.filter(request => request.endpoint.endsWith('/guest/checkout')).length, 1, 'conflict never resubmits payment automatically');
     assert.equal(records.codes, 1, "quote changes do not invalidate identity");
     const payload = records.requests.find(request => request.endpoint.endsWith("/guest/checkout")).body;
     assert.equal(payload.emailVerificationChallengeId, 1);
     assert.equal(payload.deliveryType, startDelivery ? "DELIVERY" : "PICKUP");
     assert.equal(payload.quoteFingerprint, `quote-${payload.deliveryType}-${startDelivery ? 3000 : 0}-0`);
-    await page.getByRole("button", { name: "Aceptar resumen actualizado" }).click(); await waitPay(page);
+    assert.ok((await pay(page).textContent()).includes(startDelivery ? '$8.990' : '$5.990'), 'final action explicitly names the displayed total');
     await page.getByRole("radio", { name: /Retiro en tienda/ }).check();
     records.fee = 4000;
     await delivery(page); await page.getByLabel("Referencia u observaciones de entrega").fill("Portón de prueba");
-    await page.getByRole("button", { name: "Aceptar resumen actualizado" }).waitFor();
-    assert.equal(await pay(page).isDisabled(), true);
+    await page.getByRole("button", { name: /Pagar con Webpay Plus.*\$9\.990/ }).waitFor();
+    await page.getByText(/El resumen cambió\./).waitFor(); await waitPay(page);
+    assert.ok((await pay(page).textContent()).includes('$9.990'));
     assert.equal(records.codes, 1);
-    await page.getByRole("button", { name: "Aceptar resumen actualizado" }).click(); await waitPay(page);
     records.stock = 0; await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent.includes("Pagar con Webpay Plus") && button.disabled));
     assert.equal(records.codes, 1, "stock validation remains independent");

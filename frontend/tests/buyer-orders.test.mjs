@@ -9,15 +9,16 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("Mis pedidos respeta movimiento reducido al desplazarse al pedido sin cambiar el destino", async () => {
   const source = await read("src/pages/ClientOrdersPage.jsx");
-  const effect = source.match(/useEffect\(\(\) => \{\s*(if \(loading \|\| !location\.hash\.startsWith\("#order-"\)\) return;[\s\S]*?)\}, \[loading, location\.hash, orders\]\);/)?.[1];
+  const effect = source.match(/useEffect\(\(\) => \{\s*(if \(loading \|\| !location\.hash\.startsWith\("#order-"\)[\s\S]*?)\}, \[loading, location\.hash, location\.key, orders\]\);/)?.[1];
   assert.ok(effect, "debe conservar el efecto de navegación al pedido");
-  const runEffect = ({ reducedMotion = false, loading = false, hash = "#order-42", exists = true } = {}) => {
+  const runEffect = ({ reducedMotion = false, loading = false, hash = "#order-42", exists = true, scrolledLocation = {current:null} } = {}) => {
     const calls = [];
     const queries = [];
     const ids = [];
     runInNewContext(`(() => { ${effect} })()`, {
       loading,
-      location: { hash },
+      location: { hash, key: 'navigation-1' },
+      scrolledLocation,
       window: { matchMedia: query => { queries.push(query); return { matches: reducedMotion }; } },
       document: { getElementById: id => {
         ids.push(id);
@@ -36,6 +37,9 @@ test("Mis pedidos respeta movimiento reducido al desplazarse al pedido sin cambi
     assert.deepEqual(runEffect(input), { calls: [], queries: [], ids: [] });
   }
   assert.deepEqual(runEffect({ exists: false }).calls, []);
+  const scrolledLocation = {current:null};
+  assert.equal(runEffect({scrolledLocation}).calls.length,1);
+  assert.equal(runEffect({scrolledLocation}).calls.length,0,'Refreshing the same order must not move the scroll again');
 });
 
 test("los intentos de pago no se clasifican como pedidos operativos", () => {
@@ -63,11 +67,11 @@ test("las tarjetas normales no ofrecen ocultar; los modales y la restauración l
     read("src/pages/ClientOrdersPage.jsx"), read("src/pages/GuestDeviceOrdersPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
   ]);
   assert.doesNotMatch(client, /afterDetailActions=/);
-  assert.match(client, /actions=\{selectedOrder \? actionsFor\(selectedOrder\)/);
+  assert.match(client, /actions=\{selectedOrder \? <>[\s\S]*?\{actionsFor\(selectedOrder\)\}/);
   const incompleteSection = guest.split('<OrdersSection title="No completados"')[1].split("/>")[0];
   assert.doesNotMatch(incompleteSection, /renderAfterDetail/);
   assert.match(guest, /title="Intentos ocultos"[^\n]*renderAfterDetail=\{visibilityActionFor\}/);
-  assert.match(guest, /actions=\{selectedOrder \? <>\{actionsFor\(selectedOrder\)\}\{visibilityActionFor\(selectedOrder\)\}/);
+  assert.match(guest, /actions=\{selectedOrder \? <>[\s\S]*?\{actionsFor\(selectedOrder\)\}\{visibilityActionFor\(selectedOrder\)\}/);
   assert.match(card, /isOnlineOrderPaid\(order.status\) && order.status !== "DELIVERED"/);
   assert.match(card, /max-\[680px\]:row-start-1/);
 });

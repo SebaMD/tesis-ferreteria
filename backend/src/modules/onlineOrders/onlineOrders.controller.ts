@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { classifyWebpayReturn } from "./webpayReturn.js";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import {
@@ -14,6 +15,7 @@ import {
   restoreArchivedClientOrderService,
   cancelWebpayPaymentService,
   confirmWebpayPaymentService,
+  inspectWebpayReturnService,
   continueOnlineOrderPaymentService,
   continueGuestOnlineOrderPaymentService,
   createCheckoutService,
@@ -517,14 +519,6 @@ export async function getMyOrderDeliveryProofController(
   }
 }
 
-function returnValue(req: Request, field: string) {
-  const bodyValue = req.body && typeof req.body === "object"
-    ? (req.body as Record<string, unknown>)[field]
-    : undefined;
-  const value = bodyValue ?? req.query[field];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
   if (orderId) {
     const guestAccess = await issueGuestOrderTrackingAccessService(orderId, status);
@@ -537,35 +531,21 @@ async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
 }
 
 export async function webpayReturnController(req: Request, res: Response) {
-  const tokenWs = returnValue(req, "token_ws");
-  const tbkToken = returnValue(req, "TBK_TOKEN");
-  const buyOrder = returnValue(req, "TBK_ORDEN_COMPRA");
-  const sessionId = returnValue(req, "TBK_ID_SESION");
+  const returned = classifyWebpayReturn(req.body, req.query);
+  if (returned.kind === "invalid") return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
 
   try {
-    if (tbkToken || (!tokenWs && buyOrder && sessionId)) {
-      const result = await cancelWebpayPaymentService({
-        token: tbkToken,
-        buyOrder,
-        sessionId,
-        outcome: req.method === "GET" ? "expired" : tokenWs ? "failed" : "cancelled",
-      });
-      return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
-    }
-
-    if (!tokenWs) return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
-
-    const result = await confirmWebpayPaymentService(tokenWs);
+    const result = returned.kind === "authorization"
+      ? await confirmWebpayPaymentService(returned.token)
+      : returned.kind === "error"
+        ? await inspectWebpayReturnService(returned)
+        : await cancelWebpayPaymentService({ ...returned, outcome: returned.kind });
     return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
   } catch (error) {
     logServerError("Error al procesar retorno Webpay", error);
     let orderId: number | null = null;
     try {
-      orderId = await findOrderIdByPaymentReturnService({
-        token: tbkToken || tokenWs,
-        buyOrder,
-        sessionId,
-      });
+      orderId = await findOrderIdByPaymentReturnService(returned);
     } catch {
       // El resultado queda consultable desde Mis pedidos aunque falle esta recuperación.
     }

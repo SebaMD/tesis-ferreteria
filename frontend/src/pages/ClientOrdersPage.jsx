@@ -1,6 +1,7 @@
 import { AlertTriangle, CreditCard, EyeOff, PackageSearch, RefreshCw } from "lucide-react";
 import { InformationBackLink } from "../components/InformationNavigation.jsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import useBuyerOrders from "../hooks/useBuyerOrders.js";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -21,15 +22,15 @@ import {
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
-function OrdersSection({ title, description, orders, renderOrder, emptyText }) {
+function OrdersSection({ title, description, orders, renderOrder, emptyText, headerAction }) {
   return (
     <section className="grid gap-3">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="m-0 text-xl font-bold text-ink-950 max-[520px]:text-lg">{title}</h2>
           {description && <p className="mt-1 mb-0 text-xs leading-5 text-slate-500">{description}</p>}
         </div>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{headerAction}<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span></div>
       </header>
       {orders.length ? <div className="grid gap-3">{orders.map(renderOrder)}</div> : (
         <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-8 text-center text-sm text-slate-500">{emptyText}</p>
@@ -40,56 +41,26 @@ function OrdersSection({ title, description, orders, renderOrder, emptyText }) {
 
 export default function ClientOrdersPage() {
   const location = useLocation();
-  const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const { orders, setOrders, selectedOrder, setSelectedOrder, loading, refreshing, error: loadError, loadOrders } = useBuyerOrders(getMyOnlineOrdersRequest, "No se pudieron cargar tus pedidos");
   const [paymentActionOrderIds, setPaymentActionOrderIds] = useState(() => new Set());
   const [archivingOrderId, setArchivingOrderId] = useState(null);
   const [archiveCandidate, setArchiveCandidate] = useState(null);
   const paymentActionRefs = useRef(new Set());
   const archiveActionRef = useRef(null);
 
-  const loadOrders = useCallback(async ({ showLoading = true, notifyError = true } = {}) => {
-    if (showLoading) setLoading(true);
-    try {
-      const data = await getMyOnlineOrdersRequest();
-      setOrders(data);
-      setSelectedOrder((current) => current
-        ? data.find((order) => order.id === current.id) || null
-        : null);
-      setLoadError("");
-    } catch (error) {
-      const message = getApiError(error, "No se pudieron cargar tus pedidos");
-      setLoadError(message);
-      if (notifyError) toast.error(message);
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
-
+  const scrolledLocation = useRef(null);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadOrders();
-    const refreshOrders = () => loadOrders({ showLoading: false, notifyError: false });
-    const refreshTimer = window.setInterval(refreshOrders, 30_000);
-    window.addEventListener("focus", refreshOrders);
-    return () => {
-      window.clearInterval(refreshTimer);
-      window.removeEventListener("focus", refreshOrders);
-    };
-  }, [loadOrders]);
-
-  useEffect(() => {
-    if (loading || !location.hash.startsWith("#order-")) return;
+    if (loading || !location.hash.startsWith("#order-") || scrolledLocation.current === location.key) return;
+    scrolledLocation.current = location.key;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     document.getElementById(location.hash.slice(1))?.scrollIntoView({
       behavior: reducedMotion ? "instant" : "smooth",
       block: "center",
     });
-  }, [loading, location.hash, orders]);
+  }, [loading, location.hash, location.key, orders]);
 
   const grouped = useMemo(() => groupBuyerOrders(orders), [orders]);
+  const refreshButton = <button type="button" className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" aria-label="Actualizar estado" onClick={() => loadOrders({ showLoading: false })} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />{refreshing ? "Actualizando…" : "Actualizar estado"}</button>;
 
   const handlePaymentAction = async (order, action) => {
     const canRun = action === "continue" ? order.canContinuePayment : order.canRetryPayment;
@@ -224,7 +195,7 @@ export default function ClientOrdersPage() {
       ) : !loading && (
         <>
           {grouped.payments.length > 0 && (
-            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" />
+            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" headerAction={refreshButton} />
           )}
           <OrdersSection title="Pedidos en curso" description="Compras pagadas que todavía están en preparación, retiro o entrega." orders={grouped.active} renderOrder={renderOrder()} emptyText="No tienes pedidos en curso." />
           <OrdersSection title="Historial" description="Compras que ya fueron entregadas o retiradas." orders={grouped.delivered} renderOrder={renderOrder()} emptyText="Todavía no tienes compras entregadas." />
@@ -237,7 +208,7 @@ export default function ClientOrdersPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         requestDeliveryProof={({ id }) => getMyOnlineOrderDeliveryProofRequest(id)}
-        actions={selectedOrder ? actionsFor(selectedOrder) : null}
+        actions={selectedOrder ? <>{["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(selectedOrder.status) && refreshButton}{actionsFor(selectedOrder)}</> : null}
       />
       <AppModal
         open={Boolean(archiveCandidate)}

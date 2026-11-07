@@ -1,5 +1,6 @@
 import { ClipboardList, CreditCard, Eye, EyeOff, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import useBuyerOrders from "../hooks/useBuyerOrders.js";
 import AppModal from "../components/AppModal.jsx";
 import CatalogEmptyState from "../components/CatalogEmptyState.jsx";
 import { InformationBackLink } from "../components/InformationNavigation.jsx";
@@ -19,15 +20,15 @@ import {
   retryGuestDeviceOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
-function OrdersSection({ title, description, orders, onView, renderActions, renderAfterDetail, empty, secondary = false }) {
+function OrdersSection({ title, description, orders, onView, renderActions, renderAfterDetail, empty, secondary = false, headerAction }) {
   return (
     <section className="grid gap-3">
-      <header className="flex items-end justify-between gap-3">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="m-0 text-xl font-bold text-ink-950 max-[520px]:text-lg">{title}</h2>
           {description && <p className="mt-1 mb-0 text-xs leading-5 text-slate-500">{description}</p>}
         </div>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{headerAction}<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span></div>
       </header>
       {orders.length ? (
         <div className="grid gap-3">
@@ -51,37 +52,14 @@ function OrdersSection({ title, description, orders, onView, renderActions, rend
 }
 
 export default function GuestDeviceOrdersPage() {
-  const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { orders, selectedOrder, setSelectedOrder, loading, refreshing, error, loadOrders } = useBuyerOrders(getGuestDeviceOrdersRequest, "No se pudieron recuperar las compras de este dispositivo");
   const [paymentActionOrderIds, setPaymentActionOrderIds] = useState(() => new Set());
   const paymentActionRefs = useRef(new Set());
   const [hiddenOrderIds, setHiddenOrderIds] = useState(() => readHiddenGuestOrderIds(sessionStorage));
   const [showHidden, setShowHidden] = useState(false);
   const [hideCandidate, setHideCandidate] = useState(null);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await getGuestDeviceOrdersRequest();
-      setOrders(data);
-      setSelectedOrder((current) => current
-        ? data.find((order) => order.id === current.id) || null
-        : null);
-    } catch (requestError) {
-      setError(getApiError(requestError, "No se pudieron recuperar las compras de este dispositivo"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadOrders();
-  }, [loadOrders]);
-
+  const refreshButton = <button type="button" className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" aria-label="Actualizar estado" onClick={() => loadOrders({ showLoading: false })} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />{refreshing ? "Actualizando…" : "Actualizar estado"}</button>;
   const hiddenOrders = orders.filter(order => canHideGuestOrder(order) && hiddenOrderIds.has(order.id));
   const grouped = useMemo(() => groupBuyerOrders(orders.filter(order => !canHideGuestOrder(order) || !hiddenOrderIds.has(order.id))), [orders, hiddenOrderIds]);
 
@@ -180,7 +158,7 @@ export default function GuestDeviceOrdersPage() {
       ) : !loading && !error && (
         <>
           {grouped.payments.length > 0 && (
-            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary />
+            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary headerAction={refreshButton} />
           )}
           <OrdersSection title="Pedidos en curso" description="Compras pagadas que continúan en preparación, retiro o entrega." orders={grouped.active} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras en curso." />
           <OrdersSection title="Historial" description="Compras entregadas o retiradas desde este dispositivo." orders={grouped.delivered} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras entregadas." />
@@ -209,7 +187,7 @@ export default function GuestDeviceOrdersPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         requestDeliveryProof={({ id }) => getGuestDeviceOrderDeliveryProofRequest(id)}
-        actions={selectedOrder ? <>{actionsFor(selectedOrder)}{visibilityActionFor(selectedOrder)}</> : null}
+        actions={selectedOrder ? <>{["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(selectedOrder.status) && refreshButton}{actionsFor(selectedOrder)}{visibilityActionFor(selectedOrder)}</> : null}
       />
       <AppModal
         open={Boolean(hideCandidate)}

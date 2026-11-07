@@ -4,7 +4,7 @@ import { auditDTO, auditOperations, type AuditRow } from "./productAudits.dto.js
 
 export class AuditError extends Error { constructor(message: string, public statusCode = 400) { super(message); } }
 const positive = (v: unknown, max = 2147483647) => typeof v === "string" && /^[1-9]\d*$/.test(v) && Number(v) <= max ? Number(v) : null;
-export function validateAuditQuery(input: Record<string, unknown>) {
+export function validateAuditQuery(input: Record<string, unknown>, now = new Date()) {
   if (Object.keys(input).some(k => !["operation", "productId", "familyId", "from", "to", "limit", "cursor", "page"].includes(k))) throw new AuditError("Filtro de auditoría desconocido");
   const operation = input.operation === undefined ? null : typeof input.operation === "string" && Object.hasOwn(auditOperations, input.operation) ? input.operation : undefined;
   if (operation === undefined) throw new AuditError("Operación de auditoría inválida");
@@ -12,7 +12,10 @@ export function validateAuditQuery(input: Record<string, unknown>) {
   const date = (key: string) => { const v = input[key]; if (v === undefined) return null;
     if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || v.startsWith("0000") || !Number.isFinite(Date.parse(v)) || new Date(v).toISOString().slice(0, 10) !== v) throw new AuditError("Fecha inválida; utilice AAAA-MM-DD (UTC)"); return v; };
   const from = date("from"), to = date("to");
-  if (from && to && from > to) throw new AuditError("El inicio no puede ser posterior al fin");
+  const today = now.toISOString().slice(0, 10);
+  if (from && from >= today) throw new AuditError("Desde debe ser anterior al día actual (UTC)");
+  if (to && to > today) throw new AuditError("Hasta no puede superar el día actual (UTC)");
+  if (from && to && from >= to) throw new AuditError("Desde debe ser estrictamente anterior a Hasta");
   const page = number("page", 1000000);
   const limit = number("limit", 100) ?? (page === null ? 25 : 10);
   if (page !== null && input.cursor !== undefined) throw new AuditError("No combine page con cursor");

@@ -12,6 +12,7 @@ import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals 
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
+import { calendarDay, shiftCalendarDay, reportDateError } from "../helpers/dateFilters.js";
 import {
   badgeClass,
   dashboardListRowClass,
@@ -52,16 +53,10 @@ function getSaleStatusTone(status) {
   return "critical";
 }
 
-function dateInputValue(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function initialFilters() {
-  const today = dateInputValue(new Date());
+  const today = calendarDay(new Date(), "America/Santiago");
   return {
+    mode: "single",
     from: today,
     to: today,
     cashierId: "",
@@ -76,7 +71,9 @@ export default function ReportsPage() {
   const [report, setReport] = useState(null);
   const [cashierSummarySearch, setCashierSummarySearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const today = dateInputValue(new Date());
+  const [showDateError, setShowDateError] = useState(false);
+  const today = calendarDay(new Date(), "America/Santiago");
+  const dateError = reportDateError(filters, dateMode);
 
   const loadReport = async (nextFilters) => {
     setLoading(true);
@@ -101,18 +98,8 @@ export default function ReportsPage() {
     const { name, value } = event.target;
 
     if (name === "from" || name === "to") {
-      const safeValue = value > today ? today : value;
-      setFilters((current) => {
-        if (name === "from" && safeValue > current.to) {
-          return { ...current, from: safeValue, to: safeValue };
-        }
-
-        if (name === "to" && current.from > safeValue) {
-          return { ...current, from: safeValue, to: safeValue };
-        }
-
-        return { ...current, [name]: safeValue };
-      });
+      setShowDateError(true);
+      setFilters((current) => ({ ...current, [name]: value }));
       return;
     }
 
@@ -120,26 +107,33 @@ export default function ReportsPage() {
   };
 
   const handleSingleDateChange = (event) => {
-    const safeValue = event.target.value > today ? today : event.target.value;
-    setFilters((current) => ({ ...current, from: safeValue, to: safeValue }));
+    setShowDateError(true);
+    const value = event.target.value;
+    setFilters((current) => ({ ...current, from: value, to: value }));
   };
 
   const handleDateModeChange = (mode) => {
     setDateMode(mode);
+    setShowDateError(false);
 
     if (mode === "single") {
-      setFilters((current) => ({ ...current, to: current.from }));
+      setFilters((current) => ({ ...current, mode, to: current.from }));
+    } else {
+      setFilters((current) => ({ ...current, mode }));
     }
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    setShowDateError(true);
+    if (dateError) { toast.error(dateError); return; }
     loadReport(filters);
   };
 
   const handleReset = () => {
     const nextFilters = initialFilters();
     setDateMode("single");
+    setShowDateError(false);
     setFilters(nextFilters);
     setCashierSummarySearch("");
     loadReport(nextFilters);
@@ -226,7 +220,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <form className={`${panelClass} gap-4.5`} onSubmit={handleSubmit}>
+      <form className={`${panelClass} gap-4.5`} onSubmit={handleSubmit} noValidate>
         <div className="flex items-center justify-between gap-4 max-[720px]:flex-col max-[720px]:items-stretch">
           <div className="flex items-center gap-3">
             <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
@@ -268,14 +262,14 @@ export default function ReportsPage() {
                     type="date"
                     name="from"
                     value={filters.from}
-                    max={filters.to && filters.to < today ? filters.to : today}
+                    max={shiftCalendarDay(filters.to && filters.to < today ? filters.to : today, -1)}
                     onChange={handleChange}
                     required
                   />
                 </label>
                 <label>
                   Hasta
-                  <input type="date" name="to" value={filters.to} min={filters.from} max={today} onChange={handleChange} required />
+                  <input type="date" name="to" value={filters.to} min={shiftCalendarDay(filters.from, 1)} max={today} onChange={handleChange} required />
                 </label>
               </>
             )}
@@ -296,6 +290,8 @@ export default function ReportsPage() {
             </button>
           </div>
         </div>
+        {showDateError && dateError && <p role="alert" className="m-0 text-sm text-critical-600">{dateError}</p>}
+        <p className="m-0 text-xs text-slate-500">Los límites de selección corresponden a la fecha actual en America/Santiago (Chile). En Rango de fechas, Desde y Hasta deben ser días distintos.</p>
       </form>
 
       <div className="grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">

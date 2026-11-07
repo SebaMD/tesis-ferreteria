@@ -128,6 +128,25 @@ test('checkout retains the last quote only as provisional, keeps payment guards 
   assert.match(page, /min-h-24[^\n]+border-slate-300[^\n]+p-3[^\n]+maxLength=\{500\}/);
   assert.doesNotMatch(page, /data: null, needsAcceptance: true/);
 });
+
+test('one final payment action confirms the current total without accepting changed quotes on receipt', async () => {
+  const page = await read('pages/CheckoutPage.jsx');
+  const state = acceptCheckoutQuote(receiveCheckoutQuote({}, 'old', quote('pickup')), 'old', 'pickup');
+  const changed = receiveCheckoutQuote(state, 'new', quote('local'));
+  assert.equal(changed.acceptedSignature, 'pickup');
+  assert.equal(changed.needsAcceptance, true);
+  assert.equal(acceptCheckoutQuote(changed, 'old', 'pickup'), changed);
+  assert.equal(acceptCheckoutQuote(changed, 'new', 'local').acceptedSignature, 'local');
+  assert.doesNotMatch(page, /Aceptar resumen actualizado|&& !quoteState.needsAcceptance/);
+  assert.match(page, /quoteState.needsAcceptance && <p role="status"/);
+  assert.match(page, /Pagar con Webpay Plus\$\{quote \? ` · \$\{formatClp\(quote.total\)\}/);
+  const payment = page.slice(page.indexOf('const handlePayment ='), page.indexOf('return (', page.indexOf('const handlePayment =')));
+  assert.equal((payment.match(/acceptCheckoutQuote\(/g) || []).length, 1);
+  assert.match(payment, /code === "QUOTE_CHANGED"/);
+  assert.ok(payment.indexOf('payment.total !== Number(quote.total)') < payment.indexOf('submitWebpayForm(payment)'));
+  assert.match(payment, /!Number.isSafeInteger\(payment.total\)/);
+  assert.doesNotMatch(payment, /setTimeout|handlePayment\(\)/);
+});
 test('counters share theme-aware contrast without modifying count helpers; conditions omit only their own redundant link', async () => {
   const count = await read('components/TableRecordCount.jsx'), css = await read('styles/styles.css');
   assert.match(count, /className="table-result-count"/);

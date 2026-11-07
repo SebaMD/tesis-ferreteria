@@ -192,7 +192,7 @@ function CheckoutForm({ draftStore }) {
       if (isClient) {
         const orders = await getMyOnlineOrdersRequest();
         if (!isCurrent()) return;
-        setPendingOrder(orders.find((order) => order.status === "PENDING_PAYMENT") || null);
+        setPendingOrder(orders.find((order) => order.blocksNewPayment || order.status === "PENDING_PAYMENT") || null);
       } else {
         const order = await getGuestPendingOrderRequest();
         if (isCurrent()) setPendingOrder(order);
@@ -293,8 +293,7 @@ function CheckoutForm({ draftStore }) {
     && guestDataIsValid
     && emailVerifiedForCheckout
     && Boolean(quote)
-    && Boolean(quote.quoteFingerprint && quote.commercialSignature)
-    && !quoteState.needsAcceptance;
+    && Boolean(quote.quoteFingerprint && quote.commercialSignature);
   const pendingGuestAccessToken = !isClient && pendingOrder
     ? readGuestOrderAccessToken(pendingOrder.id)
     : null;
@@ -363,7 +362,16 @@ function CheckoutForm({ draftStore }) {
       if (!isClient && payment.guestAccessToken) {
         saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
       }
+      // A successful checkout consumed this one-purchase proof on the server.
+      if (!isClient) setGuestEmailVerification(null);
 
+      if (!Number.isSafeInteger(payment.total) || payment.total <= 0 || payment.total !== Number(quote.total)) {
+        const message = "El importe del intento de pago no coincide con el resumen confirmado. Revisa el pedido pendiente antes de continuar; no se abrió Webpay.";
+        setQuoteState(previous => ({ ...previous, error: message, errorKind: "PAYMENT" }));
+        toast.error(message);
+        await loadPendingOrder(false);
+        return;
+      }
       submitWebpayForm(payment);
       redirectStarted = true;
     } catch (error) {
@@ -399,7 +407,7 @@ function CheckoutForm({ draftStore }) {
           <div className="grid gap-1">
             <strong className="text-sm text-rust-800">Tienes un pago pendiente</strong>
             <span className="text-xs leading-5 text-rust-700">
-              Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.
+              {pendingOrder.paymentRecoveryMessage || "Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago."}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 max-[520px]:w-full max-[520px]:*:flex-1">
@@ -409,16 +417,14 @@ function CheckoutForm({ draftStore }) {
                 {continuingPayment ? "Abriendo..." : "Continuar pago"}
               </button>
             )}
-            {(isClient || pendingGuestAccessToken) && (
               <Link
                 className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 bg-white px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100"
                 to={isClient
                   ? `/orders#order-${pendingOrder.id}`
-                  : `/order-tracking#token=${encodeURIComponent(pendingGuestAccessToken)}`}
+                  : pendingGuestAccessToken ? `/order-tracking#token=${encodeURIComponent(pendingGuestAccessToken)}` : `/guest-orders#order-${pendingOrder.id}`}
               >
                 Ver pedido
               </Link>
-            )}
           </div>
         </section>
       )}
@@ -649,7 +655,7 @@ function CheckoutForm({ draftStore }) {
             <div className="flex items-center justify-between gap-3 text-sm"><span className="font-bold text-slate-600">Entrega{!quote && displayQuote ? " (último resumen)" : ""}</span><strong className="text-right text-ink-950">{(displayQuote ? quoteState.deliveryType : deliveryType) === "DELIVERY" ? "Despacho a domicilio · Santa Juana" : "Retiro en tienda"}</strong></div>
             {displayQuote && <div aria-live="polite" aria-busy={quotePending}><OrderAmounts order={displayQuote} checkout provisional={!quote} />{quoteState.deliveryType === "DELIVERY" && displayQuote.deliveryBenefit?.active && <p className="mt-2 mb-0 text-xs text-slate-600">Gratuidad solo si los productos después de descuentos superan estrictamente {formatClp(displayQuote.deliveryBenefit.threshold)}.</p>}</div>}
             {quotePending && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">Actualizando resumen para {deliveryType === "DELIVERY" ? "despacho local" : "retiro en tienda"}…{displayQuote ? " Los importes mostrados son del último resumen validado, no están confirmados para pagar." : " Se validan los importes en el servidor."}</p>}
-            {quote && quoteState.needsAcceptance && <div role="status" className="grid gap-3 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950"><p className="m-0">El resumen cambió. Revisa los productos, condiciones e importes y acepta el resumen actualizado antes de iniciar el pago.</p><button type="button" onClick={() => setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature))}>Aceptar resumen actualizado · {formatClp(quote.total)}</button></div>}
+            {quote && quoteState.needsAcceptance && <p role="status" className="m-0 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950">El resumen cambió. Revisa los productos, condiciones e importes actualizados. Para confirmarlos e iniciar el pago, pulsa Pagar por el total mostrado.</p>}
             {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
               <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
               {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
@@ -671,9 +677,9 @@ function CheckoutForm({ draftStore }) {
 
             <button type="button" onClick={handlePayment} disabled={!canStartPayment}>
               <CreditCard size={18} />
-              {submitting ? "Iniciando Webpay..." : "Pagar con Webpay Plus"}
+              {submitting ? "Iniciando Webpay..." : `Pagar con Webpay Plus${quote ? ` · ${formatClp(quote.total)}` : ""}`}
             </button>
-            {quote && !quoteState.needsAcceptance && <p className="m-0 text-xs leading-5 text-slate-600">Al pulsar Pagar aceptas este resumen y su total de {formatClp(quote.total)}. El servidor lo validará nuevamente antes de iniciar Webpay.</p>}
+            {quote && <p className="m-0 text-xs leading-5 text-slate-600">Al pulsar Pagar aceptas este resumen y su total de {formatClp(quote.total)}. El servidor lo validará nuevamente antes de iniciar Webpay.</p>}
             <Link className="text-center text-sm font-bold text-rust-600" to={back.to} state={back.state}>{checkoutIntent?.source === "DIRECT" || directPurchase ? "Modificar selección en el producto" : "Modificar carrito"}</Link>
           </aside>
         </div>

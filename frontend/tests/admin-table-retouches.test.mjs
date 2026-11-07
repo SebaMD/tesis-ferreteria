@@ -31,7 +31,7 @@ test('audit date labels preserve UTC day boundaries and Chilean event display', 
   assert.match(backend, /e\.created_at >= \$\{q\.from\}::date::timestamp at time zone 'UTC'/);
   assert.match(backend, /e\.created_at < \(\$\{q\.to\}::date \+ 1\)::timestamp at time zone 'UTC'/);
   assert.ok(auditFilterValidationMessage({ ...auditEmptyFilters, from: '0000-11-04' }));
-  assert.equal(auditFilterValidationMessage({ ...auditEmptyFilters, from: '2026-11-04', to: '2026-11-04' }), '');
+  assert.match(auditFilterValidationMessage({ ...auditEmptyFilters, from: '2026-11-04', to: '2026-11-04' }), /estrictamente anterior/);
   const presentation = await readFile(new URL('../src/helpers/auditPresentation.js', import.meta.url), 'utf8');
   assert.match(presentation, /timeZone: "America\/Santiago"/);
 });

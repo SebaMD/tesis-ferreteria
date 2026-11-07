@@ -4,7 +4,7 @@ test('new checkout has structured local destination and a definitive server summ
  const page=await read('pages/CheckoutPage.jsx');
  for(const field of ['deliveryRecipientName','deliveryPhone','deliveryAddress','deliveryReference','deliveryCommune:DELIVERY_COMMUNE','destinationValid','quoteFingerprint: quote.quoteFingerprint','<OrderAmounts order={displayQuote}'])assert.ok(page.includes(field),field);
  assert.doesNotMatch(page,/DeliveryQuoteRequestForm|quotePinRequest|Por cotizar|distanceKm|navigator.geolocation/);
- assert.match(page,/quoteOnlineOrderRequest\(\{ items: selectedItems, deliveryType,/);assert.match(page,/&& !quoteState.needsAcceptance/);
+ assert.match(page,/quoteOnlineOrderRequest\(\{ items: selectedItems, deliveryType,/);assert.match(page,/Boolean\(quote.quoteFingerprint && quote.commercialSignature\)/);
  assert.doesNotMatch(page.slice(page.indexOf('const checkoutData ='),page.indexOf('const payment =',page.indexOf('const checkoutData ='))),/deliveryFee:|total:/);
  const amounts=await read('components/orders/OrderAmounts.jsx');
  assert.match(page,/<OrderAmounts order=\{displayQuote\} checkout provisional=\{!quote\}/);

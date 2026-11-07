@@ -28,6 +28,8 @@ export default function OrderSummaryCard({
   const primaryItem = order.items?.[0];
   const extraProducts = Math.max((order.items?.length || 0) - 1, 0);
   const incomplete = isIncompleteOrder(order);
+  const paymentPending = ["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(order.status);
+  const stackedActions = incomplete || paymentPending;
   const inProgress = isOnlineOrderPaid(order.status) && order.status !== "DELIVERED";
 
   return (
@@ -68,14 +70,14 @@ export default function OrderSummaryCard({
               <span className="truncate">{order.deliveryAddress}, {order.deliveryCommune}</span>
             </span>
           )}
-          <p className="m-0 line-clamp-2 text-xs leading-5 text-slate-500">{status.description}</p>
+          <p className="m-0 text-xs leading-5 text-slate-500">{paymentPending && order.paymentRecoveryMessage ? order.paymentRecoveryMessage : status.description}</p>
         </div>
 
-        <div className={`flex min-w-48 flex-col items-end justify-between gap-3 border-l border-slate-200 pl-4 max-[680px]:col-span-2 max-[680px]:min-w-0 max-[680px]:border-t max-[680px]:border-l-0 max-[680px]:pt-3 max-[680px]:pl-0 ${incomplete ? "w-52 max-[680px]:w-full" : "max-[680px]:flex-row max-[680px]:items-start"}`}>
+        <div className={`flex min-w-48 flex-col items-end justify-between gap-3 border-l border-slate-200 pl-4 max-[680px]:col-span-2 max-[680px]:min-w-0 max-[680px]:border-t max-[680px]:border-l-0 max-[680px]:pt-3 max-[680px]:pl-0 ${stackedActions ? "w-52 max-[680px]:w-full" : "max-[680px]:flex-row max-[680px]:items-start"}`}>
           <strong className="font-mono text-lg text-ink-950">{formatClp(order.total)}</strong>
-          <div className={`grid justify-items-stretch gap-2 ${incomplete ? "w-full [&>button]:w-full [&>button]:min-h-11" : "max-[430px]:w-full"}`}>
+          <div className={`grid justify-items-stretch gap-2 ${stackedActions ? "w-full [&>button]:w-full [&>button]:min-h-11" : "max-[430px]:w-full"}`}>
             <DownloadReceiptButton order={order} requestReceipt={requestReceipt} />
-            {incomplete && actions}
+            {stackedActions && actions}
             <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => onView(order)}>
               {order.status === "DELIVERED" ? "Ver compra" : "Ver detalle"} <ChevronRight size={16} />
             </button>
@@ -83,7 +85,7 @@ export default function OrderSummaryCard({
           </div>
         </div>
       </div>
-      {!incomplete && actions && <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{actions}</footer>}
+      {!stackedActions && actions && <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{actions}</footer>}
     </article>
   );
 }

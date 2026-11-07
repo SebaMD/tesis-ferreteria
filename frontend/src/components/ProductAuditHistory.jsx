@@ -8,6 +8,7 @@ import AppSelect from "./AppSelect.jsx";
 import Pagination from "./Pagination.jsx";
 import { auditReadableRows, auditLocalDate, auditResponsible } from "../helpers/auditPresentation.js";
 import { auditEmptyFilters, auditFilterValidationMessage, auditQueryFromSearch, auditQueryToSearch } from "../helpers/auditNavigation.js";
+import { calendarDay, shiftCalendarDay } from "../helpers/dateFilters.js";
 
 export default function ProductAuditHistory() {
   const location = useLocation(), navigate = useNavigate();
@@ -28,6 +29,8 @@ function AuditQuery({ query, onNavigate }) {
   const listId = useId();
   const operationId = `${listId}-operation`;
   const dateHelpId = `${listId}-dates`;
+  const today = calendarDay();
+  const fromMax = shiftCalendarDay(draft.to && draft.to < today ? draft.to : today, -1);
   const apply = useCallback((filters, incomplete = {}) => {
     if (auditFilterValidationMessage(filters, incomplete)) return;
     const next = { ...filters, page: "1" };
@@ -77,8 +80,8 @@ function AuditQuery({ query, onNavigate }) {
         <div className="grid min-w-0 gap-1 text-sm"><label htmlFor={operationId}>Operación</label><AppSelect id={operationId} ariaLabel="Operación" searchable value={draft.operation} onChange={value => changeField("operation", value)} options={[{ value: "", label: "Todas las operaciones" }, ...Object.entries(response?.operations || {}).map(([value, label]) => ({ value, label }))]} renderOption={option => <span className="whitespace-normal break-words py-2">{option.label}</span>} /></div>
         <label className="grid min-w-0 gap-1 text-sm">ID de producto<input type="number" min="1" max="2147483647" step="1" {...field("productId")} /></label>
         <div className="grid min-w-0 content-start gap-1"><label className="grid min-w-0 gap-1 text-sm">ID de familia<input aria-describedby="audit-family-help" type="number" min="1" max="2147483647" step="1" {...field("familyId")} /></label><p id="audit-family-help" className="m-0 text-xs font-normal text-slate-500">Agrupa las variantes de un producto</p></div>
-        <label className="grid min-w-0 gap-1 text-sm">Desde<input type="date" aria-describedby={dateHelpId} {...field("from")} /></label>
-        <label className="grid min-w-0 gap-1 text-sm">Hasta<input type="date" aria-describedby={dateHelpId} min={draft.from || undefined} {...field("to")} /></label>
+        <label className="grid min-w-0 gap-1 text-sm">Desde<input type="date" aria-describedby={dateHelpId} max={fromMax} {...field("from")} /></label>
+        <label className="grid min-w-0 gap-1 text-sm">Hasta<input type="date" aria-describedby={dateHelpId} min={shiftCalendarDay(draft.from, 1)} max={today} {...field("to")} /></label>
         <div className="audit-page-controls grid min-w-0 self-end"><button type="button" className={`${secondaryButtonClass} mr-0! w-full justify-center`} onClick={() => { setDraftState({ query, filters: auditEmptyFilters, incomplete: {} }); const next = { ...auditEmptyFilters, page: "1" }; if (auditQueryToSearch(next) !== auditQueryToSearch(query)) onNavigate(next, { automatic: true }); }}><RotateCcw size={17} aria-hidden="true" />Limpiar filtros</button></div>
         <p id={dateHelpId} className="m-0 text-xs text-slate-500 sm:col-span-2 lg:col-span-3">Desde y Hasta filtran días completos en UTC; Hasta incluye todo el día. La hora de los eventos se muestra en America/Santiago (Chile).</p>
       </form>

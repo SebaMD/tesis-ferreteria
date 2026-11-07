@@ -43,6 +43,12 @@ function isFutureDate(date: Date, now: Date) {
   return date > today;
 }
 
+function chileDay(now: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (type: string) => parts.find(value => value.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function validateDailyReportQuery(
   query: unknown,
   now = new Date(),
@@ -54,7 +60,7 @@ export function validateDailyReportQuery(
   const input = query as Record<string, unknown>;
   const parsedDate = parseDate(input.date, "La fecha");
   if (!parsedDate.success) return parsedDate;
-  if (isFutureDate(parsedDate.value.date, now)) {
+  if (parsedDate.value.label > chileDay(now)) {
     return { success: false, error: "La fecha no puede ser futura" };
   }
 
@@ -87,12 +93,19 @@ export function validateSalesReportQuery(
   if (parsedFrom.value.date > parsedTo.value.date) {
     return { success: false, error: "La fecha desde no puede ser posterior a la fecha hasta" };
   }
-  if (isFutureDate(parsedFrom.value.date, now)) {
+  if (parsedFrom.value.label > chileDay(now)) {
     return { success: false, error: "La fecha desde no puede ser futura" };
   }
-  if (isFutureDate(parsedTo.value.date, now)) {
+  if (parsedTo.value.label > chileDay(now)) {
     return { success: false, error: "La fecha hasta no puede ser futura" };
   }
+
+  // Existing consumers use from=to for the one-day report; explicit range mode is stricter.
+  const mode = input.mode ?? (parsedFrom.value.label === parsedTo.value.label ? "single" : "range");
+  if (mode !== "single" && mode !== "range") return { success: false, error: "Modo de fecha invalido" };
+  if (mode === "single" && parsedFrom.value.label !== parsedTo.value.label) return { success: false, error: "Un día requiere una única fecha" };
+  if (mode === "range" && parsedFrom.value.label >= chileDay(now)) return { success: false, error: "La fecha desde debe ser anterior a hoy (Chile)" };
+  if (mode === "range" && parsedFrom.value.label >= parsedTo.value.label) return { success: false, error: "Desde debe ser estrictamente anterior a Hasta; para una sola fecha utilice Un día" };
 
   const value: ReportDateRange = {
     from: parsedFrom.value.date,

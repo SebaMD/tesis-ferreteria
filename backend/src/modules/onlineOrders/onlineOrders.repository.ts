@@ -270,8 +270,7 @@ export async function findPendingOrderForClient(
 ) {
   const conditions = [
     eq(onlineOrdersTable.clientId, clientId),
-    eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-    sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+    unresolvedPaymentOrder(),
   ];
 
   if (excludedOrderId !== undefined) conditions.push(ne(onlineOrdersTable.id, excludedOrderId));
@@ -293,8 +292,7 @@ export async function findPendingOrderForGuestSession(
   const conditions = [
     eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
     isNull(onlineOrdersTable.clientId),
-    eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-    sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+    unresolvedPaymentOrder(),
   ];
 
   if (excludedOrderId !== undefined) conditions.push(ne(onlineOrdersTable.id, excludedOrderId));
@@ -306,6 +304,24 @@ export async function findPendingOrderForGuestSession(
     .limit(1);
 
   return order ?? null;
+}
+
+// A provider result that is still unknown must not stop blocking just because the stock lease ended.
+function unresolvedPaymentOrder() {
+  return sql`(
+    (${onlineOrdersTable.status} = 'PENDING_PAYMENT' and ${onlineOrdersTable.reservationExpiresAt} > now())
+    or (${onlineOrdersTable.status} in ('PENDING_PAYMENT', 'PAYMENT_REVIEW') and exists (
+      select 1 from ${onlinePaymentsTable} p where p.order_id = ${onlineOrdersTable.id}
+      and p.token is not null and p.status in ('CREATED', 'PROCESSING')
+    ))
+  )`;
+}
+
+export async function findUnresolvedPaymentForOrder(tx: DbTransaction, orderId: number) {
+  const [payment] = await tx.select({ id: onlinePaymentsTable.id }).from(onlinePaymentsTable)
+    .where(and(eq(onlinePaymentsTable.orderId, orderId), inArray(onlinePaymentsTable.status, ["CREATED", "PROCESSING"])))
+    .limit(1);
+  return payment ?? null;
 }
 
 export async function createOnlineOrder(
@@ -625,6 +641,7 @@ export async function findPaymentsNeedingReconciliation(
   scope: {
     clientId?: number;
     guestSessionHash?: string;
+    guestDeviceHash?: string;
     orderId?: number;
   } = {},
 ) {
@@ -633,12 +650,13 @@ export async function findPaymentsNeedingReconciliation(
     sql`(
       (
         ${onlinePaymentsTable.status} = 'CREATED'
-        and ${onlineOrdersTable.status} = 'PENDING_PAYMENT'
-        and ${onlineOrdersTable.reservationExpiresAt} <= now() + interval '2 minutes'
+        and ${onlineOrdersTable.status} in ('PENDING_PAYMENT', 'PAYMENT_REVIEW')
+        and (${onlineOrdersTable.reservationExpiresAt} <= now() + interval '2 minutes'
+          or ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore.toISOString()}::timestamp)
       )
       or (
         ${onlinePaymentsTable.status} = 'PROCESSING'
-        and ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore}
+        and ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore.toISOString()}::timestamp
       )
     )`,
   ];
@@ -648,6 +666,10 @@ export async function findPaymentsNeedingReconciliation(
   }
   if (scope.guestSessionHash !== undefined) {
     conditions.push(eq(onlineOrdersTable.guestSessionHash, scope.guestSessionHash));
+  }
+  if (scope.guestDeviceHash !== undefined) {
+    conditions.push(eq(onlineOrdersTable.guestDeviceHash, scope.guestDeviceHash));
+    conditions.push(isNull(onlineOrdersTable.clientId));
   }
   if (scope.orderId !== undefined) {
     conditions.push(eq(onlineOrdersTable.id, scope.orderId));
@@ -884,7 +906,6 @@ async function attachOrderData<T extends { id: number; total: string }>(orders: 
       redirectUrl: null,
     };
     const orderStatus = String((order as { status?: string }).status || "");
-    const reservationExpiresAt = (order as { reservationExpiresAt?: Date }).reservationExpiresAt;
     const terminalOrder = ["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(orderStatus);
     const terminalPayment = !payment || ["FAILED", "CANCELLED", "EXPIRED"].includes(payment.status);
 
@@ -893,11 +914,16 @@ async function attachOrderData<T extends { id: number; total: string }>(orders: 
       items: itemsByOrder.get(order.id) ?? [],
       commercialAmounts: buildCommercialAmounts({ ...order, items: itemsByOrder.get(order.id) ?? [] }),
       payment: payment ? clientPayment : null,
-      canContinuePayment: orderStatus === "PENDING_PAYMENT"
-        && payment?.status === "CREATED"
-        && Boolean(token && redirectUrl)
-        && Boolean(reservationExpiresAt && reservationExpiresAt.getTime() > Date.now()),
-      canRetryPayment: terminalOrder,
+      // INITIALIZED does not prove that an already opened external form can be reopened.
+      canContinuePayment: false,
+      blocksNewPayment: orderStatus === "PENDING_PAYMENT"
+        || (orderStatus === "PAYMENT_REVIEW" && ["CREATED", "PROCESSING"].includes(payment?.status || "")),
+      paymentRecoveryMessage: ["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(orderStatus)
+        ? payment?.status === "AUTHORIZED"
+          ? "El pago fue autorizado y requiere revisión del pedido. No vuelvas a pagar este pedido."
+          : "Aún no podemos confirmar el resultado de este pago. No vuelvas a pagarlo. Puedes actualizar su estado o consultar con la ferretería indicando el folio del pedido."
+        : null,
+      canRetryPayment: terminalOrder && terminalPayment,
       canArchive: terminalOrder && terminalPayment,
     };
   });
@@ -1063,8 +1089,7 @@ export async function findPendingOrderDetailsForGuestSession(guestSessionHash: s
     .where(and(
       eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
       isNull(onlineOrdersTable.clientId),
-      eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-      sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+      unresolvedPaymentOrder(),
     ))
     .limit(1);
 

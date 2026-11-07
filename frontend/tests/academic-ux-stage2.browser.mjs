@@ -285,7 +285,7 @@ try {
       await check.click();
       await page.getByRole("button", { name: "Confirmar reemplazo al crear el pedido" }).click();
     }
-    await Promise.all([page.waitForResponse(response => response.url().endsWith("/online-orders/checkout")), page.getByRole("button", { name: "Pagar con Webpay Plus" }).click()]);
+    await Promise.all([page.waitForResponse(response => response.url().endsWith("/online-orders/checkout")), page.getByRole("button", { name: /^Pagar con Webpay Plus/ }).click()]);
     assert.equal(requests.at(-1).saveDeliveryAddress, true);
     assert.deepEqual(requests.at(-1).items, [{ productId: 99, quantity: 1 }]);
     assert.equal(requests.at(-1).deliveryRecipientName, "Otro destinatario");
@@ -304,7 +304,7 @@ try {
       await page.getByLabel("Teléfono de contacto").fill("+56987654321");
       await page.getByLabel("Dirección, numeración o sector").fill("Calle del pedido 456");
     } else await page.getByRole("button", { name: "Usar otra dirección", exact: true }).waitFor();
-    await Promise.all([page.waitForResponse(response => response.url().endsWith("/online-orders/checkout")), page.getByRole("button", { name: "Pagar con Webpay Plus" }).click()]);
+    await Promise.all([page.waitForResponse(response => response.url().endsWith("/online-orders/checkout")), page.getByRole("button", { name: /^Pagar con Webpay Plus/ }).click()]);
     assert.equal(requests.at(-1).saveDeliveryAddress, false, "neither reuse nor a one-order alternative replaces account data");
     assert.equal(requests.at(-1).deliveryAddress, mode === "saved" ? saved.address : "Calle del pedido 456");
     await noOverflow(page); await page.context().close();

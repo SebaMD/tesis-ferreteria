@@ -9,8 +9,8 @@ import {
   resolveOrderProductAssets,
 } from "../helpers/productAssets.js";
 
-export async function createOnlineOrderCheckoutRequest(data) {
-  const response = await api.post("/online-orders/checkout", data);
+export async function createOnlineOrderCheckoutRequest(data, { expectedClientId } = {}) {
+  const response = await api.post("/online-orders/checkout", data, { expectedClientId });
   return response.data.data;
 }
 
@@ -78,6 +78,7 @@ function guestOrderHeaders(accessToken) {
 export async function createGuestOnlineOrderCheckoutRequest(data) {
   const response = await api.post("/online-orders/guest/checkout", data, {
     headers: guestSessionHeaders(),
+    expectedGuest: true,
   });
   return response.data.data;
 }

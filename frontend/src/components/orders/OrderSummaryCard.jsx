@@ -23,7 +23,7 @@ export default function OrderSummaryCard({
   requestReceipt,
   secondary = false,
 }) {
-  const status = getOnlineOrderStatus(order.status);
+  const status = getOnlineOrderStatus(order.status, order.payment?.status);
   const delivery = getOnlineOrderDeliveryType(order.deliveryType);
   const primaryItem = order.items?.[0];
   const extraProducts = Math.max((order.items?.length || 0) - 1, 0);

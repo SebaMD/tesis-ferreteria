@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { checkoutRequestHash, providerQueryWindowEnded } from "./checkoutIdentity.js";
 import { commercialQuoteSignature } from "../deliverySettings/deliveryPricing.js";
 import { canonicalizeDeliveryCommune } from "../../utils/delivery.js";
 import { assertManualDeliveryPaymentAuthorization } from "../deliveryQuotes/manualDeliveryAuthorization.js";
@@ -36,6 +37,8 @@ import {
   deleteClientDeliveryAddress,
   cancelOtherOpenPayments,
   claimPaymentReconciliationLease,
+  claimPaymentStatusQuery,
+  stopExpiredProviderQueries,
   deferSupersededProcessingPayment,
   expirePendingOrdersForClient,
   expirePendingOrdersForGuestSession,
@@ -64,7 +67,6 @@ import {
   findPaymentByToken,
   findPaymentForUpdateById,
   findPaymentLaunchByOrder,
-  findPendingOrderForClient,
   findPendingOrderForGuestSession,
   findPendingOrderDetailsForGuestSession,
   findUnresolvedPaymentForOrder,
@@ -201,8 +203,6 @@ export type CheckoutOwner =
     emailVerificationChallengeId?: number;
   };
 
-const WEBPAY_LAUNCH_REUSE_MILLISECONDS = 4 * 60_000;
-const WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS = WEBPAY_TIMEOUT_MS + 15_000;
 const RECONCILIATION_EXTENSION_MILLISECONDS = 5 * 60_000;
 const PAYMENT_REVIEW_AFTER_MILLISECONDS = 60 * 60_000;
 const RECONCILIATION_STALE_MARGIN_MILLISECONDS = 15_000;
@@ -340,15 +340,7 @@ export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateC
     : { guestSessionHash: owner.guestSessionHash });
 
   let prepared: PreparedPayment | null = null;
-  let existingLaunch: {
-    orderId: number;
-    paymentId: number;
-    token: string;
-    url: string;
-    total: number;
-    guestAccessToken?: string;
-  } | null = null;
-  let expiredLaunch = false;
+  const requestHash = checkoutRequestHash(data, owner.type === "GUEST" ? owner : undefined);
   let clientEmailVerified = false;
   const orderHistoryLabel = owner.type === "CLIENT" ? "Mis pedidos" : "el seguimiento del pedido";
 
@@ -371,70 +363,11 @@ export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateC
         if (owner.type === "GUEST") {
           await bindGuestOrderToDevice(tx, existingOrder.id, owner.guestDeviceHash);
         }
-        const payment = await findPaymentLaunchByOrder(tx, existingOrder.id);
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && payment.token
-          && payment.redirectUrl
-          && Date.now() - payment.createdAt.getTime() < WEBPAY_LAUNCH_REUSE_MILLISECONDS
-        ) {
-          const guestAccessToken = owner.type === "GUEST"
-            ? await issueGuestAccessInTransaction(tx, existingOrder.id)
-            : undefined;
-          existingLaunch = {
-            orderId: existingOrder.id,
-            paymentId: payment.id,
-            token: payment.token,
-            url: payment.redirectUrl,
-            total: Number(existingOrder.total),
-            ...(guestAccessToken ? { guestAccessToken } : {}),
-          };
-          return;
-        }
-
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && !payment.token
-          && !payment.redirectUrl
-          && Date.now() - payment.createdAt.getTime() < WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS
-        ) {
-          throw new OnlineOrderError(
-            "El pago Webpay se esta iniciando. Espera unos segundos y vuelve a intentarlo.",
-            409,
-          );
-        }
-
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && !payment.token
-          && !payment.redirectUrl
-        ) {
-          await updatePaymentResult(tx, payment.id, { status: "EXPIRED" });
-          await updateOrderStatus(tx, existingOrder.id, "EXPIRED", ["PENDING_PAYMENT"]);
-          expiredLaunch = true;
-          return;
-        }
-        if (existingOrder.status === "PENDING_PAYMENT" && payment?.status === "CREATED") {
-          throw new OnlineOrderError(
-            `La sesion anterior de Webpay ya no puede reutilizarse. Revisa ${orderHistoryLabel}.`,
-            409,
-          );
+        if (!existingOrder.checkoutRequestHash || existingOrder.checkoutRequestHash !== requestHash) {
+          throw new OnlineOrderError("Esta clave corresponde a otra selección o a un pedido histórico. Inicia una compra nueva desde el catálogo o carrito.", 409);
         }
         throw new OnlineOrderError(
-          `Este intento de checkout ya fue procesado. Revisa ${orderHistoryLabel}.`,
-          409,
-        );
-      }
-
-      const pendingOrder = owner.type === "CLIENT"
-        ? await findPendingOrderForClient(tx, owner.clientId)
-        : await findPendingOrderForGuestSession(tx, owner.guestSessionHash);
-      if (pendingOrder) {
-        throw new OnlineOrderError(
-          "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
+          `Esta compra ya tiene un pedido. Revisa ${orderHistoryLabel}; no se reenviará una sesión Webpay ni se creará otro cobro con la misma clave.`,
           409,
         );
       }
@@ -473,6 +406,7 @@ export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateC
         guestSessionHash: owner.type === "GUEST" ? owner.guestSessionHash : null,
         guestDeviceHash: owner.type === "GUEST" ? owner.guestDeviceHash : null,
         checkoutKey: data.checkoutKey,
+        checkoutRequestHash: requestHash,
         total: quote.total.toFixed(2),
         productsSubtotal: quote.productsSubtotal.toFixed(2),
         productsDiscountTotal: quote.productsDiscountTotal.toFixed(2),
@@ -537,20 +471,13 @@ export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateC
   } catch (error) {
     if (databaseErrorCode(error) === "23505") {
       throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
+        "No se pudo registrar una intención única de compra. Consulta Mis pedidos antes de volver a enviarla.",
         409,
       );
     }
     throw error;
   }
 
-  if (expiredLaunch) {
-    throw new OnlineOrderError(
-      `La sesion de Webpay vencio. Reintenta el pago desde ${orderHistoryLabel}.`,
-      409,
-    );
-  }
-  if (existingLaunch) return existingLaunch;
   if (!prepared) throw new OnlineOrderError("No se pudo preparar el pago", 500);
   return startWebpayPayment(prepared);
 }
@@ -617,12 +544,6 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
     }
     if (await findUnresolvedPaymentForOrder(tx, order.id)) {
       throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
-    }
-    if (await findPendingOrderForClient(tx, clientId, orderId)) {
-      throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de reintentar otro pedido.",
-        409,
-      );
     }
 
     const items = await findOrderItems(tx, order.id);
@@ -915,12 +836,6 @@ async function retryGuestOrderPayment(
     }
     if (await findUnresolvedPaymentForOrder(tx, order.id)) {
       throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
-    }
-    if (await findPendingOrderForGuestSession(tx, order.guestSessionHash, order.id)) {
-      throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza la compra anterior antes de reintentar.",
-        409,
-      );
     }
 
     const items = await findOrderItems(tx, order.id);
@@ -1272,6 +1187,10 @@ export async function confirmWebpayPaymentService(token: string) {
   if (claim.mode === "settled") {
     return { orderId: claim.locatedPayment.orderId, orderStatus: claim.orderStatus };
   }
+  if (providerQueryWindowEnded(claim.locatedPayment.createdAt)) {
+    await stopExpiredProviderQueries(claim.locatedPayment.orderId, claim.locatedPayment.id);
+    return paymentOrderState(claim.locatedPayment.orderId);
+  }
 
   let response: WebpayTransactionResult | null = null;
   let source: ProviderResponseSource = claim.mode === "commit" ? "commit" : "status";
@@ -1303,6 +1222,10 @@ export async function confirmWebpayPaymentService(token: string) {
 export async function inspectWebpayReturnService(data: { token?: string; buyOrder?: string; sessionId?: string }) {
   const payment = await findPaymentByReturnIdentifiers(data);
   if (!payment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
+  if (providerQueryWindowEnded(payment.createdAt)) {
+    await stopExpiredProviderQueries(payment.orderId, payment.id);
+    return paymentOrderState(payment.orderId);
+  }
   if (payment.token) {
     try {
       const response = await getWebpayTransactionStatus(payment.token);
@@ -1330,6 +1253,10 @@ export async function cancelWebpayPaymentService(data: {
 }) {
   const locatedPayment = await findPaymentByReturnIdentifiers(data);
   if (!locatedPayment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
+  if (providerQueryWindowEnded(locatedPayment.createdAt)) {
+    await stopExpiredProviderQueries(locatedPayment.orderId, locatedPayment.id);
+    return paymentOrderState(locatedPayment.orderId);
+  }
 
   if (!locatedPayment.token) return paymentOrderState(locatedPayment.orderId);
   if (locatedPayment.token) {
@@ -1469,6 +1396,11 @@ async function reconcilePaymentCandidate(
   candidate: Awaited<ReturnType<typeof findPaymentsNeedingReconciliation>>[number],
 ) {
   if (!candidate.token) return;
+  if (!await claimPaymentStatusQuery(candidate.orderId, candidate.paymentId)) return;
+  if (providerQueryWindowEnded(candidate.paymentCreatedAt)) {
+    await stopExpiredProviderQueries(candidate.orderId, candidate.paymentId);
+    return;
+  }
 
   const locatedPayment = { id: candidate.paymentId, orderId: candidate.orderId };
   let response: WebpayTransactionResult;

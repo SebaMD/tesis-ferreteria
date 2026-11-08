@@ -24,6 +24,7 @@ import { getOrCreateGuestSessionId, readGuestOrderAccessToken, saveGuestOrderAcc
 import { guestCheckoutEmailIsVerified } from "../helpers/checkoutEmailVerification.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
+import { claimCheckoutOwner } from '../helpers/checkoutOwner.js';
 import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
 import {
   continueOnlineOrderPaymentRequest,
@@ -53,14 +54,21 @@ function createCheckoutKey() {
 
 export default function CheckoutPage() {
   const draftStore = useContext(CheckoutDraftContext);
-  return <CheckoutForm key={draftStore.owner} draftStore={draftStore} />;
+  const location = useLocation();
+  return <CheckoutOwnerBoundary key={`${draftStore.owner}:${location.key}`} owner={draftStore.owner} historyKey={location.key} draftStore={draftStore} />;
+}
+
+function CheckoutOwnerBoundary({ owner, historyKey, draftStore }) {
+  const [allowed] = useState(() => claimCheckoutOwner(sessionStorage, historyKey, owner));
+  if (!allowed) return <main className="mx-auto max-w-190 p-6"><h1>La sesión de esta compra cambió</h1><p>Vuelve al carrito de la cuenta activa para preparar una compra nueva. El pedido anterior conserva su propietario y su estado.</p><Link to="/cart">Ver carrito de la cuenta activa</Link></main>;
+  return <CheckoutForm draftStore={draftStore} />;
 }
 
 function CheckoutForm({ draftStore }) {
   const location = useLocation();
   const navigationType = useNavigationType();
   const { isAuthenticated, user, replaceSession } = useAuth();
-  const { items } = useCart();
+  const { items, captureCheckoutCart, rememberCheckoutCart, detachCheckoutCart } = useCart();
   const directPurchase = useMemo(
     () => readDirectPurchaseItem(location.state),
     [location.state],
@@ -125,6 +133,11 @@ function CheckoutForm({ draftStore }) {
   const clientEmailVerified = Boolean(user?.emailVerifiedAt || user?.emailVerified);
   const [guestEmailVerification, setGuestEmailVerification] = useState(initialDraft?.guestEmailVerification || null);
   const submittingRef = useRef(false);
+  useEffect(() => {
+    const returned = event => { if (event.persisted) { submittingRef.current = false; setSubmitting(false); } };
+    window.addEventListener('pageshow', returned);
+    return () => window.removeEventListener('pageshow', returned);
+  }, []);
   const refreshingRef = useRef(false);
   const [availabilityRequests] = useState(createLatestCheckoutRequest);
   const [pendingRequests] = useState(createLatestCheckoutRequest);
@@ -192,7 +205,7 @@ function CheckoutForm({ draftStore }) {
       if (isClient) {
         const orders = await getMyOnlineOrdersRequest();
         if (!isCurrent()) return;
-        setPendingOrder(orders.find((order) => order.blocksNewPayment || order.status === "PENDING_PAYMENT") || null);
+        setPendingOrder(orders.find((order) => order.requiresPaymentAttention || order.status === "PENDING_PAYMENT" || order.status === "PAYMENT_REVIEW" && order.payment?.status !== "AUTHORIZED") || null);
       } else {
         const order = await getGuestPendingOrderRequest();
         if (isCurrent()) setPendingOrder(order);
@@ -287,7 +300,6 @@ function CheckoutForm({ draftStore }) {
     && destinationValid
     && !pendingOrderLoading
     && !submitting
-    && !pendingOrder
     && rows.length > 0
     && !hasAvailabilityIssues
     && guestDataIsValid
@@ -327,6 +339,7 @@ function CheckoutForm({ draftStore }) {
 
     submittingRef.current = true;
     setSubmitting(true);
+    const cartSnapshot = !directPurchase && checkoutIntent?.source !== "DIRECT" && !(checkoutIntent && isClient) ? captureCheckoutCart?.(checkoutItems, checkoutKey) : null;
     setQuoteState(previous => acceptCheckoutQuote(previous, quoteKey, quote.commercialSignature));
     let redirectStarted = false;
 
@@ -343,7 +356,7 @@ function CheckoutForm({ draftStore }) {
         saveDeliveryAddress: isClient && deliveryType === "DELIVERY" && saveAddress && addressMode === "ALTERNATIVE",
       };
       const payment = isClient
-        ? await createOnlineOrderCheckoutRequest(checkoutData)
+        ? await createOnlineOrderCheckoutRequest(checkoutData, { expectedClientId: Number(user.id) })
         : await createGuestOnlineOrderCheckoutRequest({
           ...checkoutData,
           guestName: guestData.name,
@@ -362,6 +375,7 @@ function CheckoutForm({ draftStore }) {
       if (!isClient && payment.guestAccessToken) {
         saveGuestOrderAccessToken(payment.orderId, payment.guestAccessToken);
       }
+      rememberCheckoutCart?.(payment.orderId, cartSnapshot);
       // A successful checkout consumed this one-purchase proof on the server.
       if (!isClient) setGuestEmailVerification(null);
 
@@ -372,6 +386,7 @@ function CheckoutForm({ draftStore }) {
         await loadPendingOrder(false);
         return;
       }
+      detachCheckoutCart?.(payment, cartSnapshot);
       submitWebpayForm(payment);
       redirectStarted = true;
     } catch (error) {
@@ -390,6 +405,8 @@ function CheckoutForm({ draftStore }) {
     }
   };
 
+  if (submitting) return <main className="min-h-120"><LoadingOverlay active fullScreen label="Preparando pago seguro" /></main>;
+
   return (
     <main className="mx-auto grid w-full max-w-300 gap-5 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
@@ -405,9 +422,10 @@ function CheckoutForm({ draftStore }) {
       {!pendingOrderLoading && pendingOrder && (
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-rust-200 bg-rust-50 px-5 py-4">
           <div className="grid gap-1">
-            <strong className="text-sm text-rust-800">Tienes un pago pendiente</strong>
+            <strong className="text-sm text-rust-800">Una compra anterior requiere seguimiento</strong>
             <span className="text-xs leading-5 text-rust-700">
-              {pendingOrder.paymentRecoveryMessage || "Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago."}
+              {pendingOrder.paymentRecoveryMessage || "Consulta el estado de esa compra; no vuelvas a pagar el mismo pedido mientras su resultado sea incierto."}
+              {" Puedes realizar una compra nueva e independiente. Si incluyes los mismos productos, revisa que no estés repitiendo la compra anterior; se comprobará nuevamente el stock disponible."}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 max-[520px]:w-full max-[520px]:*:flex-1">
@@ -559,7 +577,7 @@ function CheckoutForm({ draftStore }) {
                   </p>
                 </div>
               )}
-              {isClient && !clientEmailVerified && !pendingOrder && (
+              {isClient && !clientEmailVerified && (
                 <EmailVerificationPanel
                   key={`client-${user.correo}`}
                   email={user.correo}
@@ -572,7 +590,7 @@ function CheckoutForm({ draftStore }) {
                   description="Solo debes hacerlo una vez antes de iniciar tu próxima compra."
                 />
               )}
-              {!isClient && !pendingOrder && (
+              {!isClient && (
                 guestEmailFieldsAreValid ? (
                   <EmailVerificationPanel
                     key={`guest-${normalizedGuestEmail}-${guestEmailVerification?.challengeId || "pending"}`}

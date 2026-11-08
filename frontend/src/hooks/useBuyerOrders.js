@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import CartContext from "../context/CartContext.js";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 
 // One authorized read at a time, shared by initial load, browser restoration and manual refresh.
 export default function useBuyerOrders(request, errorMessage) {
+  const cart = useContext(CartContext);
+  const settleCart = useRef(cart?.settlePurchasedOrder);
+  useEffect(() => { settleCart.current = cart?.settlePurchasedOrder; }, [cart?.settlePurchasedOrder]);
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +29,7 @@ export default function useBuyerOrders(request, errorMessage) {
       try {
         const data = await request({ signal: task.controller.signal });
         if (!mounted.current || active.current !== task || task.controller.signal.aborted) return;
+        for (const order of data) settleCart.current?.(order);
         setOrders(data);
         setSelectedOrder(current => current ? data.find(order => order.id === current.id) || null : null);
         setError("");

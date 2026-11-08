@@ -5,8 +5,8 @@ export async function loginRequest(credentials) {
   return response.data.data;
 }
 
-export async function logoutRequest() {
-  const response = await api.post("/auth/logout");
+export async function logoutRequest(expectedAuthToken) {
+  const response = await api.post("/auth/logout", undefined, { expectedAuthToken });
   return response.data;
 }
 

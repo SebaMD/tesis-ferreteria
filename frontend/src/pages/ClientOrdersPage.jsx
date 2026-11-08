@@ -9,6 +9,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import AppModal from "../components/AppModal.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
+import PaymentAttentionNotice from "../components/orders/PaymentAttentionNotice.jsx";
 import { groupBuyerOrders, isIncompleteOrder } from "../helpers/buyerOrderGroups.js";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import { dangerButtonClass } from "../helpers/uiClasses.js";
@@ -194,11 +195,11 @@ export default function ClientOrdersPage() {
         </section>
       ) : !loading && (
         <>
-          {grouped.payments.length > 0 && (
-            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" headerAction={refreshButton} />
-          )}
+          <PaymentAttentionNotice orders={grouped.payments} />
           <OrdersSection title="Pedidos en curso" description="Compras pagadas que todavía están en preparación, retiro o entrega." orders={grouped.active} renderOrder={renderOrder()} emptyText="No tienes pedidos en curso." />
+          {grouped.review.length > 0 && <OrdersSection title="Pagos autorizados · Pedidos en revisión" description="La autorización está registrada; su cumplimiento requiere revisión de la ferretería." orders={grouped.review} renderOrder={renderOrder()} emptyText="" headerAction={refreshButton} />}
           <OrdersSection title="Historial" description="Compras que ya fueron entregadas o retiradas." orders={grouped.delivered} renderOrder={renderOrder()} emptyText="Todavía no tienes compras entregadas." />
+          {grouped.payments.length > 0 && <OrdersSection title="Pagos pendientes" description="Resultados financieros todavía desconocidos. Actualizar estado no inicia otra compra." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" headerAction={refreshButton} />}
           {grouped.incomplete.length > 0 && (
             <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados que se conservan por trazabilidad." orders={grouped.incomplete} renderOrder={renderOrder(true)} emptyText="" />
           )}

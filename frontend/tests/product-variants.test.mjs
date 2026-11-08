@@ -102,6 +102,6 @@ test("unified editor replaces legacy management while protected maintenance endp
 test("loading overlay reuses its indicator without changing its accessible container", async () => {
   const source = await readFile(new URL("../src/components/LoadingOverlay.jsx", import.meta.url), "utf8");
   assert.equal((source.match(/className="app-loading-indicator"/g) || []).length, 1);
-  assert.match(source, /<LoadingIndicator \/>/);
-  for (const attribute of ['role="status"', 'aria-live="polite"', 'aria-atomic="true"', 'aria-label="Cargando"']) assert.ok(source.includes(attribute));
+  assert.match(source, /<LoadingIndicator label=\{label\} \/>/);
+  for (const attribute of ['role="status"', 'aria-live="polite"', 'aria-atomic="true"', 'aria-label={label}']) assert.ok(source.includes(attribute));
 });

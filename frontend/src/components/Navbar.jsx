@@ -27,7 +27,7 @@ export default function Navbar({ onToggleSidebar }) {
   const canManageNotice = ["ADMIN", "MANAGER"].includes(user?.role);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16.25 items-center gap-3 border-b border-slate-200 bg-white px-6 max-[720px]:gap-2 max-[720px]:px-3.5">
+    <header data-loading-navbar className="sticky top-0 z-30 flex h-16.25 items-center gap-3 border-b border-slate-200 bg-white px-6 max-[720px]:gap-2 max-[720px]:px-3.5">
       <button className="hidden size-10 min-h-10 shrink-0 border-slate-300 bg-white p-0 text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[980px]:inline-flex" type="button" onClick={onToggleSidebar} aria-label="Abrir menu">
         <Menu size={20} />
       </button>

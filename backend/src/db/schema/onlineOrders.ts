@@ -27,6 +27,7 @@ export const onlineOrdersTable = pgTable(
     guestSessionHash: varchar("guest_session_hash", { length: 64 }),
     guestDeviceHash: varchar("guest_device_hash", { length: 64 }),
     checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
+    checkoutRequestHash: varchar("checkout_request_hash", { length: 64 }),
     status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
     total: numeric({ precision: 12, scale: 2 }).notNull(),
     // NULL identifies legacy orders, not an explicit free delivery policy.
@@ -94,12 +95,7 @@ export const onlineOrdersTable = pgTable(
     uniqueIndex("online_orders_guest_checkout_key_unique")
       .on(table.guestSessionHash, table.checkoutKey)
       .where(sql`${table.guestSessionHash} is not null`),
-    uniqueIndex("online_orders_pending_client_unique")
-      .on(table.clientId)
-      .where(sql`${table.clientId} is not null and ${table.status} = 'PENDING_PAYMENT'`),
-    uniqueIndex("online_orders_pending_guest_session_unique")
-      .on(table.guestSessionHash)
-      .where(sql`${table.guestSessionHash} is not null and ${table.status} = 'PENDING_PAYMENT'`),
+    check("online_orders_checkout_request_hash_check", sql`${table.checkoutRequestHash} is null or ${table.checkoutRequestHash} ~ '^[a-f0-9]{64}$'`),
     check(
       "online_orders_status_check",
       sql`${table.status} in ('PENDING_PAYMENT', 'PAID', 'PAYMENT_FAILED', 'CANCELLED', 'EXPIRED', 'PAYMENT_REVIEW', 'PREPARING', 'READY_FOR_PICKUP', 'READY_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED')`,

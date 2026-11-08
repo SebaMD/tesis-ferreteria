@@ -9,6 +9,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
+import PaymentAttentionNotice from "../components/orders/PaymentAttentionNotice.jsx";
 import { saveGuestOrderAccessToken } from "../helpers/guestCheckout.js";
 import { groupBuyerOrders } from "../helpers/buyerOrderGroups.js";
 import { canHideGuestOrder, readHiddenGuestOrderIds, writeHiddenGuestOrderIds } from "../helpers/guestOrderVisibility.js";
@@ -157,11 +158,11 @@ export default function GuestDeviceOrdersPage() {
         <CatalogEmptyState icon={ClipboardList} title="Todavía no hay compras invitadas en este dispositivo">Las compras aparecerán aquí sin guardar los tokens individuales de seguimiento en el navegador.</CatalogEmptyState>
       ) : !loading && !error && (
         <>
-          {grouped.payments.length > 0 && (
-            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary headerAction={refreshButton} />
-          )}
+          <PaymentAttentionNotice orders={grouped.payments} />
           <OrdersSection title="Pedidos en curso" description="Compras pagadas que continúan en preparación, retiro o entrega." orders={grouped.active} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras en curso." />
+          {grouped.review.length > 0 && <OrdersSection title="Pagos autorizados · Pedidos en revisión" description="La autorización está registrada; su cumplimiento requiere revisión de la ferretería." orders={grouped.review} onView={setSelectedOrder} renderActions={actionsFor} empty="" headerAction={refreshButton} />}
           <OrdersSection title="Historial" description="Compras entregadas o retiradas desde este dispositivo." orders={grouped.delivered} onView={setSelectedOrder} renderActions={actionsFor} empty="No hay compras entregadas." />
+          {grouped.payments.length > 0 && <OrdersSection title="Pagos pendientes" description="Resultados financieros todavía desconocidos. Actualizar estado no inicia otra compra." orders={grouped.payments} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary headerAction={refreshButton} />}
           {grouped.incomplete.length > 0 && (
             <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados." orders={grouped.incomplete} onView={setSelectedOrder} renderActions={actionsFor} empty="" secondary />
           )}

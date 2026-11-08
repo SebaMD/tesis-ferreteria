@@ -36,6 +36,7 @@ import {
 } from "../helpers/onlineOrders.js";
 import { badgeClass } from "../helpers/uiClasses.js";
 import useCart from "../hooks/useCart.js";
+import { paymentResultAccessMessage } from "../helpers/paymentResultContext.js";
 import {
   continueGuestOnlineOrderPaymentRequest,
   getGuestOnlineOrderRequest,
@@ -62,9 +63,8 @@ function nextRefreshDelay(status) {
 }
 
 export default function GuestOrderTrackingPage() {
-  const { removePurchasedItems } = useCart();
-  const removePurchasedItemsRef = useRef(removePurchasedItems);
-  const cartAdjustedRef = useRef(false);
+  const { settlePurchasedOrder } = useCart();
+  const settlePurchasedOrderRef = useRef(settlePurchasedOrder);
   const accessTokenRef = useRef(null);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -72,8 +72,8 @@ export default function GuestOrderTrackingPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    removePurchasedItemsRef.current = removePurchasedItems;
-  }, [removePurchasedItems]);
+    settlePurchasedOrderRef.current = settlePurchasedOrder;
+  }, [settlePurchasedOrder]);
 
   const loadOrder = useCallback(async (notifyError = false) => {
     const accessToken = accessTokenRef.current
@@ -94,15 +94,14 @@ export default function GuestOrderTrackingPage() {
       setErrorMessage("");
       if (
         isOnlineOrderPaid(data.status)
-        && !cartAdjustedRef.current
         && !isDirectPurchaseOrder(data.id)
       ) {
-        cartAdjustedRef.current = true;
-        removePurchasedItemsRef.current(data.items || []);
+        settlePurchasedOrderRef.current?.(data);
       }
       return data;
     } catch (error) {
-      const message = getApiError(error, "Pedido no encontrado o enlace inválido");
+      const message = paymentResultAccessMessage(error?.response?.status)
+        || getApiError(error, "No pudimos consultar el pedido mediante este enlace seguro. Revisa Mis pedidos en este dispositivo.");
       setErrorMessage(message);
       if (notifyError) toast.error(message);
       return null;
@@ -152,7 +151,7 @@ export default function GuestOrderTrackingPage() {
     }
   };
 
-  const orderStatus = order ? getOnlineOrderStatus(order.status) : null;
+  const orderStatus = order ? getOnlineOrderStatus(order.status, order.payment?.status) : null;
   const paymentStatus = order?.payment ? getOnlinePaymentStatus(order.payment.status) : null;
   const isPaid = isOnlineOrderPaid(order?.status);
   const deliveryType = order ? getOnlineOrderDeliveryType(order.deliveryType) : null;
@@ -266,7 +265,7 @@ export default function GuestOrderTrackingPage() {
 
           {order.status === "PAYMENT_REVIEW" && (
             <p className="m-0 w-full max-w-125 rounded-[5px] bg-rust-50 px-3 py-3 text-xs leading-5 text-rust-700">
-              Tu pago fue autorizado, pero requiere revisión. No vuelvas a pagar este pedido.
+              {orderStatus.description}
             </p>
           )}
 

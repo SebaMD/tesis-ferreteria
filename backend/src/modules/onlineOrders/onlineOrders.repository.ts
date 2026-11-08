@@ -224,6 +224,7 @@ export async function findOrderByCheckoutKey(
   const [order] = await tx
     .select({
       id: onlineOrdersTable.id,
+      checkoutRequestHash: onlineOrdersTable.checkoutRequestHash,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
@@ -247,6 +248,7 @@ export async function findOrderByGuestCheckoutKey(
   const [order] = await tx
     .select({
       id: onlineOrdersTable.id,
+      checkoutRequestHash: onlineOrdersTable.checkoutRequestHash,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
@@ -334,6 +336,7 @@ export async function createOnlineOrder(
     guestSessionHash?: string | null;
     guestDeviceHash?: string | null;
     checkoutKey: string;
+    checkoutRequestHash: string;
     productsSubtotal: string;
     productsDiscountTotal: string;
     deliveryFee: string;
@@ -647,6 +650,7 @@ export async function findPaymentsNeedingReconciliation(
 ) {
   const conditions = [
     isNotNull(onlinePaymentsTable.token),
+    lte(onlinePaymentsTable.nextReconciliationAt, sql`now()`),
     sql`(
       (
         ${onlinePaymentsTable.status} = 'CREATED'
@@ -681,6 +685,7 @@ export async function findPaymentsNeedingReconciliation(
       paymentStatus: onlinePaymentsTable.status,
       paymentCreatedAt: onlinePaymentsTable.createdAt,
       paymentUpdatedAt: onlinePaymentsTable.updatedAt,
+      nextReconciliationAt: onlinePaymentsTable.nextReconciliationAt,
       token: onlinePaymentsTable.token,
       orderId: onlineOrdersTable.id,
       orderStatus: onlineOrdersTable.status,
@@ -691,10 +696,36 @@ export async function findPaymentsNeedingReconciliation(
     .from(onlinePaymentsTable)
     .innerJoin(onlineOrdersTable, eq(onlinePaymentsTable.orderId, onlineOrdersTable.id))
     .where(and(...conditions))
-    .orderBy(asc(onlinePaymentsTable.updatedAt), asc(onlinePaymentsTable.id))
+    .orderBy(asc(onlinePaymentsTable.nextReconciliationAt), asc(onlinePaymentsTable.id))
     .limit(50);
 
   return rows;
+}
+
+// Persist a bounded status-query lease, shared by workers and authorized refreshes.
+// Does not change payment.updatedAt (also used by the commit reconciliation lease).
+export async function claimPaymentStatusQuery(orderId: number, paymentId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    const payment = await findPaymentForUpdateById(tx, paymentId);
+    if (!order || !payment || payment.orderId !== order.id
+      || !["CREATED", "PROCESSING"].includes(payment.status)
+      || !payment.nextReconciliationAt) return false;
+    const claimed = await tx.update(onlinePaymentsTable).set({ nextReconciliationAt: sql`now() + interval '1 minute'` })
+      .where(and(eq(onlinePaymentsTable.id, payment.id), lte(onlinePaymentsTable.nextReconciliationAt, sql`now()`)))
+      .returning({ id: onlinePaymentsTable.id });
+    return claimed.length === 1;
+  });
+}
+
+export async function stopExpiredProviderQueries(orderId: number, paymentId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    const payment = await findPaymentForUpdateById(tx, paymentId);
+    if (!order || !payment || payment.orderId !== order.id || !["CREATED", "PROCESSING"].includes(payment.status)) return;
+    await tx.update(onlinePaymentsTable).set({ nextReconciliationAt: null }).where(eq(onlinePaymentsTable.id, paymentId));
+    if (order.status === "PENDING_PAYMENT") await updateOrderStatus(tx, order.id, "PAYMENT_REVIEW", ["PENDING_PAYMENT"]);
+  });
 }
 
 export async function claimPaymentReconciliationLease(
@@ -916,8 +947,9 @@ async function attachOrderData<T extends { id: number; total: string }>(orders: 
       payment: payment ? clientPayment : null,
       // INITIALIZED does not prove that an already opened external form can be reopened.
       canContinuePayment: false,
-      blocksNewPayment: orderStatus === "PENDING_PAYMENT"
-        || (orderStatus === "PAYMENT_REVIEW" && ["CREATED", "PROCESSING"].includes(payment?.status || "")),
+      blocksNewPayment: false,
+      requiresPaymentAttention: orderStatus === "PENDING_PAYMENT"
+        || ["CREATED", "PROCESSING"].includes(payment?.status || ""),
       paymentRecoveryMessage: ["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(orderStatus)
         ? payment?.status === "AUTHORIZED"
           ? "El pago fue autorizado y requiere revisión del pedido. No vuelvas a pagar este pedido."

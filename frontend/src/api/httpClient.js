@@ -1,5 +1,25 @@
 import axios from "axios";
-import { markSessionExpired } from "../helpers/session.js";
+import { markSessionExpired, readAuthSnapshot, notifyAuthChanged } from "../helpers/session.js";
+
+let observedSession = readAuthSnapshot();
+export function setApiAuthSnapshot(snapshot) { observedSession = snapshot; }
+export function assertStoredAuthToken(token) { if (token !== readAuthSnapshot().token) throw sessionChanged(); }
+function sessionChanged() {
+  notifyAuthChanged();
+  const error = new Error('La sesión cambió. Revisa la cuenta activa y vuelve a abrir la compra desde su carrito.');
+  error.code = 'AUTH_CONTEXT_CHANGED';
+  return error;
+}
+function authStorageStamp() { return JSON.stringify([localStorage.getItem('token'),localStorage.getItem('user'),localStorage.getItem('fyf-auth-session')]); }
+function sameSession(snapshot) {
+  const stored = readAuthSnapshot();
+  return snapshot?.token === stored.token
+    && (stored.token || (!localStorage.getItem('token') && !localStorage.getItem('user')));
+}
+function responseBelongsToCurrentSession(config) {
+  return config?.fyfAuthStamp === authStorageStamp()
+    && (config.fyfCredentialRequest || sameSession(config.fyfAuthSnapshot));
+}
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
@@ -7,8 +27,17 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const credentialRequest = /\/auth\/(login|register)$/.test(config.url || '');
+  if (!sameSession(observedSession) && !(credentialRequest && !observedSession.token && !readAuthSnapshot().token)) throw sessionChanged();
+  const token = observedSession.token;
+  if (Object.hasOwn(config, 'expectedAuthToken') && token !== config.expectedAuthToken) throw sessionChanged();
+  if (token && config.expectedClientId !== undefined && Number(observedSession.user?.id) !== config.expectedClientId) throw sessionChanged();
+  if (token && config.expectedGuest) throw sessionChanged();
+  config.fyfAuthSnapshot = observedSession;
+  config.fyfAuthStamp = authStorageStamp();
+  config.fyfCredentialRequest = credentialRequest;
 
+  config.headers.delete('Authorization');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -19,8 +48,13 @@ api.interceptors.request.use((config) => {
 let redirectingToLogin = false;
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (!responseBelongsToCurrentSession(response.config)) throw sessionChanged();
+    return response;
+  },
   (error) => {
+    if (error.code === 'AUTH_CONTEXT_CHANGED') return Promise.reject(error);
+    if (error.config?.fyfAuthSnapshot && !responseBelongsToCurrentSession(error.config)) return Promise.reject(sessionChanged());
     const status = error?.response?.status;
     const code = String(error?.response?.data?.code || "");
     const message = String(error?.response?.data?.message || error?.response?.data?.details || "");
@@ -52,6 +86,7 @@ api.interceptors.response.use(
 );
 
 export function getApiError(error, fallback = "Error al conectar con el servidor") {
+  if (error?.code === 'AUTH_CONTEXT_CHANGED') return error.message;
   const details = error?.response?.data?.details;
   if (typeof details === "string" && details.trim()) return details;
 

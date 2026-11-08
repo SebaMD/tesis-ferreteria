@@ -98,7 +98,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
   });
 
   if (!order) return null;
-  const status = getOnlineOrderStatus(order.status);
+  const status = getOnlineOrderStatus(order.status, order.payment?.status);
   const delivery = getOnlineOrderDeliveryType(order.deliveryType);
   const progressOpen = expandedSections.orderId === order.id && expandedSections.progress;
   const productsOpen = expandedSections.orderId === order.id && expandedSections.products;

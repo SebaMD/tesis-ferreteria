@@ -7,6 +7,8 @@ import { getCatalogProductByIdRequest } from "../services/catalog.service.js";
 import CartContext from "./CartContext.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 import { resolveProductAssets } from "../helpers/productAssets.js";
+import { createId } from "../helpers/createId.js";
+import { captureCartCheckout, rememberOrderCart, consumePaidCartSnapshot, consumeCreatedCartSnapshot } from "../helpers/cartCheckoutSnapshot.js";
 
 const CART_STORAGE_PREFIX = "fyf_client_cart";
 
@@ -48,6 +50,7 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     if (guestItems.length === 0) return storedItems;
 
     const mergedItems = mergeCartItems(storedItems, guestItems);
+    localStorage.setItem(`${storageKey}:revision`, createId());
     localStorage.setItem(storageKey, JSON.stringify(mergedItems));
     localStorage.removeItem(guestStorageKey);
     return mergedItems;
@@ -75,7 +78,10 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
   }, [storageKey]);
 
   const saveItems = (updater) => {
-    const nextItems = typeof updater === "function" ? updater(itemsRef.current) : updater;
+    // Storage events can arrive after a user action in another tab. Never build
+    // an edit from an obsolete in-memory cart (which could resurrect removed SKUs).
+    const nextItems = typeof updater === "function" ? updater(readCart(storageKey)) : updater;
+    localStorage.setItem(`${storageKey}:revision`, createId());
     localStorage.setItem(storageKey, JSON.stringify(nextItems));
     itemsRef.current = nextItems;
     setItems(nextItems);
@@ -86,7 +92,7 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
       return { success: false, message: "Este producto está disponible únicamente para compra presencial." };
     }
     const stock = getOnlineAvailableStock(product);
-    const currentItem = itemsRef.current.find((item) => Number(item.product.id) === Number(product?.id));
+    const currentItem = readCart(storageKey).find((item) => Number(item.product.id) === Number(product?.id));
     const currentQuantity = Number(currentItem?.quantity || 0);
 
     const validation = validateCartQuantity(quantity, getRemainingCartCapacity(stock, currentQuantity));
@@ -151,17 +157,11 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     return removedItems.length ? removalUndo(removedItems) : null;
   };
 
-  const removePurchasedItems = (purchasedItems = []) => {
+  const settlePurchasedOrder = (order) => {
+    const remaining = consumePaidCartSnapshot(localStorage, storageKey, order);
+    if (!remaining) return;
     contextVersion.current += 1;
-    const purchasedByProduct = new Map(
-      purchasedItems.map((item) => [Number(item.productId), Number(item.quantity || 0)]),
-    );
-
-    saveItems((current) => current.flatMap((item) => {
-      const purchasedQuantity = purchasedByProduct.get(Number(item.product.id)) || 0;
-      const remainingQuantity = Number(item.quantity) - purchasedQuantity;
-      return remainingQuantity > 0 ? [{ ...item, quantity: remainingQuantity }] : [];
-    }));
+    saveItems(remaining);
   };
 
   const value = useMemo(() => ({
@@ -175,7 +175,26 @@ function CartStore({ children, storageKey, guestStorageKey, mergeGuestCart }) {
     updateQuantity,
     removeItem,
     clearCart,
-    removePurchasedItems,
+    captureCheckoutCart: (selected, checkoutKey) => {
+      try {
+        if (localStorage.getItem(`${storageKey}:intent`) !== checkoutKey) {
+          // A different checkout owns a different cart generation, even with identical SKUs.
+          localStorage.setItem(`${storageKey}:revision`, createId());
+          localStorage.setItem(`${storageKey}:intent`, checkoutKey);
+        }
+        const snapshot = captureCartCheckout(localStorage, storageKey, itemsRef.current, selected);
+        return snapshot ? { ...snapshot, contextVersion: contextVersion.current } : null;
+      } catch { return null; }
+    },
+    rememberCheckoutCart: (orderId, snapshot) => rememberOrderCart(localStorage, storageKey, orderId, snapshot),
+    detachCheckoutCart: (payment, snapshot) => {
+      if (!active.current || snapshot?.contextVersion !== contextVersion.current) return;
+      const remaining = consumeCreatedCartSnapshot(localStorage, storageKey, payment, snapshot);
+      if (!remaining) return;
+      contextVersion.current += 1;
+      saveItems(remaining);
+    },
+    settlePurchasedOrder,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [items]);
 

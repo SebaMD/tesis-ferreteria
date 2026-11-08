@@ -83,10 +83,11 @@ test("cada intento no completado conserva un mensaje acorde a su estado real", (
   const pending = getOnlineOrderStatus("PENDING_PAYMENT");
 
   assert.equal(cancelled.label, "Compra cancelada");
-  assert.match(cancelled.description, /no se realizó ningún cargo/i);
+  assert.match(cancelled.description, /cancelación del intento/i);
+  assert.doesNotMatch(cancelled.description, /ningún cargo/i);
   assert.doesNotMatch(cancelled.description, /expir/);
   assert.equal(expired.label, "Reserva expirada");
-  assert.match(expired.description, /venció.*reserva de stock fue liberada/i);
+  assert.match(expired.description, /no demuestra por sí solo el resultado financiero/i);
   assert.equal(failed.label, "Pago no completado");
   assert.doesNotMatch(failed.description, /expir/);
   assert.equal(pending.label, "Pendiente de pago");

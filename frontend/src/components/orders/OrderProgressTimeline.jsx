@@ -89,7 +89,7 @@ export function OrderProgressCurrentIcon({ order, size = 23 }) {
 
 export default function OrderProgressTimeline({ order }) {
   if (PAYMENT_ONLY_STATUSES.has(order.status)) {
-    const status = getOnlineOrderStatus(order.status);
+    const status = getOnlineOrderStatus(order.status, order.payment?.status);
     return (
       <section className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <Clock3 className="mt-0.5 shrink-0 text-rust-600" size={22} />

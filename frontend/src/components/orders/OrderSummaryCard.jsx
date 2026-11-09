@@ -43,7 +43,7 @@ export default function OrderSummaryCard({
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
-          <div className={inProgress ? "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 max-[680px]:grid-cols-1" : "flex flex-wrap items-start justify-between gap-2"}>
+          <div className={`order-summary-heading ${inProgress ? "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2" : "flex flex-wrap items-start justify-between gap-2"}`}>
             <div className="min-w-0">
               <strong className={`block text-base text-ink-950 max-[430px]:text-sm ${inProgress ? "break-words" : "truncate"}`}>{primaryItem?.productName || "Pedido online"}</strong>
               <HistoricalIdentityNote capture={primaryItem?.historicalIdentity}/>
@@ -52,7 +52,7 @@ export default function OrderSummaryCard({
                 {extraProducts > 0 ? ` · +${extraProducts} ${extraProducts === 1 ? "producto" : "productos"}` : ""}
               </span>
             </div>
-            <span className={`${badgeClass(status.tone)}${inProgress ? " justify-self-end max-[680px]:row-start-1" : ""}`}>{status.label}</span>
+            <span className={`order-summary-status ${badgeClass(status.tone)}${inProgress ? " justify-self-end" : ""}`}>{status.label}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">

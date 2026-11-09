@@ -1,8 +1,9 @@
-import { BarChart3, CalendarDays, DollarSign, FileSpreadsheet, Filter, RotateCcw, Search, ShoppingCart, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BarChart3, CalendarDays, DollarSign, FileSpreadsheet, RotateCcw, Search, ShoppingCart, UserRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
+import PeriodFilterPanel from "../components/PeriodFilterPanel.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import TableRecordCount from "../components/TableRecordCount.jsx";
@@ -12,7 +13,8 @@ import { compareByNewest, formatClp, formatDate, formatSaleFolio, getSaleTotals 
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
 import usePagination from "../hooks/usePagination.js";
 import { getSalesReportRequest } from "../services/reports.service.js";
-import { calendarDay, shiftCalendarDay, reportDateError } from "../helpers/dateFilters.js";
+import { calendarDay, customPeriodError, customRangeBounds, initializeCustomRange, validCustomRange, reportDateError } from "../helpers/dateFilters.js";
+import { getStatisticsPeriodRange, STATISTICS_PERIOD_OPTIONS } from "../helpers/managerStatistics.js";
 import {
   badgeClass,
   dashboardListRowClass,
@@ -24,7 +26,6 @@ import {
   numericCellClass,
   pageClass,
   pageHeaderClass,
-  panelClass,
   panelCountClass,
   secondaryButtonClass,
   tableHeadingClass,
@@ -65,7 +66,8 @@ function initialFilters() {
 }
 
 export default function ReportsPage() {
-  const [dateMode, setDateMode] = useState("single");
+  const [period, setPeriod] = useState("today");
+  const customRangeRef = useRef(null);
   const [filters, setFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
@@ -73,9 +75,13 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [showDateError, setShowDateError] = useState(false);
   const today = calendarDay(new Date(), "America/Santiago");
-  const dateError = reportDateError(filters, dateMode);
+  const requestFilters = { ...filters, mode: period === "custom" ? "range" : filters.from === filters.to ? "single" : "range" };
+  const dateError = customPeriodError(filters, period) || reportDateError(requestFilters, requestFilters.mode);
+  const dateBounds = customRangeBounds(filters, today);
 
   const loadReport = async (nextFilters) => {
+    const error = reportDateError(nextFilters, nextFilters.mode);
+    if (error) { toast.error(error); return; }
     setLoading(true);
 
     try {
@@ -99,6 +105,12 @@ export default function ReportsPage() {
 
     if (name === "from" || name === "to") {
       setShowDateError(true);
+      if (period === "custom") {
+        const next = { ...filters, [name]: value };
+        if (validCustomRange(next, calendarDay(new Date(), "America/Santiago"))) customRangeRef.current = { from: next.from, to: next.to };
+        setFilters(next);
+        return;
+      }
       setFilters((current) => ({ ...current, [name]: value }));
       return;
     }
@@ -112,27 +124,28 @@ export default function ReportsPage() {
     setFilters((current) => ({ ...current, from: value, to: value }));
   };
 
-  const handleDateModeChange = (mode) => {
-    setDateMode(mode);
+  const handlePeriodChange = (nextPeriod) => {
+    setPeriod(nextPeriod);
     setShowDateError(false);
-
-    if (mode === "single") {
-      setFilters((current) => ({ ...current, mode, to: current.from }));
-    } else {
-      setFilters((current) => ({ ...current, mode }));
-    }
+    if (nextPeriod === "custom") {
+      if (period === "custom") return;
+      const next = initializeCustomRange(customRangeRef.current, calendarDay(new Date(), "America/Santiago"));
+      customRangeRef.current = next;
+      setFilters(current => ({ ...current, ...next }));
+    } else if (nextPeriod === "day") setFilters(current => ({ ...current, to: current.from }));
+    else if (nextPeriod !== "custom") setFilters(current => ({ ...current, ...getStatisticsPeriodRange(nextPeriod, new Date(), "America/Santiago") }));
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
     setShowDateError(true);
     if (dateError) { toast.error(dateError); return; }
-    loadReport(filters);
+    loadReport(requestFilters);
   };
 
   const handleReset = () => {
     const nextFilters = initialFilters();
-    setDateMode("single");
+    setPeriod("today");
     setShowDateError(false);
     setFilters(nextFilters);
     setCashierSummarySearch("");
@@ -151,7 +164,7 @@ export default function ReportsPage() {
     appliedFilters.from === today &&
     appliedFilters.to === today;
   const showingSingleDayReport = appliedFilters.from === appliedFilters.to;
-  const reportPeriodMessage = showingTodayReport
+  const reportPeriodMessage = report === null ? "Todavía no hay reportes consultados." : showingTodayReport
     ? "Mostrando reportes de ventas de hoy"
     : showingSingleDayReport
       ? `Mostrando ventas del día ${appliedFilters.from}`
@@ -220,41 +233,16 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <form className={`${panelClass} gap-4.5`} onSubmit={handleSubmit} noValidate>
-        <div className="flex items-center justify-between gap-4 max-[720px]:flex-col max-[720px]:items-stretch">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-rust-50 text-rust-600"><Filter size={18} /></span>
-            <div>
-              <h2 className="m-0 text-base font-bold text-ink-950">Período del reporte</h2>
-              <p className="mt-1 mb-0 text-xs text-slate-500">Selecciona fecha o rango. No se permiten fechas futuras.</p>
-            </div>
-          </div>
-          <div className="flex w-fit max-w-full shrink-0 gap-2 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
-            <button
-              className={`min-h-11 rounded-sm border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "single" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
-              type="button"
-              onClick={() => handleDateModeChange("single")}
-            >
-              Un día
-            </button>
-            <button
-              className={`min-h-11 rounded-sm border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "range" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
-              type="button"
-              onClick={() => handleDateModeChange("range")}
-            >
-              Rango de fechas
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-[minmax(220px,1fr)_auto] items-end gap-4 max-[1120px]:grid-cols-1">
-
-          <div className={`${dateMode === "single" ? "grid-cols-[minmax(180px,260px)]" : "grid-cols-[repeat(2,minmax(160px,220px))]"} grid min-w-0 items-end gap-3 max-[720px]:grid-cols-1`}>
-            {dateMode === "single" ? (
+      <PeriodFilterPanel title="Período del reporte" period={period} onPeriodChange={handlePeriodChange}
+        options={STATISTICS_PERIOD_OPTIONS} selectLabel="Seleccionar período del reporte" onSubmit={handleSubmit}
+        indicator={reportPeriodMessage} error={(showDateError || period === "custom") ? dateError : ""} errorId="report-range-error"
+        dates={<>
+            {period === "day" ? (
               <label>
                 Fecha
                 <input type="date" value={filters.from} max={today} onChange={handleSingleDateChange} required />
               </label>
-            ) : (
+            ) : period === "custom" ? (
               <>
                 <label>
                   Desde
@@ -262,25 +250,23 @@ export default function ReportsPage() {
                     type="date"
                     name="from"
                     value={filters.from}
-                    max={shiftCalendarDay(filters.to && filters.to < today ? filters.to : today, -1)}
+                    min={dateBounds.fromMin}
+                    max={dateBounds.fromMax}
+                    aria-invalid={Boolean(dateError)}
+                    aria-describedby={dateError ? "report-range-error" : undefined}
                     onChange={handleChange}
                     required
                   />
                 </label>
                 <label>
                   Hasta
-                  <input type="date" name="to" value={filters.to} min={shiftCalendarDay(filters.from, 1)} max={today} onChange={handleChange} required />
+                  <input type="date" name="to" value={filters.to} min={dateBounds.toMin} max={dateBounds.toMax} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "report-range-error" : undefined} onChange={handleChange} required />
                 </label>
               </>
-            )}
-          </div>
-
-          <div className="flex min-w-0 items-center justify-end gap-2 max-[1120px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch">
-            <div className="flex w-fit max-w-full items-center gap-2 rounded-[5px] border border-rust-500 bg-rust-50 px-3.5 py-2.5 text-[13px] font-semibold text-[#92400e] max-[720px]:w-full">
-              <CalendarDays className="shrink-0" size={17} />
-              <span>{reportPeriodMessage}</span>
-            </div>
-            <button type="submit" disabled={loading}>
+            ) : <div className="flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 text-sm font-semibold"><CalendarDays size={17}/><span>{filters.from === filters.to ? filters.from : `${filters.from} al ${filters.to}`}</span></div>}
+        </>}
+        actions={<>
+            <button type="submit" disabled={loading || Boolean(dateError)}>
               <BarChart3 size={18} />
               Consultar
             </button>
@@ -288,11 +274,8 @@ export default function ReportsPage() {
               <RotateCcw size={17} />
               Limpiar
             </button>
-          </div>
-        </div>
-        {showDateError && dateError && <p role="alert" className="m-0 text-sm text-critical-600">{dateError}</p>}
-        <p className="m-0 text-xs text-slate-500">Los límites de selección corresponden a la fecha actual en America/Santiago (Chile). En Rango de fechas, Desde y Hasta deben ser días distintos.</p>
-      </form>
+        </>}
+        footer={<p className="m-0 text-xs text-slate-500">Los límites de selección corresponden a la fecha actual en America/Santiago (Chile). En Rango personalizado, Desde debe ser anterior a Hasta. Para una sola fecha, utiliza Por día.</p>}/>
 
       <div className="grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
         <article className={reportMetricCardClass}>

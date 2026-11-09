@@ -14,6 +14,8 @@ const entry=name=>bundle.output.find(f=>f.type==='chunk'&&f.isEntry&&f.name===na
 const browser=await chromium.launch({executablePath:process.env.FYF_BROWSER_EXECUTABLE || 'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
 const shots=await mkdtemp(path.join(process.env.FYF_UX_SCREENSHOT_DIR || tmpdir(),'fyf-payment-recovery-'));
 const errors=[];let cases=0;
+// Select historical filters without running the legacy checkout fixture.
+const datesOnly=process.argv.includes('--dates-only');
 const item={productId:99,productName:'Producto con nombre largo para revisar recuperación y acciones',quantity:1,unitPrice:5990,subtotal:5990,unitMeasure:'unidad'};
 const pending={id:10,status:'PENDING_PAYMENT',total:5990,deliveryType:'PICKUP',createdAt:'2026-11-05T12:00:00Z',items:[item],payment:{status:'CREATED'},canContinuePayment:false,canRetryPayment:false,canArchive:false,paymentRecoveryMessage:'Estamos consultando el resultado de Webpay. No vuelvas a pagar hasta conocer el resultado.'};
 try {
@@ -45,7 +47,7 @@ try {
     await page.goto(`http://fyf.test/${kind==='checkout'?'checkout':kind==='orders'?(guest?'guest-orders':'orders'):'ux-test'}?case=${kind}&theme=${theme}${guest?'&guest':''}`);
     return {page,context,calls};
   }
-  for(const width of [320,1280])for(const theme of ['light','dark'])for(const guest of [false,true]) {
+  for(const width of datesOnly?[]:[320,1280])for(const theme of ['light','dark'])for(const guest of [false,true]) {
     const {page,context,calls}=await open('checkout',width,theme,guest);
     await page.getByText('Tienes un pago pendiente',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Continuar pago',exact:true}).count(),0);
@@ -56,7 +58,7 @@ try {
     cases++;await context.close();
   }
   for(const width of [320,360,390,430,1280,1440])for(const theme of ['light','dark']) {
-    for(const guest of [false,true]) {
+    for(const guest of datesOnly?[]:[false,true]) {
       const {page,context}=await open('orders',width,theme,guest);
       const card=page.locator('#order-10');await card.getByRole('button',{name:'Ver detalle'}).waitFor();
       assert.equal(await card.locator('footer').count(),0);assert.equal(await card.getByRole('button',{name:/Continuar|Reintentar/}).count(),0);
@@ -74,34 +76,39 @@ try {
       const {page,context,calls}=await open('audit',width,theme);
       const from=page.getByLabel('Desde',{exact:true}),to=page.getByLabel('Hasta',{exact:true});
       await page.getByText(/Mostrando 0 de 0 cambios/).waitFor();
-      assert.equal(await from.getAttribute('max'),'2026-11-05');assert.equal(await to.getAttribute('max'),'2026-11-06');
+      assert.equal(await from.getAttribute('max'),'2026-11-06');assert.equal(await to.getAttribute('max'),'2026-11-06');
+      await Promise.all([page.waitForResponse(r=>r.url().includes('/product-audits')&&new URL(r.url()).searchParams.get('from')==='2026-11-06'&&new URL(r.url()).searchParams.get('to')==='2026-11-06'),(async()=>{await from.fill('2026-11-06');await to.fill('2026-11-06');})()]);
+      assert.equal(calls.at(-1).from,'2026-11-06');assert.equal(calls.at(-1).to,'2026-11-06');assert.equal(await to.getAttribute('min'),'2026-11-06');
       const baseline=calls.length;
-      await from.fill('2026-11-06');await page.getByRole('alert').waitFor();await page.waitForTimeout(500);assert.equal(calls.length,baseline);
+      await from.fill('2026-11-07');await page.getByRole('alert').waitFor();await page.waitForTimeout(500);assert.equal(calls.length,baseline);
       await from.fill('2026-11-04');await to.fill('2026-11-07');await page.waitForTimeout(500);assert.equal(calls.length,baseline);
       await to.fill('2026-11-06');await page.waitForTimeout(550);assert.equal(calls.at(-1).from,'2026-11-04');assert.equal(calls.at(-1).to,'2026-11-06');
-      const validCalls=calls.length;await to.fill('2026-11-04');await page.waitForTimeout(500);assert.equal(calls.length,validCalls);
+      await Promise.all([page.waitForResponse(r=>r.url().includes('/product-audits')&&new URL(r.url()).searchParams.get('from')==='2026-11-04'&&new URL(r.url()).searchParams.get('to')==='2026-11-04'),to.fill('2026-11-04')]);assert.equal(calls.at(-1).from,calls.at(-1).to);
+      const validCalls=calls.length;await to.fill('2026-11-03');await page.waitForTimeout(500);assert.equal(calls.length,validCalls);
       await page.getByRole('button',{name:'Limpiar filtros'}).click();await page.waitForTimeout(100);assert.equal(await from.inputValue(),'');assert.equal(await to.inputValue(),'');
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
       cases++;await context.close();
     }
     {
       const {page,context,calls}=await open('reports',width,theme);
+      await page.getByRole('combobox',{name:'Seleccionar período del reporte'}).click();await page.getByRole('option',{name:'Por día',exact:true}).click();
       const date=page.getByLabel('Fecha',{exact:true});await date.waitFor();await page.getByRole('button',{name:'Consultar',exact:true}).waitFor({state:'visible'});await page.waitForTimeout(100);
       assert.equal(await date.inputValue(),'2026-11-05');assert.equal(await date.getAttribute('max'),'2026-11-05');
-      const count=calls.length;await date.fill('2026-11-06');await page.getByRole('button',{name:'Consultar',exact:true}).click();assert.equal(calls.length,count);
-      await date.fill('2026-11-05');await page.getByRole('button',{name:'Rango de fechas'}).click();
-      assert.equal(await page.locator('form [role="alert"]').count(),0,'Changing mode alone does not show a preventive warning');
+      const count=calls.length;await date.fill('2026-11-06');assert.equal(await page.getByRole('button',{name:'Consultar',exact:true}).isDisabled(),true);await page.locator('form').evaluate(form=>form.requestSubmit());assert.equal(calls.length,count);
+      await date.fill('2026-11-05');await page.getByRole('combobox',{name:'Seleccionar período del reporte'}).click();await page.getByRole('option',{name:'Rango personalizado',exact:true}).click();
+      assert.equal(await page.getByLabel('Desde',{exact:true}).inputValue(),'2026-11-04');assert.equal(await page.getByLabel('Hasta',{exact:true}).inputValue(),'2026-11-05');assert.equal(await page.locator('form [role="alert"]').count(),0,'Custom mode initializes a valid yesterday/today range');
       const from=page.getByLabel('Desde',{exact:true}),to=page.getByLabel('Hasta',{exact:true});
       assert.equal(await from.getAttribute('max'),'2026-11-04');
       await from.fill('2026-11-04');await to.fill('2026-11-05');await page.getByRole('button',{name:'Consultar',exact:true}).click();await page.waitForTimeout(100);
       assert.equal(calls.at(-1).mode,'range');assert.equal(calls.at(-1).from,'2026-11-04');
       assert.equal(await page.locator('form [role="alert"]').count(),0,'Valid dates have no date warning');
-      const validCount=calls.length;await to.fill('2026-11-04');await page.getByRole('button',{name:'Consultar',exact:true}).click();assert.equal(calls.length,validCount);await page.getByRole('alert').waitFor();
+      const validCount=calls.length;await to.fill('2026-11-04');assert.equal(await page.getByRole('button',{name:'Consultar',exact:true}).isDisabled(),true);await page.locator('form').evaluate(form=>form.requestSubmit());assert.equal(calls.length,validCount);assert.match(await page.locator('form [role="alert"]').innerText(),/Desde debe ser anterior/);
+      await to.fill('2026-11-03');await page.locator('form').evaluate(form=>form.requestSubmit());assert.equal(calls.length,validCount);await page.locator('form [role="alert"]').waitFor();
       await page.clock.setFixedTime(new Date('2026-11-06T03:05:00Z'));await from.fill('2026-11-05');await to.fill('2026-11-06');assert.equal(await to.getAttribute('max'),'2026-11-06');
       await page.getByRole('button',{name:'Consultar',exact:true}).click();await page.waitForTimeout(100);assert.equal(calls.at(-1).to,'2026-11-06');
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
       cases++;await context.close();
     }
   }
-  assert.deepEqual(errors,[]);console.log(`PASS ${cases} Chromium cases: guest/client pending cards, detail, strict UTC/Chile filters and local midnight; simulated APIs. Screenshots: ${shots}`);
+  assert.deepEqual(errors,[]);console.log(`PASS ${cases} Chromium cases: ${datesOnly?'historical UTC/Chile filters and local midnight only (checkout/order cases not selected)':'guest/client pending cards, detail, UTC/Chile filters and local midnight'}; simulated APIs. Screenshots: ${shots}`);
 } finally {await browser.close();}

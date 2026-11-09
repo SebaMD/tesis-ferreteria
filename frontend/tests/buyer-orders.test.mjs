@@ -73,7 +73,10 @@ test("las tarjetas normales no ofrecen ocultar; los modales y la restauración l
   assert.match(guest, /title="Intentos ocultos"[^\n]*renderAfterDetail=\{visibilityActionFor\}/);
   assert.match(guest, /actions=\{selectedOrder \? <>[\s\S]*?\{actionsFor\(selectedOrder\)\}\{visibilityActionFor\(selectedOrder\)\}/);
   assert.match(card, /isOnlineOrderPaid\(order.status\) && order.status !== "DELIVERED"/);
-  assert.match(card, /max-\[680px\]:row-start-1/);
+  assert.doesNotMatch(card, /max-\[680px\]:row-start-1/);
+  assert.equal((card.match(/order-summary-status/g) || []).length, 1);
+  const css = await read("src/styles/styles.css");
+  assert.match(css, /\.order-summary-status\s*\{[^}]*grid-row:\s*3/);
 });
 
 test("cada intento no completado conserva un mensaje acorde a su estado real", () => {

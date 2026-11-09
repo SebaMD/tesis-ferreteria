@@ -1268,3 +1268,62 @@
   .cart-clear-action > span { display: none; }
   .creation-continue-action { width: 100%; min-height: 48px; padding: 10px 12px; font-size: 13px; line-height: 1.4; }
 }
+
+/* Keep section counts attached to their title, not below the description. */
+.buyer-orders-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.buyer-orders-heading > div:first-child { display: contents; }
+.buyer-orders-heading h2 { grid-column: 1; grid-row: 1; }
+.buyer-orders-heading p { grid-column: 1 / -1; grid-row: 2; }
+.buyer-orders-heading > div:last-child { grid-column: 2; grid-row: 1; }
+@media (max-width: 680px) {
+  .order-summary-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
+  .order-summary-heading > div { display: contents; }
+  .order-summary-heading > div > strong { grid-column: 1 / -1; grid-row: 1; white-space: normal; overflow-wrap: anywhere; }
+  .order-summary-heading > div > span:not(:last-child) { grid-column: 1 / -1; grid-row: 2; }
+  .order-summary-heading > div > span:last-child { grid-column: 1; grid-row: 3; }
+  .order-summary-status { grid-column: 2; grid-row: 3; max-width: 100%; white-space: normal; align-self: start; }
+  .account-mobile-actions, #client-address-section .flex.flex-wrap.gap-2 { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .account-mobile-actions > button, #client-address-section .flex.flex-wrap.gap-2 > button { width: 100%; justify-content: center; min-height: 44px; }
+  .sale-return-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .sale-return-summary > div:first-child { grid-column: 1 / -1; }
+  .sale-return-summary > div:nth-child(2) { min-width: 0; }
+  .sale-return-summary > div:nth-child(3) { grid-column: 1; text-align: left; }
+  .sale-return-summary > svg { grid-column: 2; grid-row: 2 / 4; }
+}
+.sale-return-product { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.sale-return-product > div:first-child { flex: 0 1 auto; max-width: 100%; }
+.sale-return-values { display: inline-flex; flex: 0 0 auto; align-items: baseline; gap: 6px; white-space: nowrap; }
+.return-undo-actions > button { width: 100%; justify-content: center; min-height: 44px; }
+.period-filter-panel { min-width: 0; gap: 18px; container-type: inline-size; }
+.period-filter-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
+.period-filter-selector { flex: 0 0 300px; width: 300px; max-width: 100%; min-width: 0; }
+.period-filter-body { display: grid; grid-template-columns: minmax(0,260px) minmax(0,1fr); align-items: end; gap: 16px; min-width: 0; }
+.period-filter-body[data-period="custom"] { grid-template-columns: minmax(0,452px) minmax(0,1fr); }
+.period-filter-dates { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; width: min(100%,260px); min-width: 0; max-width: 100%; }
+.period-filter-dates[data-period="custom"] { width: min(100%,452px); grid-template-columns: repeat(2,minmax(0,1fr)); }
+.period-filter-dates > label { min-width: 0; }
+.period-filter-actions { display: flex; align-items: end; justify-content: end; gap: 8px; width: 100%; min-width: 0; max-width: 100%; }
+.period-filter-indicator { min-width: 0; max-width: 100%; }
+.period-filter-indicator > span { min-width: 0; overflow-wrap: anywhere; }
+.dark .period-filter-indicator { color: #fed7aa; }
+.period-filter-buttons { display: flex; flex: 0 0 auto; gap: 8px; max-width: 100%; }
+.period-filter-buttons > button { justify-content: center; }
+@container (max-width: 1000px) {
+  .period-filter-body, .period-filter-body[data-period="custom"] { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 1120px) {
+  .period-filter-body, .period-filter-body[data-period="custom"] { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 720px) {
+  .period-filter-header { flex-direction: column; align-items: stretch; }
+  .period-filter-selector { flex: 0 1 auto; width: 100%; max-width: none; }
+  .period-filter-dates, .period-filter-dates[data-period="custom"] { width: 100%; grid-template-columns: minmax(0,1fr); }
+  .period-filter-actions { flex-direction: column; align-items: stretch; width: 100%; }
+  .period-filter-indicator { width: 100%; }
+  .period-filter-buttons { display: grid; grid-template-columns: minmax(0,1fr); width: 100%; }
+  .period-filter-buttons > button { width: 100%; min-height: 44px; }
+}
+@media (max-width: 680px) {
+  .sale-return-product { display: grid; grid-template-columns: minmax(0,1fr); }
+  .sale-return-values { justify-self: start; }
+}

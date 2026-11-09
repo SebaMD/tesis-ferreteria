@@ -1794,7 +1794,7 @@ export default function SalesPage() {
                                 onClick={() => setExpandedReturnRequestId((current) => current === request.id ? null : request.id)}
                                 aria-expanded={requestOpen}
                               >
-                                <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2">
+                                <div className="sale-return-summary flex w-full flex-wrap items-center gap-x-4 gap-y-2">
                                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <span className={badgeClass(getCancellationRequestTone(request.status))}>
                                       {getCancellationRequestStatusLabel(request.status)}
@@ -1835,14 +1835,14 @@ export default function SalesPage() {
                                   <div className="grid gap-1.5 border-t border-slate-200 pt-2 text-xs">
                                     {(request.details || []).map((detail) => (
                                       <div
-                                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 max-[720px]:grid-cols-[minmax(0,1fr)_auto]"
+                                        className="sale-return-product"
                                         key={`${request.id}-${detail.productId}`}
                                       >
-                                        <span className="truncate text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/>
-                                        <span className="font-mono text-slate-500">{detail.requestedQuantity} unidades</span>
-                                        <strong className="font-mono text-ink-950 max-[720px]:col-span-2 max-[720px]:justify-self-end">
+                                        <div className="min-w-0"><span className="block break-words text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/></div>
+                                        <div className="sale-return-values font-mono"><span className="return-quantity text-slate-500">{detail.requestedQuantity} {Number(detail.requestedQuantity) === 1 ? "unidad" : "unidades"}</span><span aria-hidden="true">·</span>
+                                        <strong className="text-ink-950">
                                           {formatClp(detail.requestedSubtotal)}
-                                        </strong>
+                                        </strong></div>
                                       </div>
                                     ))}
                                   </div>
@@ -1869,7 +1869,7 @@ export default function SalesPage() {
                                   )}
 
                                   {canCancel && request.status === "APPROVED" && (
-                                    <div className="flex justify-end border-t border-slate-200 pt-2">
+                                    <div className="return-undo-actions flex justify-end border-t border-slate-200 pt-2">
                                       <button
                                         className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0`}
                                         type="button"

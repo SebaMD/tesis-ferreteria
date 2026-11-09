@@ -13,9 +13,9 @@ export function validateAuditQuery(input: Record<string, unknown>, now = new Dat
     if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v) || v.startsWith("0000") || !Number.isFinite(Date.parse(v)) || new Date(v).toISOString().slice(0, 10) !== v) throw new AuditError("Fecha inválida; utilice AAAA-MM-DD (UTC)"); return v; };
   const from = date("from"), to = date("to");
   const today = now.toISOString().slice(0, 10);
-  if (from && from >= today) throw new AuditError("Desde debe ser anterior al día actual (UTC)");
+  if (from && from > today) throw new AuditError("Desde no puede superar el día actual (UTC)");
   if (to && to > today) throw new AuditError("Hasta no puede superar el día actual (UTC)");
-  if (from && to && from >= to) throw new AuditError("Desde debe ser estrictamente anterior a Hasta");
+  if (from && to && from > to) throw new AuditError("Desde no puede ser posterior a Hasta");
   const page = number("page", 1000000);
   const limit = number("limit", 100) ?? (page === null ? 25 : 10);
   if (page !== null && input.cursor !== undefined) throw new AuditError("No combine page con cursor");

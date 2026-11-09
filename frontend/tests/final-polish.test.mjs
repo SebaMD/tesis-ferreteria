@@ -77,7 +77,8 @@ test("mobile list controls keep global queries visible and secondary filters gro
   assert.doesNotMatch(products, /<label>Buscar movimientos/);
   assert.doesNotMatch(users, /MobileTableTools/);
   assert.match(users, /Filtrar usuarios por rol/);
-  assert.match(dashboard, /auto-rows-fr/);
+  assert.match(dashboard, /dashboard-summary-panels[^\n]*items-start/);
+  assert.doesNotMatch(dashboard, /h-full content-center|auto-rows-fr/);
 });
 
 test("mobile table counts, composable quick filters and compact commerce layouts stay wired", async () => {

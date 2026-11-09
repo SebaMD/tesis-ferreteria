@@ -79,7 +79,7 @@ try {
   }
   await check({from:'2026-11-05'},500,[]);
   await check({from:'2026-11-03',to:'2026-11-04'},1);
-  await call('page=1&from=2026-11-04&to=2026-11-04','ADMIN',400);
+  await check({from:'2026-11-04',to:'2026-11-04'},1);
   await check({to:'2026-11-03'},1,[]);
   assert.equal(await digest(),baseline,'All history reads preserve stored events');
   const cursorFirst=await call('limit=10');

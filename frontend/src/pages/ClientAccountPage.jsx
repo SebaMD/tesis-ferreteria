@@ -291,6 +291,7 @@ export default function ClientAccountPage() {
 
       <AppModal
         open={deactivationOpen}
+        fitVisualViewport
         title="Desactivar mi cuenta"
         description="Esta acción cerrará tu sesión, pero no eliminará tu información ni tu historial."
         onClose={closeDeactivation}
@@ -298,9 +299,9 @@ export default function ClientAccountPage() {
       >
         <form className="grid gap-4" onSubmit={deactivateAccount}>
           <div className="client-account-deactivation-warning rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">Para confirmar, ingresa tu contraseña actual. Si existe una compra o entrega en proceso, la cuenta permanecerá activa.</div>
-          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => { setDeactivationPassword(event.target.value); setDeactivationError(""); }} autoComplete="current-password" aria-invalid={Boolean(deactivationError)} aria-describedby={deactivationError ? "client-deactivation-error" : undefined} required autoFocus /></label>
+          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => { setDeactivationPassword(event.target.value); setDeactivationError(""); }} autoComplete="current-password" aria-invalid={Boolean(deactivationError)} aria-describedby={deactivationError ? "client-deactivation-error" : undefined} required /></label>
           {deactivationError && <p className="m-0 rounded-md border border-critical-200 bg-critical-50 px-3 py-2 text-sm font-semibold text-critical-700" id="client-deactivation-error" role="alert">{deactivationError}</p>}
-          <div className="flex justify-end gap-2 max-[480px]:grid">
+          <div className="account-mobile-actions flex justify-end gap-2 max-[480px]:grid">
             <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeDeactivation} disabled={deactivating}>Cancelar</button>
             <button className="border-critical-600 bg-critical-600 text-white hover:bg-critical-700" type="submit" disabled={deactivating || !deactivationPassword}>{deactivating ? "Desactivando..." : "Confirmar desactivación"}</button>
           </div>

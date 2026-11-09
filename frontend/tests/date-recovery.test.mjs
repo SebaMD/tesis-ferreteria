@@ -12,11 +12,12 @@ test('calendar bounds distinguish UTC and Chile across midnight, month and year'
   assert.equal(shiftCalendarDay('2024-03-01', -1), '2024-02-29');
   for (const day of ['', '0000-01-01', '2026-02-30', '2026-1-01', '2026-13-01']) assert.equal(validCalendarDay(day), false);
 });
-test('audit validates strict UTC intervals without changing inclusive To semantics', () => {
+test('audit accepts single UTC days, today and intervals without changing inclusive To semantics', () => {
   const check = f => auditFilterValidationMessage({ ...auditEmptyFilters, ...f }, {}, now);
   assert.equal(check({from:'2026-11-05',to:'2026-11-06'}), '');
   assert.equal(check({to:'2026-11-06'}), '');
-  for (const f of [{from:'2026-11-06'},{to:'2026-11-07'},{from:'2026-11-05',to:'2026-11-05'},{from:'2026-11-05',to:'2026-11-04'}]) assert.ok(check(f));
+  for(const f of [{from:'2026-11-06'},{from:'2026-11-06',to:'2026-11-06'},{from:'2026-11-05',to:'2026-11-05'},{from:'2001-01-01',to:'2026-11-06'}])assert.equal(check(f),'');
+  for (const f of [{from:'2026-11-07'},{to:'2026-11-07'},{from:'2026-11-05',to:'2026-11-04'},{from:'2026-02-30'},{to:'2026-02-30'}]) assert.ok(check(f));
 });
 test('single-day reports permit today Chile; ranges require distinct days and past From', () => {
   const check = (from, to, mode = 'range') => reportDateError({from,to}, mode, now);

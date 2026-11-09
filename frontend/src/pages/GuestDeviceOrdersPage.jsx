@@ -24,7 +24,7 @@ import {
 function OrdersSection({ title, description, orders, onView, renderActions, renderAfterDetail, empty, secondary = false, headerAction }) {
   return (
     <section className="grid gap-3">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="buyer-orders-heading flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="m-0 text-xl font-bold text-ink-950 max-[520px]:text-lg">{title}</h2>
           {description && <p className="mt-1 mb-0 text-xs leading-5 text-slate-500">{description}</p>}

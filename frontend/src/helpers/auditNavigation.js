@@ -23,8 +23,8 @@ export function auditFilterValidationMessage(filters, incomplete = {}, now = new
     if (incomplete[key] || (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000") || !Number.isFinite(Date.parse(`${value}T00:00:00Z`)) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value))) return "Completa las fechas con un día, mes y año válidos.";
   }
   const today = calendarDay(now);
-  if (filters.from && filters.from >= today) return "Desde debe ser anterior al día actual (UTC).";
+  if (filters.from && filters.from > today) return "Desde no puede superar el día actual (UTC).";
   if (filters.to && filters.to > today) return "Hasta no puede superar el día actual (UTC).";
-  if (filters.from && filters.to && filters.from >= filters.to) return "Desde debe ser estrictamente anterior a Hasta.";
+  if (filters.from && filters.to && filters.from > filters.to) return "Desde no puede ser posterior a Hasta.";
   return "";
 }

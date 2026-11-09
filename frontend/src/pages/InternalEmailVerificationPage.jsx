@@ -55,7 +55,7 @@ export default function InternalEmailVerificationPage() {
             ? "No fue posible enviar el código automáticamente. Puedes intentarlo nuevamente con el botón inferior."
             : "Ingresa el código de 6 dígitos enviado al iniciar sesión. El reenvío es siempre manual."}
         />
-        <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => { clearInternalVerificationChallenge(); logout(); }}><LogOut size={17} /> Cerrar sesión</button>
+        <button className="w-full justify-center border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => { clearInternalVerificationChallenge(); logout(); }}><LogOut size={17} /> Cerrar sesión</button>
       </section>
     </main>
   );

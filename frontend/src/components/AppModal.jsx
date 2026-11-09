@@ -26,15 +26,31 @@ export default function AppModal({
   panelClassName = "",
   overlayClassName = "",
   initialFocusSelector,
+  fitVisualViewport = false,
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
+  const overlayRef = useRef(null);
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const lastFocusedRef = useRef(null);
   const [sideActions, setSideActions] = useState(false);
   const hasFlowActions = Boolean(flowActions);
+
+  useLayoutEffect(() => {
+    if (!open || !fitVisualViewport || !window.visualViewport) return undefined;
+    const viewport = window.visualViewport;
+    const update = () => {
+      overlayRef.current?.style.setProperty("height", `${viewport.height}px`);
+      overlayRef.current?.style.setProperty("top", `${viewport.offsetTop}px`);
+      dialogRef.current?.style.setProperty("max-height", `${Math.max(120, viewport.height - 24)}px`);
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); };
+  }, [open, fitVisualViewport]);
 
   useLayoutEffect(() => {
     if (!open || suspended || !hasFlowActions) return undefined;
@@ -121,6 +137,7 @@ export default function AppModal({
 
   return createPortal(
     <div
+      ref={overlayRef}
       className={`fixed inset-0 z-900 grid place-items-center overflow-clip bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${suspended ? "hidden!" : ""} ${overlayClassName}`}
       hidden={suspended}
       onMouseDown={(event) => {

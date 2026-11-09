@@ -270,7 +270,7 @@ export default function DashboardPage() {
         })}
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-stretch gap-4 [&>section]:grid [&>section]:h-full [&>section]:grid-rows-[auto_1fr]">
+      <div className="dashboard-summary-panels grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4 [&>section]:grid [&>section]:content-start">
         {canViewStockReplenishment && (
           <section
             className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
@@ -284,7 +284,7 @@ export default function DashboardPage() {
               <span className={panelCountClass}>{lowStockProducts.length}</span>
             </div>
 
-            <div className={`grid ${isWarehouse ? "h-full content-center" : "content-start"}`}>
+            <div className="grid content-start">
               {priorityLowStockProducts.length === 0 ? (
                 <p className={emptyStateClass}>No hay productos con stock bajo.</p>
               ) : (
@@ -394,7 +394,7 @@ export default function DashboardPage() {
               <span className={panelCountClass}>{operationalOrders.length}</span>
             </div>
 
-            <div className="grid h-full auto-rows-fr">
+            <div className="grid content-start">
               {priorityOperationalOrders.length === 0 ? (
                 <p className={emptyStateClass}>No hay pedidos pendientes actualmente.</p>
               ) : (

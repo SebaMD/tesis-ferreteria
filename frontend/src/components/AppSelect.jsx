@@ -81,7 +81,8 @@ export default function AppSelect({
     updatePosition();
     const handleViewportChange = event => {
       // A portalled menu must not remain detached from a scrolled-away field.
-      if (event.type === 'resize' || !popupRef.current?.contains(event.target)) {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (event.type !== 'resize' && !popupRef.current?.contains(event.target) && rect && (rect.bottom < 0 || rect.top > window.innerHeight)) {
         setOpen(false);
         return;
       }
@@ -103,7 +104,7 @@ export default function AppSelect({
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
-    if (hasSearch) window.requestAnimationFrame(() => searchRef.current?.focus());
+    // Touch opening must not summon the virtual keyboard and resize the viewport.
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open, hasSearch]);
 

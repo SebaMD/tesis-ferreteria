@@ -156,6 +156,8 @@ export default function ProductsPage() {
   const entryReviewRef = useRef(null);
   const movementGuard = useRef(false);
   const simpleModeRef = useRef(null);
+  const inventoryStartRef = useRef(null);
+  const inventoryScrollKeyRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState(null);
@@ -198,6 +200,20 @@ export default function ProductsPage() {
   const canViewAdministrativeStock = user?.role !== "CASHIER";
   const viewParam = searchParams.get("view");
   const filterParam = searchParams.get("filter");
+  useEffect(() => {
+    if (loading || (!viewParam && !filterParam)) return undefined;
+    const key = `${viewParam || ""}:${filterParam || ""}`;
+    if (inventoryScrollKeyRef.current === key) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const section = inventoryStartRef.current;
+      if (!section) return;
+      const navbar = document.querySelector('[data-loading-navbar]');
+      section.style.scrollMarginTop = `${(navbar?.getBoundingClientRect().height || 72) + 12}px`;
+      section.scrollIntoView({ block: "start", behavior: "instant" });
+      inventoryScrollKeyRef.current = key;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loading, viewParam, filterParam]);
 
   useBarcodeScanner({
     captureInModal: inventoryScannerOpen,
@@ -462,7 +478,7 @@ export default function ProductsPage() {
   const useSimpleDraft = ({ fields, files }) => {
     setForm(current => ({ ...current, ...fields })); setUnitSearch(fields.unitMeasure);
     setPendingProductImages(files); setVariantsEnabled(false);
-    requestAnimationFrame(() => requestAnimationFrame(() => simpleModeRef.current?.focus()));
+    requestAnimationFrame(() => requestAnimationFrame(() => (simpleProductFormRef.current?.querySelector('[data-new-product-name]') || simpleModeRef.current)?.focus({ preventScroll: true })));
   };
   const finishNewBundle = async (result, creation) => {
     const origin = linkedRegistration?.origin === "CATEGORY_QUICK" ? "CATEGORY_QUICK" : "INVENTORY_CREATE";
@@ -1305,7 +1321,7 @@ export default function ProductsPage() {
   };
 
   return (
-    <section className={`${pageClass} inventory-compact-page`}>
+    <section ref={inventoryStartRef} className={`${pageClass} inventory-compact-page`}>
       <LoadingOverlay active={loading} />
       <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
         const category = creationReview.category || categories.find(item => item.id === product.categoryId);
@@ -1542,6 +1558,7 @@ export default function ProductsPage() {
         open={canManage && activeForm === "product"}
         suspended={bundleDialogActive || nameCorrectionOpen}
         title={editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
+        initialFocusSelector={!editingProductId && !variantsEnabled ? '[data-new-product-name]' : undefined}
         description="Completa la información comercial y de inventario."
         onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
         size={variantsEnabled ? "xlarge" : "large"}
@@ -1568,7 +1585,7 @@ export default function ProductsPage() {
               :<ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>}
             {editingProduct ? <ProductNameCorrectionAction asField label="Nombre" key={`${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} dirty={productNameDraftIsDirty(form, unitSearch, editingProduct, pendingProductImages)} busy={bundleSaving || submittingProduct || managingProductImages} onOpenChange={setNameCorrectionOpen}
               onConflict={()=>toast.warning("Recarga el editor y revisa los datos antes de guardar.")} onRenamed={async result=>{setForm(p=>({...p,name:result.name}));await loadData();}}/>
-              : <label>Nombre<input value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} required/></label>}
+              : <label>Nombre<input data-new-product-name value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} required/></label>}
             {editingProduct?.hasHistory&&!editingProduct.familyId?<ProductClassificationAction field="brand" key={`brand-${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} categories={categories} dirty={productNameDraftIsDirty(form,unitSearch,editingProduct,pendingProductImages)} busy={bundleSaving||submittingProduct||managingProductImages} onOpenChange={setNameCorrectionOpen} onSaved={async r=>{setForm(p=>({...p,brand:r.value}));await loadData();}}/>:<label>
               Marca (opcional)
               <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />
@@ -1723,6 +1740,7 @@ export default function ProductsPage() {
       <AppModal
         open={canCreateMovement && (activeForm === "ENTRY" || activeForm === "ADJUSTMENT")}
         title={activeForm === "ENTRY" ? "Registrar entrada" : "Registrar ajuste administrativo"}
+        initialFocusSelector={linkedRegistration?.step === "ENTRY" ? 'input[type="number"]' : 'input[placeholder="Buscar por producto, ID o categoría"]'}
         description={activeForm === "ENTRY"
           ? "Aumenta el stock disponible del producto seleccionado."
           : "Establece el stock exacto después de una revisión administrativa."}

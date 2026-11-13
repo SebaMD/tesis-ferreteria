@@ -20,6 +20,8 @@ import {
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import useCustomerNotice from "../hooks/useCustomerNotice.js";
+import { localDateTime } from "../helpers/promotionDates.js";
+import { customerNoticeDates } from "../helpers/customerNoticeDates.js";
 import {
   createCustomerNoticeRequest,
   deleteCustomerNoticeRequest,
@@ -67,14 +69,15 @@ function noticeForm(notice) {
   };
 }
 
-function noticePayload(form) {
+function noticePayload(form, original = null, now = Date.now()) {
+  const dates = customerNoticeDates(form, original, now);
   return {
     title: form.title.trim(),
     message: form.message.trim(),
     isActive: form.isActive,
     displaySeconds: Number(form.displaySeconds),
-    startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
-    endsAt: !form.indefinite && form.endsAt ? new Date(form.endsAt).toISOString() : null,
+    startsAt: dates.startsAt?.toISOString() ?? null,
+    endsAt: dates.endsAt?.toISOString() ?? null,
   };
 }
 
@@ -117,11 +120,24 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const [draggingId, setDraggingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [originalNotice, setOriginalNotice] = useState(null);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [dateNow, setDateNow] = useState(Date.now);
+  const [dateTouched, setDateTouched] = useState({});
+  const [serverDateErrors, setServerDateErrors] = useState({});
   const [imageFile, setImageFile] = useState(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const dates = customerNoticeDates(form, originalNotice, dateNow);
+  const dateErrors = { ...dates.errors, ...serverDateErrors };
+
+  useEffect(() => {
+    if (!editingId || editingId === "presentation") return undefined;
+    const timer = window.setInterval(() => setDateNow(Date.now() + serverOffset), 15_000);
+    return () => window.clearInterval(timer);
+  }, [editingId, serverOffset]);
 
   const updateNotices = useCallback((next) => {
     noticesRef.current = typeof next === "function" ? next(noticesRef.current) : next;
@@ -162,7 +178,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
 
   const loadConfiguration = useCallback(async () => {
     try {
-      const configuration = await getCustomerNoticeConfigurationRequest();
+      const configuration = await getCustomerNoticeConfigurationRequest({ onServerTime: setServerOffset });
       setPresentation(configuration.presentation);
       setDeliveryAnnouncement(configuration.deliveryAnnouncement);
       updateNotices(configuration.notices);
@@ -186,8 +202,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     editorRevealRef.current = { id: "new", focus };
     setEditingId("new");
     setForm(EMPTY_FORM);
+    setOriginalNotice(null);
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched({});
+    setServerDateErrors({});
     resetMedia();
-  }, []);
+  }, [serverOffset]);
 
   useImperativeHandle(ref, () => ({ startCreate }), [startCreate]);
 
@@ -195,6 +215,10 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     editorRevealRef.current = { id: notice.id, focus };
     setEditingId(notice.id);
     setForm(noticeForm(notice));
+    setOriginalNotice(notice);
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched({});
+    setServerDateErrors({});
     resetMedia();
   };
 
@@ -239,6 +263,13 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
 
   const persist = async (event) => {
     event.preventDefault();
+    if (editingId !== "presentation") {
+      const now = Date.now() + serverOffset;
+      setDateNow(now);
+      setDateTouched({ startsAt: true, endsAt: true });
+      setServerDateErrors({});
+      if (Object.keys(customerNoticeDates(form, originalNotice, now).errors).length) return;
+    }
     setSaving(true);
     let createdNoticeId = null;
     try {
@@ -252,9 +283,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
         else if (removeImage && presentation?.imageUrl) await removeCatalogPresentationImageRequest();
       } else {
         const notice = editingId === "new"
-          ? await createCustomerNoticeRequest(noticePayload(form))
-          : await updateCustomerNoticeRequest(editingId, noticePayload(form));
-        if (editingId === "new") createdNoticeId = notice.id;
+          ? await createCustomerNoticeRequest(noticePayload(form, originalNotice, Date.now() + serverOffset))
+          : await updateCustomerNoticeRequest(editingId, noticePayload(form, originalNotice, Date.now() + serverOffset));
+        if (editingId === "new") {
+          createdNoticeId = notice.id;
+          setOriginalNotice(notice);
+        }
         if (imageFile) await uploadCustomerNoticeImageRequest(notice.id, imageFile);
         else if (removeImage && editingId !== "new") await removeCustomerNoticeImageRequest(notice.id);
       }
@@ -266,7 +300,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
         setEditingId(createdNoticeId);
         await loadConfiguration();
       }
-      toast.error(getApiError(error, "No se pudieron guardar los cambios"));
+      const message = getApiError(error, "No se pudieron guardar los cambios");
+      if (editingId !== "presentation") {
+        if (/término|termino/i.test(message)) setServerDateErrors({ endsAt: message });
+        else if (/inicio/i.test(message)) setServerDateErrors({ startsAt: message });
+      }
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -275,7 +314,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const toggleActive = async (notice) => {
     try {
       await updateCustomerNoticeRequest(notice.id, {
-        ...noticePayload(noticeForm(notice)),
+        ...noticePayload(noticeForm(notice), notice),
         isActive: !notice.isActive,
       });
       await Promise.all([loadConfiguration(), refreshNotices()]);
@@ -360,6 +399,20 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     ? presentation?.imageUrl
     : notices.find((notice) => notice.id === editingId)?.imageUrl;
 
+  const changeDate = (field, value) => {
+    setForm(current => ({ ...current, [field]: value }));
+    setDateNow(Date.now() + serverOffset);
+    setServerDateErrors({});
+    setDateTouched(current => ({ ...current, [field]: true, ...(field === "startsAt" && form.endsAt ? { endsAt: true } : {}) }));
+  };
+
+  const invalidDate = (event, field) => {
+    event.preventDefault();
+    const checked = customerNoticeDates(form, originalNotice, Date.now() + serverOffset);
+    setDateTouched(current => ({ ...current, [field]: true }));
+    setServerDateErrors(current => ({ ...current, [field]: checked.errors[field] || `La fecha de ${field === "startsAt" ? "inicio" : "término"} no es válida` }));
+  };
+
   const renderEditor = (kind) => {
     const isPresentation = kind === "presentation";
     return (
@@ -384,15 +437,23 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
             <label>Mensaje
               <textarea className="min-h-28 resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2.5 text-sm text-ink-950" maxLength="1000" value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} required />
             </label>
-            <div className="grid grid-cols-3 gap-3 max-[680px]:grid-cols-1">
+            <div className="grid grid-cols-3 items-start gap-3 max-[680px]:grid-cols-1">
               <label>Tiempo en pantalla (segundos)
                 <input type="number" min="3" max="30" step="1" value={form.displaySeconds} onChange={(event) => setForm((current) => ({ ...current, displaySeconds: event.target.value }))} required />
               </label>
-              <label>Inicio de vigencia (opcional)
-                <input type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} />
+              <label className="min-w-0"><span className="block min-[681px]:min-h-10 min-[1024px]:min-h-5">Inicio de vigencia (opcional)</span>
+                <input aria-label="Inicio de vigencia (opcional)" className="min-w-0 max-w-full" type="datetime-local" step="60" value={form.startsAt} min={dates.startUnchanged ? undefined : localDateTime(dateNow)}
+                  aria-invalid={Boolean(dateTouched.startsAt && dateErrors.startsAt)} aria-describedby={dateTouched.startsAt && dateErrors.startsAt ? "notice-start-error" : undefined}
+                  onChange={event => changeDate("startsAt", event.target.value)} onBlur={() => setDateTouched(current => ({ ...current, startsAt: true }))} onInvalid={event => invalidDate(event, "startsAt")} />
+                {dateTouched.startsAt && dateErrors.startsAt && <span id="notice-start-error" className="text-sm text-critical-600" role="alert">{dateErrors.startsAt}</span>}
               </label>
-              <label>Término de vigencia (opcional)
-                <input type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} disabled={form.indefinite} required={!form.indefinite} />
+              <label className="min-w-0"><span className="block min-[681px]:min-h-10 min-[1024px]:min-h-5">Término de vigencia (opcional)</span>
+                <input aria-label="Término de vigencia (opcional)" className="min-w-0 max-w-full" type="datetime-local" step="60" value={form.endsAt}
+                  min={dates.endUnchanged && !dateErrors.endsAt ? undefined : localDateTime(Math.floor((dates.startsAt?.getTime() ?? dateNow) / 60_000) * 60_000 + 60_000)}
+                  aria-invalid={Boolean(dateTouched.endsAt && dateErrors.endsAt)} aria-describedby={dateTouched.endsAt && dateErrors.endsAt ? "notice-end-error" : undefined}
+                  onChange={event => changeDate("endsAt", event.target.value)} onBlur={() => setDateTouched(current => ({ ...current, endsAt: true }))} onInvalid={event => invalidDate(event, "endsAt")}
+                  disabled={form.indefinite} required={!form.indefinite} />
+                {dateTouched.endsAt && dateErrors.endsAt && <span id="notice-end-error" className="text-sm text-critical-600" role="alert">{dateErrors.endsAt}</span>}
               </label>
             </div>
             <div className="flex flex-wrap gap-5">
@@ -401,7 +462,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                 Aviso activo
               </label>
               <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm font-bold text-ink-700">
-                <input className="size-4 min-h-0 w-4" type="checkbox" checked={form.indefinite} onChange={(event) => setForm((current) => ({ ...current, indefinite: event.target.checked, endsAt: event.target.checked ? "" : current.endsAt }))} />
+                <input className="size-4 min-h-0 w-4" type="checkbox" checked={form.indefinite} onChange={event => { setForm(current => ({ ...current, indefinite: event.target.checked })); setServerDateErrors({}); }} />
                 Vigencia indefinida
               </label>
             </div>

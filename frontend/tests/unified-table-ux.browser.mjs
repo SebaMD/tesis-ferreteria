@@ -121,13 +121,15 @@ try {
       if (width >= 1000) await centered(page);
       await noOverflow(page);
       if (mode === 'sales' && width >= 1000) {
-        const a = await page.getByRole('button', { name: 'Registrar devolución', exact: true }).first().boundingBox();
-        const b = await page.getByRole('button', { name: 'Revisar solicitud', exact: true }).first().boundingBox();
-        assert.ok(Math.abs(a.width - b.width) < 1);
+        const a = await page.getByRole('button', { name: 'Detalle', exact: true }).first().boundingBox();
+        const b = await page.getByRole('button', { name: 'Revisar solicitud de devolución', exact: true }).first().boundingBox();
+        assert.ok(Math.abs(a.height - b.height) < 1);
+        const direct = await page.getByRole('button', { name: 'Registrar devolución', exact: true }).first().boundingBox();
+        assert.ok(Math.abs(b.width - direct.width) < 1, 'Administrator review matches direct return width');
         await page.getByRole('button', { name: 'Registrar devolución', exact: true }).first().click();
         await page.getByRole('dialog').getByRole('table').waitFor(); await centered(page);
         await page.keyboard.press('Escape');
-        await page.getByRole('button', { name: 'Revisar solicitud', exact: true }).first().click();
+        await page.getByRole('button', { name: 'Revisar solicitud de devolución', exact: true }).first().click();
         await page.getByRole('dialog').getByRole('table').waitFor(); await centered(page); await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Detalle', exact: true }).first().click();
         await page.getByRole('dialog').getByRole('table').waitFor(); await centered(page); await page.keyboard.press('Escape');

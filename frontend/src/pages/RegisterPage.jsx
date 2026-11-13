@@ -105,7 +105,7 @@ export default function RegisterPage() {
         </Link>
 
         <form className="grid gap-5 rounded-lg border border-slate-200 bg-white p-7 shadow-[0_12px_36px_rgba(16,21,31,0.08)] max-[620px]:p-5" onSubmit={handleSubmit}>
-          <div>
+          <div className="auth-mobile-heading">
             <h1 className="m-0 text-2xl font-bold text-ink-950">Crear cuenta</h1>
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Regístrate para comprar y consultar tus pedidos.</p>
           </div>

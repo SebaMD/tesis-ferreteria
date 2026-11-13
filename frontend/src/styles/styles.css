@@ -25,6 +25,10 @@
 .fyf-data-table .inventory-product-label :is(strong, small) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .fyf-data-table .table-description-cell .inventory-variant-select .app-select-trigger { text-align: left; }
 .fyf-data-table .sale-return-action { width: 180px; max-width: 100%; min-height: 36px; white-space: normal; }
+.sale-detail-action, .sale-review-action { flex-shrink: 0; padding: 6px 11px; font-size: 12px; line-height: 1.25; }
+.fyf-data-table :is(.sale-detail-action, .sale-review-action) { min-height: 36px; }
+.fyf-data-table .sale-review-action--admin { width: 180px; max-width: 100%; }
+.sale-detail-action > svg, .sale-review-action > svg { flex-shrink: 0; }
 .audit-history-pagination { width: 100%; }
 
 @theme {
@@ -943,6 +947,21 @@
 .product-positive-action:disabled { opacity: .5; cursor: not-allowed; }
 .inventory-toolbar ~ div button:disabled { cursor: not-allowed; opacity: .5; }
 @media(max-width:720px) {
+  /* Only authentication headings opt in; form labels retain their alignment. */
+  .auth-mobile-heading { width: 100%; min-width: 0; text-align: center; }
+  .auth-mobile-heading :is(h1, h2, h3) { justify-content: center; }
+  .auth-mobile-heading-row { flex-direction: column; align-items: center; }
+  .product-mode-switch > button { padding: 8px 6px; font-size: 14px; line-height: 1.25; }
+  .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .dashboard-metrics > article { min-width: 0; min-height: 112px; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; padding: 12px; }
+  .dashboard-metrics > article:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .dashboard-metrics > article > strong { min-width: 0; font-size: 24px; line-height: 1.25; overflow-wrap: anywhere; }
+  .dashboard-metrics > article > span:first-child { width: 30px; height: 30px; }
+  .dashboard-metrics > article > span:first-child > svg { width: 18px; height: 18px; }
+  .dashboard-metrics > article > span:last-child { min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+  .dashboard-metrics > .dashboard-metric-card--long > span:first-child { grid-row: 1; }
+  .dashboard-metrics > .dashboard-metric-card--long > strong { grid-column: 1 / -1; grid-row: 2; font-size: 20px; }
+  .dashboard-metrics > .dashboard-metric-card--long > span:last-child { grid-row: 3; }
   .inventory-search { width: 100%; }
   .inventory-section-header { text-align: center; }
   .inventory-compact-page .inventory-search-controls { display: grid; grid-template-columns: minmax(0,1fr) auto; width: 100%; }

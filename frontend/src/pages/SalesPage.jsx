@@ -939,7 +939,7 @@ export default function SalesPage() {
   const saleActionsFor = (sale) => (
     <>
       <button
-        className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`}
+        className={`${secondaryButtonClass} ${tableActionButtonClass} sale-detail-action mr-0!`}
         type="button"
         onClick={() => openDetailModal(sale)}
         disabled={loadingSaleDetail}
@@ -963,12 +963,13 @@ export default function SalesPage() {
       )}
       {canReviewCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && (
         <button
-          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-return-action border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-review-action ${user?.role === "ADMIN" ? "sale-review-action--admin" : ""} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
           type="button"
+          aria-label="Revisar solicitud de devolución"
           onClick={() => openReviewModal(sale)}
           disabled={submitting}
         >
-          <Send size={16} /> Revisar solicitud
+          <Send size={16} aria-hidden="true" /> Revisar
         </button>
       )}
       {canCancel && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && (

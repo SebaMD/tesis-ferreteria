@@ -263,7 +263,7 @@ export default function ReportsPage() {
                   <input type="date" name="to" value={filters.to} min={dateBounds.toMin} max={dateBounds.toMax} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "report-range-error" : undefined} onChange={handleChange} required />
                 </label>
               </>
-            ) : <div className="flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 text-sm font-semibold"><CalendarDays size={17}/><span>{filters.from === filters.to ? filters.from : `${filters.from} al ${filters.to}`}</span></div>}
+            ) : <div className="flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 text-sm font-semibold"><CalendarDays size={17} className="text-rust-600" aria-hidden="true"/><span>{filters.from === filters.to ? filters.from : `${filters.from} al ${filters.to}`}</span></div>}
         </>}
         actions={<>
             <button type="submit" disabled={loading || Boolean(dateError)}>

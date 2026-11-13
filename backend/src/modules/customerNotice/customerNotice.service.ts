@@ -16,6 +16,7 @@ import {
   updateCustomerNoticeById,
 } from "./customerNotice.repository.js";
 import type { CatalogPresentationInput, NoticeInput } from "./customerNotice.validation.js";
+import { customerNoticePeriodError } from "./customerNotice.validation.js";
 
 const DEFAULT_PRESENTATION = {
   id: 1,
@@ -95,13 +96,18 @@ export class CustomerNoticeError extends Error {
 }
 
 export async function createCustomerNoticeService(userId: number, input: NoticeInput) {
+  const error = customerNoticePeriodError(input);
+  if (error) throw new CustomerNoticeError(error, 400);
   return presentNotice(await createCustomerNotice({ ...input, userId }));
 }
 
 export async function updateCustomerNoticeService(userId: number, id: number, input: NoticeInput) {
-  if (!await findCustomerNoticeById(id)) {
+  const current = await findCustomerNoticeById(id);
+  if (!current) {
     throw new CustomerNoticeError("Aviso no encontrado", 404);
   }
+  const error = customerNoticePeriodError(input, current);
+  if (error) throw new CustomerNoticeError(error, 400);
   const updated = await updateCustomerNoticeById(id, { ...input, userId });
   if (!updated) throw new CustomerNoticeError("Aviso no encontrado", 404);
   return presentNotice(updated);

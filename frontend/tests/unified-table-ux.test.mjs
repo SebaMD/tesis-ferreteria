@@ -52,9 +52,10 @@ test('only opted-in descriptive cells and expanded audit details use left alignm
   assert.doesNotMatch(audit, /registros de esta página|Más recientes primero/);
 });
 
-test('sale secondary return actions keep their width; cashier and warehouse schedules are informational', async () => {
+test('sale review styling is independent of direct returns; worker schedules are informational', async () => {
   const sales = await read('pages/SalesPage.jsx');
-  assert.match(sales, /sale-return-action[^`]*`\}[\s\S]*?openReviewModal\(sale\)/);
+  assert.match(sales, /sale-review-action[^`]*`\}[\s\S]*?openReviewModal\(sale\)/);
+  assert.match(sales, /aria-label="Revisar solicitud de devolución"/);
   assert.match(sales, /sale-return-action[^`]*`\}[\s\S]*?openDirectReturnModal\(sale\)/);
   const users = await read('pages/UsersPage.jsx');
   assert.match(users, /\["CASHIER", "WAREHOUSE"\]\.includes\(user.roleName\) && \([\s\S]*?openScheduleForm\(user\)/);

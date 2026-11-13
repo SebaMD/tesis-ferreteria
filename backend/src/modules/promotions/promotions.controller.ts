@@ -27,6 +27,8 @@ function handlePromotionError(res: Response, error: unknown, fallback: string) {
 
 export async function listPromotionsController(_req: AuthenticatedRequest, res: Response) {
   try {
+    // Allow the promotion form to read the HTTP clock when frontend/API use different origins.
+    res.append("Access-Control-Expose-Headers", "Date");
     return handleSuccess(res, 200, "Promociones obtenidas", await listPromotionsService());
   } catch (error) {
     return handlePromotionError(res, error, "No se pudieron obtener las promociones");

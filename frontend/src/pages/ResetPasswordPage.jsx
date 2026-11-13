@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
           </div>
         ) : (
           <form className="grid gap-5" onSubmit={submit}>
-            <div><h1 className="m-0 text-2xl font-bold text-ink-950">Crea una nueva contraseña</h1><p className="mt-2 mb-0 text-sm leading-6 text-slate-600">El enlace es personal, vence a los 30 minutos y solo puede utilizarse una vez.</p></div>
+            <div className="auth-mobile-heading"><h1 className="m-0 text-2xl font-bold text-ink-950">Crea una nueva contraseña</h1><p className="mt-2 mb-0 text-sm leading-6 text-slate-600">El enlace es personal, vence a los 30 minutos y solo puede utilizarse una vez.</p></div>
             {!token && <p className="m-0 rounded-[5px] border border-critical-200 bg-critical-50 p-3 text-sm text-critical-600" role="alert">El enlace no es válido o ya expiró. Solicita uno nuevo.</p>}
             <label>
               Nueva contraseña

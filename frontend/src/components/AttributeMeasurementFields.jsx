@@ -1,7 +1,7 @@
 import { ATTRIBUTE_MEASUREMENTS } from "../helpers/attributeMeasurements.js";
 
 export default function AttributeMeasurementFields({ attribute, label, disabled, hasValues, onChange }) {
-  if (attribute.id) return <p className="m-0 break-words text-xs text-slate-500">{attribute.unitCode
+  if (attribute.id) return <p className="m-0 wrap-break-word text-xs text-slate-500">{attribute.unitCode
     ? `Atributo cuantitativo · ${ATTRIBUTE_MEASUREMENTS[attribute.measurementKind]?.label || "Magnitud"} · ${attribute.unitCode}. Tipo, unidad y valores guardados protegidos; no es la unidad de venta del SKU.`
     : "Atributo de texto. Las etiquetas existentes se conservan; no se convierten automáticamente a magnitudes."}</p>;
   return <div className="grid min-w-0 gap-1">

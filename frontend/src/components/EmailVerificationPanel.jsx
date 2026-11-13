@@ -17,6 +17,7 @@ export default function EmailVerificationPanel({
   verified = false,
   title = "Verifica tu correo",
   description = "Te enviaremos un codigo de 6 digitos.",
+  centerHeadingOnMobile = false,
 }) {
   const [challenge, setChallenge] = useState(initialChallenge?.sent ? initialChallenge : null);
   const [pin, setPin] = useState("");
@@ -101,9 +102,9 @@ export default function EmailVerificationPanel({
 
   return (
     <section className="grid gap-4 rounded-lg border border-rust-200 bg-rust-50 p-4" aria-labelledby="email-verification-title">
-      <div className="flex items-start gap-3">
+      <div className={`flex items-start gap-3 ${centerHeadingOnMobile ? "auth-mobile-heading-row" : ""}`}>
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-rust-600"><ShieldCheck size={20} /></span>
-        <div className="min-w-0">
+        <div className={`min-w-0 ${centerHeadingOnMobile ? "auth-mobile-heading" : ""}`}>
           <h3 className="m-0 text-sm font-bold text-ink-950" id="email-verification-title">{title}</h3>
           <p className="mt-1 mb-0 text-xs leading-5 text-slate-600">{description}</p>
           <span className="mt-1 block truncate text-xs font-semibold text-ink-700">{maskedEmail}</span>

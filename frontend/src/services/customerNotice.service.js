@@ -19,8 +19,11 @@ export async function getPublicCustomerNoticeRequest() {
   return noticeConfiguration(response.data.data);
 }
 
-export async function getCustomerNoticeConfigurationRequest() {
+export async function getCustomerNoticeConfigurationRequest({ onServerTime } = {}) {
+  const requestedAt = Date.now();
   const response = await api.get("/customer-notice/configuration");
+  const serverTime = Date.parse(response.headers?.date);
+  if (Number.isFinite(serverTime)) onServerTime?.(serverTime - (requestedAt + Date.now()) / 2);
   return noticeConfiguration(response.data.data);
 }
 

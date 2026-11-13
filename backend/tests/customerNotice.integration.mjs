@@ -161,7 +161,7 @@ try {
     body: payload({
       title: "Vigente primero",
       displaySeconds: 9,
-      startsAt: new Date(now - 60_000).toISOString(),
+      startsAt: new Date(Math.floor(now / 60_000) * 60_000).toISOString(),
       endsAt: new Date(now + 3_600_000).toISOString(),
     }),
   }, 201);
@@ -173,10 +173,15 @@ try {
     role: "ADMIN",
     body: payload({ title: "Futuro", startsAt: new Date(now + 3_600_000).toISOString() }),
   }, 201);
-  await request("POST", "/customer-notice/configuration", {
+  const expired = await request("POST", "/customer-notice/configuration", {
     role: "ADMIN",
-    body: payload({ title: "Vencido", endsAt: new Date(now - 60_000).toISOString() }),
+    body: payload({ title: "Vencido", endsAt: new Date(now + 3_600_000).toISOString() }),
   }, 201);
+  // Historical fixture in this disposable database, not an invalid new API period.
+  const historyPool = new pg.Pool({ connectionString: databaseUrl(databaseNames[1]) });
+  try {
+    await historyPool.query("UPDATE customer_notice SET ends_at=$1 WHERE id=$2", [new Date(now - 60_000), expired.data.id]);
+  } finally { await historyPool.end(); }
   await request("POST", "/customer-notice/configuration", {
     role: "ADMIN",
     body: payload({ title: "Inactivo", isActive: false }),

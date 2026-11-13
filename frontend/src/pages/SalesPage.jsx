@@ -1839,7 +1839,7 @@ export default function SalesPage() {
                                         className="sale-return-product"
                                         key={`${request.id}-${detail.productId}`}
                                       >
-                                        <div className="min-w-0"><span className="block break-words text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/></div>
+                                        <div className="min-w-0"><span className="block wrap-break-word text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/></div>
                                         <div className="sale-return-values font-mono"><span className="return-quantity text-slate-500">{detail.requestedQuantity} {Number(detail.requestedQuantity) === 1 ? "unidad" : "unidades"}</span><span aria-hidden="true">·</span>
                                         <strong className="text-ink-950">
                                           {formatClp(detail.requestedSubtotal)}

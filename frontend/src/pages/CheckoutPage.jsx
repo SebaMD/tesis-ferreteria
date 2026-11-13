@@ -477,7 +477,7 @@ function CheckoutForm({ draftStore }) {
                       </div>
                       <div className="grid min-w-0 gap-1">
                         <strong className="truncate text-sm text-ink-950">{row.product.name}</strong>
-                        {variantLabel(row.product)&&<span className="break-words text-xs text-slate-500">{variantLabel(row.product)}</span>}
+                        {variantLabel(row.product)&&<span className="wrap-break-word text-xs text-slate-500">{variantLabel(row.product)}</span>}
                         <span className="text-xs text-slate-500">
                           {formatClp(row.pricing.baseUnitPrice)} × {formatQuantityWithUnit(row.quantity, row.product.unitMeasure)}
                         </span>
@@ -675,7 +675,7 @@ function CheckoutForm({ draftStore }) {
             {quotePending && <p role="status" className="m-0 rounded border border-slate-300 bg-slate-50 p-3 text-sm text-ink-700">Actualizando resumen para {deliveryType === "DELIVERY" ? "despacho local" : "retiro en tienda"}…{displayQuote ? " Los importes mostrados son del último resumen validado, no están confirmados para pagar." : " Se validan los importes en el servidor."}</p>}
             {quote && quoteState.needsAcceptance && <p role="status" className="m-0 rounded-[5px] border border-rust-200 bg-rust-50 p-3 text-sm text-ink-950">El resumen cambió. Revisa los productos, condiciones e importes actualizados. Para confirmarlos e iniciar el pago, pulsa Pagar por el total mostrado.</p>}
             {quoteError && <div role="alert" className="checkout-quote-alert grid min-w-0 gap-4 rounded-[5px] p-4 text-sm">
-              <p className="m-0 break-words font-semibold leading-6">{quoteError}</p>
+              <p className="m-0 wrap-break-word font-semibold leading-6">{quoteError}</p>
               {quoteState.errorKind === "RETRY" && <button className="min-h-11 w-full max-w-full justify-self-center px-5 sm:w-auto sm:min-w-56" type="button" onClick={() => setQuoteRefresh(v => v + 1)}>Reintentar cálculo</button>}
               {quoteState.errorKind === "PRODUCTS" && <Link className="font-bold underline" to={back.to} state={back.state}>{checkoutIntent?.source === "DIRECT" || directPurchase ? "Revisar producto y cantidad" : "Revisar productos y cantidades en el carrito"}</Link>}
             </div>}
@@ -707,7 +707,7 @@ function CheckoutForm({ draftStore }) {
         <button className="product-positive-action" type="button" onClick={() => { setSaveAddress(true); setConfirmAddressReplacement(false); }}>Confirmar reemplazo al crear el pedido</button>
       </>}>
         <p>Tu cuenta admite una dirección. La anterior se reemplazará por estos datos únicamente al crear el pedido. Los pedidos anteriores no cambian.</p>
-        <p className="break-words">{destination.deliveryRecipientName} · {destination.deliveryPhone}<br />{destination.deliveryAddress} · {DELIVERY_COMMUNE}<br />{destination.deliveryReference}</p>
+        <p className="wrap-break-word">{destination.deliveryRecipientName} · {destination.deliveryPhone}<br />{destination.deliveryAddress} · {DELIVERY_COMMUNE}<br />{destination.deliveryReference}</p>
       </AppModal>
     </main>
   );

@@ -49,11 +49,11 @@ export default function FamilyDeactivationDialog({ familyId, userId, onClose, on
     <form onSubmit={submit} className="grid min-w-0 gap-3">
       {busy && !bundle && <p role="status">Consultando todas las variantes…</p>}
       {error && <p role="alert" className="rounded border border-critical-600 bg-critical-50 p-3 text-sm text-critical-600">{error}</p>}
-      {bundle && <><strong className="break-words">Familia #{familyId} · {bundle.family.name}</strong>
+      {bundle && <><strong className="wrap-break-word">Familia #{familyId} · {bundle.family.name}</strong>
         <p className="m-0 text-sm">{active.length} variantes activas y {inactive.length} previamente inactivas.</p>
         <p className="m-0 text-sm">{activate ? "Se activarán exclusivamente los SKU de la desactivación verificada. Se conservarán stock, identidad e historial. Los artículos previamente inactivos seguirán inactivos." : "Se desactivarán conjuntamente todas las variantes activas para nuevas ventas. Se conservarán sus IDs, stock, movimientos, imágenes e historial. Un compromiso comercial incompatible bloqueará toda la operación."}</p>
-        <p className="m-0 break-words text-sm"><strong>{activate ? "Se activarán: " : "Se desactivarán: "}</strong>{(activate ? eligibility?.productIds || [] : active.map(p=>p.id)).map(id => `Producto #${id}`).join(", ") || "Ninguna"}</p>
-        <p className="m-0 break-words text-sm"><strong>Sin cambio, ya inactivas: </strong>{(activate ? eligibility?.previouslyInactiveProductIds || [] : inactive.map(p=>p.id)).map(id => `Producto #${id}`).join(", ") || "Ninguna"}</p>
+        <p className="m-0 wrap-break-word text-sm"><strong>{activate ? "Se activarán: " : "Se desactivarán: "}</strong>{(activate ? eligibility?.productIds || [] : active.map(p=>p.id)).map(id => `Producto #${id}`).join(", ") || "Ninguna"}</p>
+        <p className="m-0 wrap-break-word text-sm"><strong>Sin cambio, ya inactivas: </strong>{(activate ? eligibility?.previouslyInactiveProductIds || [] : inactive.map(p=>p.id)).map(id => `Producto #${id}`).join(", ") || "Ninguna"}</p>
         <p className="m-0 text-xs text-slate-500">No se archiva ni elimina la familia. La activación individual continúa disponible en Editar; la masiva solo restaura una desactivación verificable sin cambios posteriores.</p>
         <fieldset disabled={busy || uncertain} className="m-0 grid min-w-0 gap-3 border-0 p-0">
           <label>{activate ? "Motivo de activación" : "Motivo de desactivación"}<textarea required minLength={8} maxLength={500} value={reason} onChange={e => { setReason(e.target.value); setConfirmed(false); }} className="min-h-20 w-full rounded border border-slate-300 bg-white p-2" /></label>

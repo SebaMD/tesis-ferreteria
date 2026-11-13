@@ -36,13 +36,13 @@ export default function ProductBundlePreview({ draft, commonFiles, categories, o
       <PreviewImage file={file} savedUrl={savedUrl} name={name} />
       <div className="grid min-w-0 content-start gap-3 p-4">
         <span className="text-xs font-bold text-rust-600">{categories.find(c => c.id === Number(draft.categoryId))?.name || "Categoría pendiente"}</span>
-        <strong className="break-words">{draft.name || "Nombre pendiente"}</strong>
+        <strong className="wrap-break-word">{draft.name || "Nombre pendiente"}</strong>
         {draft.brand && <span className="text-xs text-slate-500">{draft.brand}</span>}
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><strong>{Number.isSafeInteger(price) && price >= 0 ? formatClp(price) : "Precio pendiente"}</strong>
           <label className="min-w-0 w-full text-xs sm:w-auto">Opción de vista previa<select className="w-full min-w-0" value={row?.key || ""} onChange={e => setKey(e.target.value)}>{draft.rows.map(r => <option key={r.key} value={r.key}>{bundleRowLabels(draft, r).filter(Boolean).join(" · ") || "Combinación pendiente"}</option>)}</select></label>
         </div>
-        <span className="break-words text-sm">{name}</span><span className="text-sm">{formatQuantityWithUnit(stock, row?.unitMeasure ?? draft.unitMeasure)} · {state}</span>
-        {(row?.description ?? draft.description) && <p className="m-0 break-words text-sm">{row?.description ?? draft.description}</p>}
+        <span className="wrap-break-word text-sm">{name}</span><span className="text-sm">{formatQuantityWithUnit(stock, row?.unitMeasure ?? draft.unitMeasure)} · {state}</span>
+        {(row?.description ?? draft.description) && <p className="m-0 wrap-break-word text-sm">{row?.description ?? draft.description}</p>}
       </div>
     </CatalogCardSurface>
   </>;

@@ -45,7 +45,7 @@ export default function OrderSummaryCard({
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2">
           <div className={`order-summary-heading ${inProgress ? "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2" : "flex flex-wrap items-start justify-between gap-2"}`}>
             <div className="min-w-0">
-              <strong className={`block text-base text-ink-950 max-[430px]:text-sm ${inProgress ? "break-words" : "truncate"}`}>{primaryItem?.productName || "Pedido online"}</strong>
+              <strong className={`block text-base text-ink-950 max-[430px]:text-sm ${inProgress ? "wrap-break-word" : "truncate"}`}>{primaryItem?.productName || "Pedido online"}</strong>
               <HistoricalIdentityNote capture={primaryItem?.historicalIdentity}/>
               <span className="mt-0.5 block text-xs text-slate-500">
                 {primaryItem ? formatQuantityWithUnit(primaryItem.quantity, primaryItem.unitMeasure || "unidad no registrada") : "Sin productos"}

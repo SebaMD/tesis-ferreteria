@@ -46,11 +46,11 @@ export default function FamilyDimensionDialog({draft,userId,onClose,onSaved,onCo
  const measurementControl=<AttributeMeasurementFields attribute={measurement} label="nueva dimensión" disabled={busy||uncertain} hasValues={slots?Object.values(rowTexts).some(v=>v.trim()):Boolean(optionsText.trim())} onChange={value=>{setMeasurement(value);setConfirmed(false);}}/>;
  const content=<>
   <form ref={form} noValidate className="grid min-w-0 gap-3" onSubmit={inline?prepare:submit}>
-   <strong className="break-words">{draft.name}</strong><p className="m-0 text-sm">Se ampliará la clasificación vigente de {draft.rows.length} artículos, incluidos los inactivos. Se conservarán IDs, existencias y capturas históricas. No se crearán combinaciones ni productos automáticamente.</p>
+   <strong className="wrap-break-word">{draft.name}</strong><p className="m-0 text-sm">Se ampliará la clasificación vigente de {draft.rows.length} artículos, incluidos los inactivos. Se conservarán IDs, existencias y capturas históricas. No se crearán combinaciones ni productos automáticamente.</p>
    {error&&<p id={errorId} ref={alert} role="alert" tabIndex={-1} className="rounded border border-critical-600 bg-critical-50 p-3 text-sm text-critical-600">{error}</p>}
    <fieldset disabled={busy||uncertain} className="m-0 grid min-w-0 gap-3 border-0 p-0">
     <details open className="min-w-0"><summary className="cursor-pointer py-2 text-base font-bold">Atributos · nueva dimensión</summary><div className="grid min-w-0 gap-3">
-    {inline&&draft.attributes.map(a=><div key={a.id} className="rounded border border-slate-200 p-3 text-sm"><strong>{a.name}</strong><p className="m-0 break-words text-xs text-slate-500">{a.draftOptions.map(o=>attributeOptionLabel(o.label,a.unitCode)).join(" · ")}</p></div>)}
+    {inline&&draft.attributes.map(a=><div key={a.id} className="rounded border border-slate-200 p-3 text-sm"><strong>{a.name}</strong><p className="m-0 wrap-break-word text-xs text-slate-500">{a.draftOptions.map(o=>attributeOptionLabel(o.label,a.unitCode)).join(" · ")}</p></div>)}
     <section className="grid min-w-0 gap-3 rounded-lg border border-rust-500 p-3"><label>Nombre del nuevo atributo<input name="dimensionName" required maxLength={60} value={name} onChange={e=>{setName(e.target.value);setConfirmed(false);}} placeholder="Ej.: Color"/></label>
     {measurementControl}
     <label>Opciones, una por línea<textarea className={area} disabled={!validAttributeMeasurement(measurement)} required value={optionsText} onChange={e=>{setOptionsText(e.target.value);setSelections({});setConfirmed(false);}} placeholder={measurement.measurementKind?"100\n200":"Negro\nAzul"}/></label>
@@ -59,9 +59,9 @@ export default function FamilyDimensionDialog({draft,userId,onClose,onSaved,onCo
     </div></details>
     <details open className="min-w-0"><summary className="cursor-pointer py-2 text-base font-bold">Variantes ({draft.rows.length}) · asignación del nuevo atributo</summary><div className="grid min-w-0 gap-3">
     {draft.rows.map(row=>{const old=bundleRowLabels(draft,row).map((v,i)=>`${draft.attributes[i].name}: ${v}`).join(" · ");const option=config.options[Number(selections[row.id])];return <section key={row.id} className="grid min-w-0 gap-2 rounded border border-slate-200 p-3">
-     <strong className="break-words text-sm">Producto #{row.id} · {row.name} · {row.status?"Activo":"Inactivo"}</strong><p className="m-0 break-words text-xs">Antes: {old}</p>
+     <strong className="wrap-break-word text-sm">Producto #{row.id} · {row.name} · {row.status?"Activo":"Inactivo"}</strong><p className="m-0 wrap-break-word text-xs">Antes: {old}</p>
      <label>Asignar {config.name||"nuevo atributo"} a producto #{row.id}<select required aria-invalid={error&&(selections[row.id]===undefined||selections[row.id]==="")?true:undefined} aria-describedby={error&&(selections[row.id]===undefined||selections[row.id]==="")?errorId:undefined} value={selections[row.id]??""} onChange={e=>{setSelections(v=>({...v,[row.id]:e.target.value}));setConfirmed(false);}}><option value="">Selecciona explícitamente una opción</option>{config.options.map((o,i)=><option key={`${i}-${o}`} value={i}>{optionLabel(o)}</option>)}</select></label>
-     <p className="m-0 break-words text-xs">Después: {old} · {config.name||"Nuevo atributo"}: {selections[row.id]!==undefined&&selections[row.id]!==""&&option?optionLabel(option):"Pendiente de asignar"}</p>
+     <p className="m-0 wrap-break-word text-xs">Después: {old} · {config.name||"Nuevo atributo"}: {selections[row.id]!==undefined&&selections[row.id]!==""&&option?optionLabel(option):"Pendiente de asignar"}</p>
     </section>;})}
     </div></details>
     <label>Motivo de la ampliación<textarea className={area} required minLength={8} maxLength={500} value={reason} onChange={e=>setReason(e.target.value)}/></label>
@@ -71,10 +71,10 @@ export default function FamilyDimensionDialog({draft,userId,onClose,onSaved,onCo
    <div className="variant-editor-actions"><button type="button" className={secondaryButtonClass} disabled={busy||uncertain} onClick={onClose}>Cancelar nueva dimensión</button><button ref={reviewTrigger} type="submit" className="product-positive-action" disabled={busy||uncertain||(!inline&&(!confirmed||!config.valid))}>{inline?"Revisar nueva dimensión":"Confirmar incorporación"}</button></div>
   </form>
   {inline&&<AppModal open={review} title="Confirmar nueva dimensión" size="large" onClose={()=>{if(!busy)back();}}>
-   <div className="grid min-w-0 gap-3"><p className="m-0 break-words"><strong>{draft.name}</strong> · {config.name}</p>
+   <div className="grid min-w-0 gap-3"><p className="m-0 wrap-break-word"><strong>{draft.name}</strong> · {config.name}</p>
     <p className="m-0 text-sm">Solo se incorporará esta dimensión. Precios, stock, imágenes y nombres no se guardan en esta operación.</p>
-    {draft.rows.map(row=><section key={row.id} className="grid min-w-0 gap-1 rounded border border-slate-200 p-3 text-sm"><strong className="break-words">#{row.id} · {row.name} · {row.status?"Activo":"Inactivo"}</strong><span className="break-words">Antes: {combination(row)}</span><span className="break-words">Después: {combination(row)} · {config.name}: {optionLabel(config.options[config.assignments.find(a=>a.productId===row.id)?.optionIndex])}</span></section>)}
-    <p className="m-0 break-words whitespace-pre-wrap text-sm">Motivo: {reason}</p>
+    {draft.rows.map(row=><section key={row.id} className="grid min-w-0 gap-1 rounded border border-slate-200 p-3 text-sm"><strong className="wrap-break-word">#{row.id} · {row.name} · {row.status?"Activo":"Inactivo"}</strong><span className="wrap-break-word">Antes: {combination(row)}</span><span className="wrap-break-word">Después: {combination(row)} · {config.name}: {optionLabel(config.options[config.assignments.find(a=>a.productId===row.id)?.optionIndex])}</span></section>)}
+    <p className="m-0 wrap-break-word whitespace-pre-wrap text-sm">Motivo: {reason}</p>
     <label className="variant-online-control"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} disabled={busy}/>Confirmo las asignaciones y que se conserva la identidad física de los artículos.</label>
     <div className="variant-editor-actions"><button type="button" className={secondaryButtonClass} disabled={busy} onClick={back}>Volver a revisar</button><button type="button" className="product-positive-action" disabled={busy||!confirmed} onClick={submit}>{busy?"Guardando…":"Confirmar incorporación"}</button></div>
    </div>
@@ -86,12 +86,12 @@ export default function FamilyDimensionDialog({draft,userId,onClose,onSaved,onCo
    {measurementControl}
    <p className="m-0 text-xs text-slate-500">Una dimensión por operación. Completa sus opciones en todas las variantes, incluidas las inactivas. Los demás datos están bloqueados hasta aplicar o cancelar.</p>
    <label>Motivo de la ampliación<textarea className={area} required minLength={8} maxLength={500} disabled={busy||uncertain} value={reason} onChange={e=>setReason(e.target.value)}/></label>
-   {error&&<p id={errorId} ref={alert} role="alert" tabIndex={-1} className="m-0 break-words text-sm text-critical-600">{error}</p>}
+   {error&&<p id={errorId} ref={alert} role="alert" tabIndex={-1} className="m-0 wrap-break-word text-sm text-critical-600">{error}</p>}
   </section>,slots.attribute)}
   {draft.rows.map(row=>slots.rows[row.id]&&createPortal(<div className="grid min-w-0 gap-1 rounded border border-rust-500 p-3">
    <label>Opción de {config.name||`atributo ${draft.attributes.length+1}`}{measurement.unitCode?` (${measurement.unitCode})`:""} · Producto #{row.id}<input ref={el=>{if(el)rowControls.current.set(row.id,el);else rowControls.current.delete(row.id);}} required maxLength={100} inputMode={measurement.measurementKind?"decimal":undefined} placeholder={measurement.measurementKind?"Solo valor, sin unidad":undefined} disabled={busy||uncertain||!validAttributeMeasurement(measurement)} value={rowTexts[row.id]||""} list={`new-dimension-${row.id}`} aria-invalid={error&&!(rowTexts[row.id]||"").trim()?true:undefined} aria-describedby={error&&!(rowTexts[row.id]||"").trim()?errorId:undefined} onChange={e=>setRowTexts(v=>({...v,[row.id]:e.target.value}))}/></label>
    <datalist id={`new-dimension-${row.id}`}>{config.options.map(o=><option key={o} value={o}/>)}</datalist>
-   <span className="break-words text-xs">{combination(row)} · {config.name||"Atributo pendiente"}: {optionLabel(rowTexts[row.id])||"Sin asignar"}</span>
+   <span className="wrap-break-word text-xs">{combination(row)} · {config.name||"Atributo pendiente"}: {optionLabel(rowTexts[row.id])||"Sin asignar"}</span>
   </div>,slots.rows[row.id],row.key))}
   {slots.actions&&createPortal(<div className="grid min-w-0 gap-3">
    {uncertain&&<div role="status"><p>Resultado pendiente de verificar. No crees otra operación.</p><button type="button" disabled={busy} onClick={recover}>Consultar resultado</button><button type="button" disabled={busy} onClick={submit}>Reintentar misma ampliación</button></div>}

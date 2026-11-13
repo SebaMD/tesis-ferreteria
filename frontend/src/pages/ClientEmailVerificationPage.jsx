@@ -33,9 +33,9 @@ export default function ClientEmailVerificationPage() {
     <main className="mx-auto grid w-full max-w-180 gap-5 px-6 py-8 max-[720px]:px-3.5">
       {fromRegistration && !verified && (
         <section className="grid gap-4 rounded-lg border border-positive-200 bg-white p-6 shadow-sm max-[520px]:p-4">
-          <div className="flex items-start gap-3">
+          <div className="auth-mobile-heading-row flex items-start gap-3">
             <span className="grid size-12 shrink-0 place-items-center rounded-full bg-positive-50 text-positive-600"><CheckCircle2 size={25} /></span>
-            <div>
+            <div className="auth-mobile-heading">
               <h1 className="m-0 text-2xl font-bold text-ink-950 max-[520px]:text-xl">Tu cuenta fue creada con éxito</h1>
               <p className="mt-2 mb-0 text-sm leading-6 text-slate-600">Ahora falta verificar tu correo electrónico. Ya enviamos un código y puedes ingresarlo a continuación.</p>
               <strong className="mt-2 block break-all text-sm text-ink-950">{user.correo}</strong>
@@ -45,13 +45,14 @@ export default function ClientEmailVerificationPage() {
       )}
       {(!fromRegistration || verified) && (
         <div>
-          <div>
+          <div className="auth-mobile-heading">
             <h1 className="m-0 flex items-center gap-2 text-2xl font-bold text-ink-950"><MailCheck size={25} /> Verifica tu correo</h1>
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Confirma tu correo una sola vez para poder iniciar compras.</p>
           </div>
         </div>
       )}
       <EmailVerificationPanel
+        centerHeadingOnMobile
         key={user.correo}
         email={user.correo}
         initialChallenge={location.state?.initialChallenge || null}

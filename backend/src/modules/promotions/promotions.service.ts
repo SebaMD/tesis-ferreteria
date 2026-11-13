@@ -12,7 +12,7 @@ import {
   updatePromotionTx,
   validateTargetRecordsTx,
 } from "./promotions.repository.js";
-import type { PromotionInput } from "./promotions.validation.js";
+import { promotionPeriodError, type PromotionInput } from "./promotions.validation.js";
 
 export class PromotionError extends Error {
   constructor(message: string, public readonly statusCode: number) {
@@ -154,6 +154,8 @@ export function getPromotionTargetsService() {
 }
 
 export async function createPromotionService(userId: number, input: PromotionInput) {
+  const dateError = promotionPeriodError(input);
+  if (dateError) throw new PromotionError(dateError, 400);
   const id = await db.transaction(async (tx) => {
     await acquirePromotionPricingLock(tx);
     await validateTargetsAndConflicts(tx, input);
@@ -165,9 +167,12 @@ export async function createPromotionService(userId: number, input: PromotionInp
 export async function updatePromotionService(userId: number, id: number, input: PromotionInput) {
   await db.transaction(async (tx) => {
     await acquirePromotionPricingLock(tx);
-    if (!await findPromotionForUpdateTx(tx, id)) {
+    const current = await findPromotionForUpdateTx(tx, id);
+    if (!current) {
       throw new PromotionError("Promocion no encontrada", 404);
     }
+    const dateError = promotionPeriodError(input, current.startsAt);
+    if (dateError) throw new PromotionError(dateError, 400);
     await validateTargetsAndConflicts(tx, input, id);
     if (!await updatePromotionTx(tx, id, { ...input, userId })) {
       throw new PromotionError("Promocion no encontrada", 404);

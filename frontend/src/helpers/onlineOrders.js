@@ -2,7 +2,7 @@ const ORDER_STATUS = {
   PENDING_PAYMENT: {
     label: "Pendiente de pago",
     tone: "warning",
-    description: "El pago fue iniciado y la reserva se mantiene mientras la sesión siga vigente.",
+    description: "El intento fue iniciado y su resultado todavía debe comprobarse. No vuelvas a pagar este pedido mientras siga pendiente.",
   },
   PAID: {
     label: "Pago confirmado",
@@ -12,22 +12,22 @@ const ORDER_STATUS = {
   PAYMENT_FAILED: {
     label: "Pago no completado",
     tone: "critical",
-    description: "Webpay no autorizó el pago y no se realizó ningún cargo. Puedes volver a intentarlo.",
+    description: "El intento tiene una resolución financiera terminal. Consulta su detalle antes de reintentar; no se reutilizará la sesión anterior.",
   },
   CANCELLED: {
     label: "Compra cancelada",
     tone: "neutral",
-    description: "La compra fue cancelada y no se realizó ningún cargo. La reserva de stock fue liberada.",
+    description: "Se registró la cancelación del intento. Consulta el estado financiero y las acciones disponibles en el detalle.",
   },
   EXPIRED: {
     label: "Reserva expirada",
     tone: "neutral",
-    description: "La sesión de pago venció y la reserva de stock fue liberada.",
+    description: "La reserva expiró. Su vencimiento no demuestra por sí solo el resultado financiero; revisa las acciones disponibles.",
   },
   PAYMENT_REVIEW: {
     label: "Pago en revisión",
     tone: "warning",
-    description: "Webpay autorizó el pago, pero el pedido requiere revisión. No realices un nuevo pago.",
+    description: "El resultado del pago o la entrega del pedido requiere revisión. No realices un nuevo pago.",
   },
   PREPARING: {
     label: "Preparando pedido",
@@ -79,7 +79,13 @@ export function formatOnlineOrderFolio(id) {
   return `P-${String(id || 0).padStart(6, "0")}`;
 }
 
-export function getOnlineOrderStatus(status) {
+export function getOnlineOrderStatus(status, paymentStatus) {
+  if (["EXPIRED", "CANCELLED", "PAYMENT_FAILED"].includes(status) && ["CREATED", "PROCESSING"].includes(paymentStatus)) {
+    return { label: "Verificando resultado del pago", tone: "warning", description: "El intento financiero sigue sin resolverse, aunque la reserva o el pedido hayan cambiado de estado. No vuelvas a pagar este pedido; consulta su estado con la ferretería." };
+  }
+  if (status === "PAYMENT_REVIEW") return paymentStatus === "AUTHORIZED"
+    ? { label: "Pago autorizado · Pedido en revisión", tone: "warning", description: "El pago fue autorizado, pero el cumplimiento del pedido requiere revisión de la ferretería. No vuelvas a pagar este pedido." }
+    : { label: "Verificando resultado del pago", tone: "warning", description: "Aún no podemos confirmar el resultado de este pago. No vuelvas a pagarlo. Puedes actualizar su estado o consultar con la ferretería indicando el folio." };
   return ORDER_STATUS[status] || { ...FALLBACK_STATUS, label: String(status || "Sin estado") };
 }
 

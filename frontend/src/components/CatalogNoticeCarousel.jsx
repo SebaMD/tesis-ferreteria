@@ -1,5 +1,6 @@
 import { Megaphone } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { carouselSwipeDirection } from "../helpers/carouselSwipe.js";
 import useCustomerNotice from "../hooks/useCustomerNotice.js";
 import {
   buildCatalogSlides,
@@ -22,21 +23,23 @@ function useReducedMotion() {
   return reduced;
 }
 
-export default function CatalogNoticeCarousel() {
-  const { notices, presentation } = useCustomerNotice();
-  const slides = useMemo(() => buildCatalogSlides(presentation, notices), [notices, presentation]);
+export default function CatalogNoticeCarousel({ paused = false }) {
+  const { notices, presentation, deliveryAnnouncement } = useCustomerNotice();
+  const slides = useMemo(() => buildCatalogSlides(presentation, notices, deliveryAnnouncement), [notices, presentation, deliveryAnnouncement]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timerVersion, setTimerVersion] = useState(0);
+  const swipe = useRef(null);
+  const [gesturing, setGesturing] = useState(false);
   const reducedMotion = useReducedMotion();
   const activeIndex = currentIndex < slides.length ? currentIndex : 0;
 
   useEffect(() => {
-    if (slides.length < 2 || reducedMotion) return undefined;
+    if (slides.length < 2 || reducedMotion || paused || gesturing) return undefined;
     const timer = window.setTimeout(() => {
       setCurrentIndex(nextCatalogSlideIndex(activeIndex, slides.length));
     }, catalogSlideDurationMilliseconds(slides[activeIndex]));
     return () => window.clearTimeout(timer);
-  }, [activeIndex, reducedMotion, slides, timerVersion]);
+  }, [activeIndex, reducedMotion, slides, timerVersion, paused, gesturing]);
 
   const selectSlide = (index) => {
     setCurrentIndex(index);
@@ -48,6 +51,28 @@ export default function CatalogNoticeCarousel() {
       className="catalog-notice-carousel relative overflow-hidden rounded-lg bg-ink-950 bg-[linear-gradient(120deg,rgba(217,119,6,0.22),transparent_60%)] text-white"
       aria-label="Información destacada del catálogo"
       aria-roledescription="carrusel"
+      tabIndex={0}
+      style={{ touchAction: "pan-y pinch-zoom" }}
+      onKeyDown={event => {
+        if (event.target !== event.currentTarget || paused || slides.length < 2) return;
+        if (["ArrowLeft", "ArrowRight"].includes(event.key)) {
+          event.preventDefault(); selectSlide((activeIndex + (event.key === "ArrowRight" ? 1 : -1) + slides.length) % slides.length);
+        }
+      }}
+      onPointerDown={event => {
+        if (paused || slides.length < 2 || !event.isPrimary || event.pointerType === "mouse" || event.target.closest("button, a, input, select, textarea")) return;
+        swipe.current = { id: event.pointerId, x: event.clientX, y: event.clientY, at: Date.now() };
+        event.currentTarget.setPointerCapture(event.pointerId); setGesturing(true);
+      }}
+      onPointerUp={event => {
+        const start = swipe.current;
+        if (start?.id !== event.pointerId) return;
+        swipe.current = null; setGesturing(false);
+        const direction = carouselSwipeDirection(start, { x: event.clientX, y: event.clientY, at: Date.now() }, event.currentTarget.clientWidth);
+        if (direction && !paused) selectSlide((activeIndex + direction + slides.length) % slides.length);
+      }}
+      onPointerCancel={() => { swipe.current = null; setGesturing(false); }}
+      onLostPointerCapture={() => { swipe.current = null; setGesturing(false); }}
     >
       <div
         className="catalog-notice-track flex"
@@ -97,6 +122,7 @@ export default function CatalogNoticeCarousel() {
               className="group grid size-8 min-h-8 place-items-center border-0 bg-transparent p-0 hover:bg-transparent"
               key={slide.id}
               type="button"
+              disabled={paused}
               aria-label={`Mostrar diapositiva ${index + 1}: ${slide.title}`}
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => selectSlide(index)}

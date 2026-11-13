@@ -31,6 +31,14 @@ function optionalDate(value: unknown, field: string) {
   if (typeof value !== "string") {
     return { success: false as const, error: `${field} no es una fecha valida` };
   }
+  // Requests must identify an instant, not a date in the server's local zone.
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!parts) return { success: false as const, error: `${field} debe ser una fecha válida con zona horaria explícita` };
+  const [year, month, day, hour, minute, second] = parts.slice(1, 7).map(Number);
+  const days = [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]! || hour > 23 || minute > 59 || (second || 0) > 59) {
+    return { success: false as const, error: `${field} no es una fecha válida` };
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return { success: false as const, error: `${field} no es una fecha valida` };
@@ -63,7 +71,7 @@ export function validateCustomerNotice(body: unknown): Result {
   const endsAt = optionalDate(input.endsAt, "El termino de vigencia");
   if (!endsAt.success) return endsAt;
   if (startsAt.value && endsAt.value && endsAt.value <= startsAt.value) {
-    return { success: false, error: "El termino de vigencia debe ser posterior al inicio" };
+    return { success: false, error: "La fecha de término debe ser posterior a la fecha y hora de inicio" };
   }
   const title = input.title.trim().replace(/\s+/g, " ");
   const message = input.message.trim();
@@ -78,6 +86,27 @@ export function validateCustomerNotice(body: unknown): Result {
       endsAt: endsAt.value,
     },
   };
+}
+
+export function customerNoticePeriodError(
+  input: Pick<NoticeInput, "startsAt" | "endsAt">,
+  original: Pick<NoticeInput, "startsAt" | "endsAt"> | null = null,
+  now = new Date(),
+): string | null {
+  const start = input.startsAt?.getTime();
+  const end = input.endsAt?.getTime();
+  if (start !== undefined && !Number.isFinite(start)) return "La fecha de inicio no es válida";
+  if (end !== undefined && !Number.isFinite(end)) return "La fecha de término no es válida";
+  if (start !== undefined && start !== original?.startsAt?.getTime() && Math.floor(start / 60_000) < Math.floor(now.getTime() / 60_000)) {
+    return "La fecha de inicio no puede ser anterior a la fecha y hora actuales";
+  }
+  if (start !== undefined && end !== undefined && end <= start) return "La fecha de término debe ser posterior a la fecha y hora de inicio";
+  // An unchanged immediate-start historical period remains editable, not reprogrammed.
+  const historicalEnd = original && !original.startsAt && end === original.endsAt?.getTime();
+  if (start === undefined && end !== undefined && !historicalEnd && end <= now.getTime()) {
+    return "La fecha de término debe ser posterior a la fecha y hora actuales";
+  }
+  return null;
 }
 
 export function validateCatalogPresentation(body: unknown) {

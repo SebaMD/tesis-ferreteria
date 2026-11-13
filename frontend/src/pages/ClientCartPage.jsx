@@ -1,19 +1,23 @@
 import { ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import CompactBackLink from '../components/CompactBackLink.jsx';
+import { cartExplorationReturn, explorationOwner } from '../helpers/explorationNavigation.js';
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import CartQuantityControl from "../components/CartQuantityControl.jsx";
+import ProductEstimatedAvailability from "../components/ProductEstimatedAvailability.jsx";
 import { formatClp } from "../helpers/formatters.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 import useCartActions from "../hooks/useCartActions.js";
-import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
+import { getDisplayUnit } from "../helpers/units.js";
 import { getCatalogProductsByIdsRequest } from "../services/catalog.service.js";
 import { getProductPromotionPricing } from "../helpers/promotionPricing.js";
 import ProductPromotionPrice from "../components/ProductPromotionPrice.jsx";
+import { variantLabel } from "../helpers/productVariants.js";
 import { createProductDetailNavigationState } from "../helpers/catalogNavigation.js";
 
 const CART_PRODUCT_DETAIL_STATE = createProductDetailNavigationState({ source: "cart" });
@@ -23,9 +27,11 @@ function getPrimaryImage(product) {
 }
 
 export default function ClientCartPage() {
-  const { items, updateQuantity, clearCart } = useCart();
-  const { removeProduct } = useCartActions();
+  const { items, updateQuantity } = useCart();
+  const { removeProduct, clearProducts } = useCartActions();
   const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+  const back = cartExplorationReturn(location.state, explorationOwner(user));
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const cartProductIds = useMemo(() => items.map((item) => item.product.id), [items]);
@@ -73,13 +79,13 @@ export default function ClientCartPage() {
   return (
     <main className="mx-auto grid w-full max-w-280 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <LoadingOverlay active={loading} />
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1.5">
-        <h1 className="m-0 flex items-center gap-2 text-2xl font-bold text-ink-950"><ShoppingCart size={24} /> Carrito</h1>
+      <header className="cart-page-header grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1.5">
+        <h1 className="m-0 flex items-center gap-2 text-2xl font-bold text-ink-950 max-[620px]:text-xl"><ShoppingCart className="shrink-0" size={24} /> Carrito</h1>
+        {items.length > 0 && <div className="cart-header-actions col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2"><CompactBackLink {...back} />
+          <button className="cart-clear-action border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={clearProducts} aria-label="Limpiar carrito" title="Limpiar carrito"><Trash2 size={18} aria-hidden="true" /><span>Limpiar carrito</span></button>
+        </div>}
         <p className="col-start-1 row-start-2 mt-0 mb-0 text-sm text-slate-500 max-[620px]:col-span-2">Revisa tus productos antes de reservar stock e iniciar el pago.</p>
-        {items.length > 0 && (
-          <button className="col-start-2 row-start-1 row-span-2 self-end border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:row-span-1 max-[620px]:self-center max-[620px]:px-3 max-[620px]:text-xs" type="button" onClick={clearCart}>Limpiar carrito</button>
-        )}
-      </div>
+      </header>
 
       {items.length === 0 ? (
         <section className="grid min-h-70 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -97,17 +103,20 @@ export default function ClientCartPage() {
               const invalidQuantity = row.requestedQuantity > row.availableStock;
 
               return (
-                <article className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 max-[620px]:grid-cols-[76px_1fr]" key={row.product.id}>
+                <article className="grid grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 max-[620px]:grid-cols-[76px_minmax(0,1fr)]" key={row.product.id}>
                   <Link className="grid size-24 place-items-center overflow-hidden rounded-[5px] bg-slate-100 p-1.5 max-[620px]:size-19" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>
                     {image ? <img className="block max-h-full max-w-full object-contain object-center" src={image.imageUrl} alt={row.product.name} /> : <ShoppingCart className="text-slate-400" size={26} />}
                   </Link>
-                  <div className="grid gap-1.5">
-                    <Link className="font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
+                  <div className="grid min-w-0 gap-1.5">
+                    <Link className="break-words font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
+                    {variantLabel(row.product)&&<span className="break-words text-xs text-slate-500">{variantLabel(row.product)}</span>}
                     <span className="text-xs text-slate-500">Precio por {getDisplayUnit(1, row.product.unitMeasure)}</span>
                     <ProductPromotionPrice product={row.product} quantity={row.quantity} showLineSummary />
-                    <span className={`text-xs font-bold ${row.available ? "text-positive-600" : "text-critical-600"}`}>
-                      {row.product.inStoreOnly ? "Solo presencial · quítalo para continuar" : row.available ? `${formatQuantityWithUnit(row.availableStock, row.product.unitMeasure)} disponibles` : "Producto no disponible actualmente"}
-                    </span>
+                    {row.available ? <ProductEstimatedAvailability product={row.product} compact inCart /> : (
+                      <span className="text-xs font-bold text-critical-600">
+                        {row.product.inStoreOnly ? "Solo presencial · quítalo para continuar" : "Producto no disponible actualmente"}
+                      </span>
+                    )}
                     {invalidQuantity && !row.product.inStoreOnly && (
                       <span className="text-xs text-critical-600">
                         Tienes {row.requestedQuantity} en el carrito, pero ahora solo hay {row.availableStock} disponibles. Ajusta la cantidad para continuar.

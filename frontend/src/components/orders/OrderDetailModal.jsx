@@ -1,6 +1,7 @@
 import { ChevronDown, MapPin, Store, Truck } from "lucide-react";
 import { useState } from "react";
 import AppModal from "../AppModal.jsx";
+import HistoricalIdentityNote from "../HistoricalIdentityNote.jsx";
 import { formatClp, formatDate } from "../../helpers/formatters.js";
 import {
   formatOnlineOrderFolio,
@@ -12,6 +13,7 @@ import OrderProgressTimeline, { OrderProgressCurrentIcon } from "./OrderProgress
 import OrderProductImage from "./OrderProductImage.jsx";
 import DeliveryProofViewer from "./DeliveryProofViewer.jsx";
 import OrderItemPromotion from "./OrderItemPromotion.jsx";
+import OrderAmounts from "./OrderAmounts.jsx";
 
 function AccordionContent({ id, open, children }) {
   return (
@@ -96,7 +98,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
   });
 
   if (!order) return null;
-  const status = getOnlineOrderStatus(order.status);
+  const status = getOnlineOrderStatus(order.status, order.payment?.status);
   const delivery = getOnlineOrderDeliveryType(order.deliveryType);
   const progressOpen = expandedSections.orderId === order.id && expandedSections.progress;
   const productsOpen = expandedSections.orderId === order.id && expandedSections.products;
@@ -167,6 +169,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
           onToggle={() => toggleSection("products")}
         >
           <div className="grid gap-2">
+            {(order.items || []).some(item => item.productImageUrl) && <p className="m-0 text-xs text-slate-500">Imágenes ilustrativas del catálogo actual; no forman parte de la captura histórica.</p>}
             {(order.items || []).map((item) => (
               <article className="grid grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-slate-200 p-3 max-[430px]:grid-cols-[48px_minmax(0,1fr)]" key={`${order.id}-${item.productId}`}>
                 <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100 max-[430px]:size-12">
@@ -174,6 +177,7 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
                 </div>
                 <div className="min-w-0">
                   <strong className="block truncate text-sm text-ink-950">{item.productName}</strong>
+                  <HistoricalIdentityNote capture={item.historicalIdentity}/>
                   <span className="text-xs text-slate-500">{item.quantity} × {formatClp(item.unitPrice)}</span>
                   <OrderItemPromotion item={item} />
                 </div>
@@ -192,21 +196,13 @@ export default function OrderDetailModal({ order, onClose, requestDeliveryProof,
           requestProof={requestDeliveryProof}
         />
 
-        {actions && (
-          <section className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-            {actions}
-          </section>
-        )}
-
+        <OrderAmounts order={order} />
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-slate-200 pt-4">
           <div>
             <span className="block text-xs font-bold text-slate-500">Fecha de compra</span>
             <span className="mt-1 block text-sm text-ink-950">{formatDate(order.paidAt || order.createdAt, { dateStyle: "long", timeStyle: "short" })}</span>
           </div>
-          <div className="text-right">
-            <span className="block text-xs font-bold text-slate-500">Total</span>
-            <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
-          </div>
+          {actions && <div className="flex flex-wrap justify-end gap-2 max-[520px]:w-full max-[520px]:[&>button]:min-h-11 max-[520px]:[&>button]:flex-1">{actions}</div>}
         </footer>
       </div>
     </AppModal>

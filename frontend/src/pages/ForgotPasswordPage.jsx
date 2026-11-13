@@ -38,8 +38,8 @@ export default function ForgotPasswordPage() {
         </Link>
         {submitted ? (
           <div className="grid gap-4" role="status">
-            <span className="grid size-12 place-items-center rounded-full bg-rust-50 text-rust-600"><Mail size={23} /></span>
-            <div>
+            <span className="grid size-12 place-items-center rounded-full bg-rust-50 text-rust-600 max-[720px]:justify-self-center"><Mail size={23} /></span>
+            <div className="auth-mobile-heading">
               <h1 className="m-0 text-2xl font-bold text-ink-950">Revisa tu correo</h1>
               <p className="mt-2 mb-0 text-sm leading-6 text-slate-600">{GENERIC_MESSAGE}</p>
             </div>
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
           </div>
         ) : (
           <form className="grid gap-5" onSubmit={handleSubmit}>
-            <div>
+            <div className="auth-mobile-heading">
               <h1 className="m-0 text-2xl font-bold text-ink-950">Recuperar contraseña</h1>
               <p className="mt-2 mb-0 text-sm leading-6 text-slate-600">Ingresa tu correo y, si corresponde, te enviaremos un enlace seguro de un solo uso.</p>
             </div>

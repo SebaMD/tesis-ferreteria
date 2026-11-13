@@ -1,4 +1,5 @@
 import ClientNavbar from "./ClientNavbar.jsx";
+import { InformationLink } from "./InformationNavigation.jsx";
 
 export default function ClientLayout({ children }) {
   return (
@@ -6,7 +7,9 @@ export default function ClientLayout({ children }) {
       <ClientNavbar />
       <div className="flex flex-1 flex-col">{children}</div>
       <footer className="mt-12 border-t border-slate-200 bg-white px-6 py-7 text-center text-xs text-slate-500">
-        FERRETERIA FYF · Tienda online
+        <span>FERRETERIA FYF · Tienda online</span>
+        <InformationLink className="mt-3 block font-semibold text-rust-600 underline" to="/changes-and-returns">Cambios y devoluciones</InformationLink>
+        <InformationLink className="mt-3 block font-semibold text-rust-600 underline" to="/delivery-conditions">Condiciones de despacho</InformationLink>
       </footer>
     </div>
   );

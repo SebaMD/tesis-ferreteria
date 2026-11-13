@@ -1,8 +1,8 @@
 import api from "../api/httpClient.js";
 import { resolveProductAssets, resolveProductListAssets } from "../helpers/productAssets.js";
 
-export async function getCatalogProductsRequest(params = {}) {
-  const response = await api.get("/catalog/products", { params });
+export async function getCatalogProductsRequest(params = {}, options = {}) {
+  const response = await api.get("/catalog/products", { params, signal: options.signal, timeout: 15000 });
   const data = response.data.data;
   return { ...data, items: resolveProductListAssets(data?.items) };
 }
@@ -10,6 +10,11 @@ export async function getCatalogProductsRequest(params = {}) {
 export async function getCatalogProductByIdRequest(id) {
   const response = await api.get(`/catalog/products/${id}`);
   return resolveProductAssets(response.data.data);
+}
+
+export async function getCatalogFamilyRequest(id) {
+  const { data } = await api.get(`/catalog/families/${id}`);
+  return { ...data.data, variants: resolveProductListAssets(data.data.variants) };
 }
 
 export async function getCatalogProductsByIdsRequest(ids = []) {

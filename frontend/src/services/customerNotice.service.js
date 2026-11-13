@@ -9,6 +9,8 @@ function noticeConfiguration(data) {
   return {
     presentation: resolveImage(data?.presentation),
     notices: Array.isArray(data?.notices) ? data.notices.map(resolveImage) : [],
+    deliveryAnnouncement: data?.deliveryAnnouncement ? {...resolveImage(data.deliveryAnnouncement), savedImageUrl:resolveApiAssetUrl(data.deliveryAnnouncement.savedImageUrl)} : null,
+    deliveryInformation: data?.deliveryInformation ?? null,
   };
 }
 
@@ -17,8 +19,11 @@ export async function getPublicCustomerNoticeRequest() {
   return noticeConfiguration(response.data.data);
 }
 
-export async function getCustomerNoticeConfigurationRequest() {
+export async function getCustomerNoticeConfigurationRequest({ onServerTime } = {}) {
+  const requestedAt = Date.now();
   const response = await api.get("/customer-notice/configuration");
+  const serverTime = Date.parse(response.headers?.date);
+  if (Number.isFinite(serverTime)) onServerTime?.(serverTime - (requestedAt + Date.now()) / 2);
   return noticeConfiguration(response.data.data);
 }
 
@@ -69,4 +74,9 @@ export async function removeCatalogPresentationImageRequest() {
 
 export async function deleteCustomerNoticeRequest(id) {
   await api.delete(`/customer-notice/configuration/${id}`);
+}
+
+export async function saveDeliveryNoticeImageRequest(revision,file){
+  const headers={"If-Match":`"${revision}"`};
+  return file ? api.post('/customer-notice/configuration/delivery-image',file,{headers:{...headers,"Content-Type":file.type}}) : api.delete('/customer-notice/configuration/delivery-image',{headers});
 }

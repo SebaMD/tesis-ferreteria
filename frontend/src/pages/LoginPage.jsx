@@ -101,7 +101,7 @@ export default function LoginPage() {
           <h1 className="m-0 text-[42px] leading-[1.08] font-bold max-[980px]:text-[34px]">Ferretería FYF, todo en un solo lugar</h1>
           <p className="mt-4.5 mb-0 max-w-97.5 text-[15px] leading-[1.65] text-[#aab3bf]">Accede a tu cuenta para comprar, consultar pedidos o continuar con tu trabajo.</p>
         </div>
-        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0 · ACCESO SEGURO</span>
+        <span className="relative z-1 font-mono text-[11px] text-[#727e8e]">V1.0</span>
       </section>
 
       <img
@@ -119,7 +119,7 @@ export default function LoginPage() {
             <BrandLogo className="size-13" />
             <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
           </div>
-          <div>
+          <div className="auth-mobile-heading">
             <h2 className="m-0 text-2xl font-bold text-ink-950">Iniciar sesión</h2>
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta para continuar.</p>
           </div>

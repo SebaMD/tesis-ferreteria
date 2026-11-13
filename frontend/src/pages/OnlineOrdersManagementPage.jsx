@@ -22,8 +22,11 @@ import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import DownloadLogisticsLabelButton from "../components/orders/DownloadLogisticsLabelButton.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
+import AdministrativeOrderCard from "../components/orders/AdministrativeOrderCard.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { buildDeliveryRouteUrl } from "../helpers/delivery.js";
+import DeliverySettingsManager from "../components/DeliverySettingsManager.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import { isValidRut, normalizeRut } from "../helpers/rut.js";
 import {
   formatOnlineOrderFolio,
@@ -446,7 +449,7 @@ export default function OnlineOrdersManagementPage() {
       <header className={pageHeaderClass}>
         <div>
           <h1>Pedidos y repartos</h1>
-          <p>{canManage ? "Prepara y entrega compras online o ventas en caja con despacho." : "Consulta el avance de las tareas logísticas."}</p>
+          <p>{canManage ? "Prepara y entrega pedidos pagados: retiro en tienda, despacho local en Santa Juana y repartos de ventas en caja." : "Consulta pedidos pagados, retiros en tienda y el avance de los repartos."}</p>
         </div>
         {canManage && (
           <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
@@ -475,8 +478,8 @@ export default function OnlineOrdersManagementPage() {
         )}
       </header>
 
-      <section className="flex flex-wrap items-center justify-between gap-3">
-        <div className="grid min-w-0 max-w-215 flex-1 grid-cols-[minmax(0,1fr)_220px] items-center gap-2.5 max-[720px]:w-full max-[720px]:max-w-none max-[720px]:grid-cols-1">
+      <section className="flex flex-wrap items-center gap-3" aria-label="Buscar y filtrar pedidos">
+        <div className="grid w-full min-w-0 max-w-[670px] flex-none grid-cols-[minmax(0,1fr)_220px] items-center gap-2.5 max-[720px]:max-w-none max-[720px]:grid-cols-1">
           <label className="relative block min-w-0">
             <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} />
             <input className="w-full pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} aria-label={canManage ? "Buscar por folio" : "Buscar por folio o cliente"} />
@@ -497,16 +500,19 @@ export default function OnlineOrdersManagementPage() {
             />
           </div>
         </div>
-        {(search || status !== "ALL") && (
-          <button
-            className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"
-            type="button"
-            onClick={() => {
-              setSearch("");
-              setStatus("ALL");
-            }}
-          >Limpiar filtros</button>
-        )}
+        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:justify-center">
+          {(search || status !== "ALL") && (
+            <button
+              className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[720px]:hidden"
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setStatus("ALL");
+              }}
+            >Limpiar filtros</button>
+          )}
+          <DeliverySettingsManager role={user?.role} />
+        </div>
       </section>
 
       <section className={tablePanelClass}>
@@ -520,13 +526,15 @@ export default function OnlineOrdersManagementPage() {
           /></span>
           <MobileTableTools
             hasActiveFilters={deliveredView}
-            onClear={() => { setView("ACTIVE"); setStatus("ALL"); }}
+            value={{ delivered: deliveredView, status }}
+            clearValue={{ delivered: false, status: "ALL" }}
+            onApply={next => { setView(next.delivered ? "DELIVERED" : "ACTIVE"); setStatus(next.status); }}
             showFilters={scope === "ALL"}
             title="Vista de pedidos"
           >
-            <button type="button" onClick={toggleDeliveredView} aria-pressed={deliveredView}>
-              {deliveredView ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
-            </button>
+            {(draft, setDraft) => <button type="button" onClick={() => setDraft(current => ({ delivered: !current.delivered, status: "ALL" }))} aria-pressed={draft.delivered}>
+              {draft.delivered ? "Mostrar pedidos en curso" : "Mostrar pedidos entregados"}
+            </button>}
           </MobileTableTools>
           {scope === "ALL" && (
             <button
@@ -582,8 +590,8 @@ export default function OnlineOrdersManagementPage() {
           }}
           desktop={(
         <div className={tableScrollClass}>
-          <table>
-            <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acción</th></tr></thead>
+          <table className="fyf-data-table">
+            <thead><tr><th>Folio</th><th>Origen</th><th>Fecha</th><th>Cliente / destinatario</th><th>Entrega</th><th>Estado</th><th>Responsable</th><th>Productos</th><th>Total</th><th>Acciones</th></tr></thead>
             <tbody>
               {ordersPagination.paginatedItems.map((order) => {
                 const orderStatus = getOnlineOrderStatus(order.status);
@@ -672,6 +680,10 @@ export default function OnlineOrdersManagementPage() {
               </section>
             )}
 
+            {["ADMIN", "MANAGER"].includes(user?.role) && selectedOrder.origin === "ONLINE" && (
+              <AdministrativeOrderCard key={selectedOrder.id} orderId={selectedOrder.id} role={user.role} />
+            )}
+
             <dl className="grid grid-cols-3 gap-3 max-[800px]:grid-cols-2 max-[520px]:grid-cols-1">
               {selectedOrder.customerName && (
                 <DetailField label={selectedOrder.origin === "ONLINE" ? "Comprador" : "Destinatario"}>
@@ -704,6 +716,7 @@ export default function OnlineOrdersManagementPage() {
               </a>
             )}
 
+            {selectedOrder.origin === "ONLINE" && <OrderAmounts order={selectedOrder} />}
             {canManage && selectedOrder.deliveryType === "DELIVERY" && !hasDeliveryDetails && (
               <p className="m-0 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
                 Los datos privados del destino se habilitan únicamente al bodeguero responsable cuando inicia el reparto.
@@ -736,9 +749,9 @@ export default function OnlineOrdersManagementPage() {
                 )}
                 desktop={(
               <div className={tableScrollClass}>
-                <table>
+                <table className="fyf-data-table">
                   <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr></thead>
-                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="font-semibold text-ink-950">{item.productName}<OrderItemPromotion item={item} compact /></td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
+                  <tbody>{(selectedOrder.items || []).map((item) => <tr key={`${item.productId}-${item.productName}`}><td className="table-description-cell font-semibold text-ink-950">{item.productName}<OrderItemPromotion item={item} compact /></td><td>{item.quantity}</td><td className={numericCellClass}>{formatClp(item.unitPrice)}</td><td className={numericCellClass}>{formatClp(item.subtotal)}</td></tr>)}</tbody>
                 </table>
               </div>
                 )}

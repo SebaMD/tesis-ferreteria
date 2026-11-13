@@ -41,8 +41,8 @@ test("checkout, success navigation, clean catalog and warehouse shortcut are wir
   ]);
   assert.doesNotMatch(checkout, /handleRemoveProduct|Trash2/);
   assert.match(checkout, /vuelve al carrito antes de pagar/);
-  assert.match(result, /Ir a mis compras/);
-  assert.match(guest, /Ir a mis compras/);
+  assert.match(result, /Ir a mis pedidos/);
+  assert.match(guest, /Ir a mis pedidos/);
   assert.match(catalog, /max-\[600px\]:gap-2\.5/);
   assert.match(card, /en el carrito/);
   assert.doesNotMatch(controls, /En tu carrito:/);
@@ -50,13 +50,13 @@ test("checkout, success navigation, clean catalog and warehouse shortcut are wir
   assert.doesNotMatch(catalog, /fondo-login|CATALOG_BACKGROUND_IMAGE|catalog-background/);
   assert.match(dashboard, /Pedidos y repartos/);
   assert.match(dashboard, /operationalOrders\.length/);
-  assert.match(favorites, /font-bold text-rust-600/);
-  assert.match(controls, /state: \{ directPurchase \}/);
+  assert.match(favorites, /<CatalogEmptyState icon=\{Heart\}/);
+  assert.match(controls, /checkoutIntent: createCheckoutIntent\("DIRECT", \[directPurchase\]\)/);
   assert.match(cartActions, /if \(showSuccessToast\) toast\.success/);
   assert.match(card, /max-\[600px\]:hidden/);
-  assert.match(favorites, /products\.length > 0/);
-  assert.match(favorites, /Explorar catálogo/);
-  assert.match(orders, /orders\.length > 0/);
+  assert.match(favorites, /<InformationBackLink/);
+  assert.match(favorites, /products.length === 0 && <CatalogEmptyState/);
+  assert.match(orders, /<InformationBackLink/);
   assert.match(orders, /Explorar catálogo/);
 });
 
@@ -77,10 +77,11 @@ test("mobile list controls keep global queries visible and secondary filters gro
   assert.doesNotMatch(products, /<label>Buscar movimientos/);
   assert.doesNotMatch(users, /MobileTableTools/);
   assert.match(users, /Filtrar usuarios por rol/);
-  assert.match(dashboard, /auto-rows-fr/);
+  assert.match(dashboard, /dashboard-summary-panels[^\n]*items-start/);
+  assert.doesNotMatch(dashboard, /h-full content-center|auto-rows-fr/);
 });
 
-test("mobile table counts, exclusive quick filters and compact commerce layouts stay wired", async () => {
+test("mobile table counts, composable quick filters and compact commerce layouts stay wired", async () => {
   const [count, products, sales, orderCard, cart] = await Promise.all([
     read("src/components/TableRecordCount.jsx"), read("src/pages/ProductsPage.jsx"),
     read("src/pages/SalesPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
@@ -88,12 +89,13 @@ test("mobile table counts, exclusive quick filters and compact commerce layouts 
   ]);
   assert.match(count, /max-\[720px\]:hidden/);
   assert.match(count, /Mostrando \{mobileVisibleCount\} de \{mobileTotalCount\}/);
-  assert.match(products, /setLowStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setOutOfStockOnly\(false\)/);
-  assert.match(products, /setOutOfStockOnly\(\(current\) => !current\); setShowInactiveProducts\(false\); setLowStockOnly\(false\)/);
+  assert.match(products, /filterInventoryProducts\(products/);
+  assert.match(products, /setEnabled\(value => !value\)/);
   assert.doesNotMatch(sales, /disabled=\{salesFilter === "cancelled"\} aria-pressed=\{salesFilter === "partial"\}>\{salesFilter/);
   assert.match(orderCard, /max-\[680px\]:size-20/);
   assert.match(orderCard, /max-\[430px\]:size-\[68px\]/);
-  assert.match(cart, /col-start-2 row-start-1 row-span-2/);
+  assert.match(cart, /cart-header-actions col-start-2 row-start-1/);
+  assert.match(cart, /aria-label="Limpiar carrito"/);
 });
 
 test("product detail keeps its quantity and purchase actions in one aligned column", async () => {

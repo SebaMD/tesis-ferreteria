@@ -9,6 +9,7 @@ export default function ProductImagesManager({
   onMove,
   onRemovePending,
   onSetPrimary,
+  compact = false,
 }) {
   return (
     <section className="grid gap-3 rounded-[5px] border border-slate-200 bg-slate-50 p-4">
@@ -36,7 +37,7 @@ export default function ProductImagesManager({
       </div>
 
       {images.length > 0 ? (
-        <div className="grid grid-cols-3 gap-2 max-[620px]:grid-cols-2">
+        <div className={compact ? "grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" : "grid grid-cols-3 gap-2 max-[620px]:grid-cols-2"}>
           {images.map((image, index) => (
             <article className="grid gap-2 rounded-[5px] border border-slate-200 bg-white p-2" key={image.id}>
               <div className="relative aspect-square overflow-hidden rounded-sm bg-slate-100">

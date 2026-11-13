@@ -31,15 +31,16 @@ export default function InternalEmailVerificationPage() {
   return (
     <main className="grid min-h-dvh place-items-center bg-[#f5f6f7] px-4 py-8">
       <section className="grid w-full max-w-145 gap-5 rounded-lg border border-slate-200 bg-white p-6 shadow-[0_16px_45px_rgba(16,21,31,0.12)] max-[520px]:p-4">
-        <div className="flex items-center gap-3">
+        <div className="auth-mobile-heading-row flex items-center gap-3">
           <BrandLogo className="size-12" />
-          <div>
+          <div className="auth-mobile-heading">
             <span className="text-xs font-bold text-rust-600">FERRETERÍA FYF</span>
             <h1 className="m-0 mt-1 flex items-center gap-2 text-xl font-bold text-ink-950"><MailCheck size={22} /> Verifica tu correo</h1>
           </div>
         </div>
-        <p className="m-0 text-sm leading-6 text-slate-600">Antes de ingresar al sistema interno, confirma que tienes acceso a <strong className="break-all text-ink-950">{user.correo}</strong>.</p>
+        <p className="auth-mobile-heading m-0 text-sm leading-6 text-slate-600">Antes de ingresar al sistema interno, confirma que tienes acceso a <strong className="break-all text-ink-950">{user.correo}</strong>.</p>
         <EmailVerificationPanel
+          centerHeadingOnMobile
           key={initialChallenge?.challengeId || user.correo}
           email={user.correo}
           initialChallenge={initialChallenge}
@@ -55,7 +56,7 @@ export default function InternalEmailVerificationPage() {
             ? "No fue posible enviar el código automáticamente. Puedes intentarlo nuevamente con el botón inferior."
             : "Ingresa el código de 6 dígitos enviado al iniciar sesión. El reenvío es siempre manual."}
         />
-        <button className="w-fit border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => { clearInternalVerificationChallenge(); logout(); }}><LogOut size={17} /> Cerrar sesión</button>
+        <button className="w-full justify-center border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => { clearInternalVerificationChallenge(); logout(); }}><LogOut size={17} /> Cerrar sesión</button>
       </section>
     </main>
   );

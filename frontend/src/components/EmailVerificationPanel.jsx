@@ -1,5 +1,5 @@
 import { CheckCircle2, Mail, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 
@@ -17,6 +17,7 @@ export default function EmailVerificationPanel({
   verified = false,
   title = "Verifica tu correo",
   description = "Te enviaremos un codigo de 6 digitos.",
+  centerHeadingOnMobile = false,
 }) {
   const [challenge, setChallenge] = useState(initialChallenge?.sent ? initialChallenge : null);
   const [pin, setPin] = useState("");
@@ -26,6 +27,12 @@ export default function EmailVerificationPanel({
   );
   const [resendAvailableAt, setResendAvailableAt] = useState(initialChallenge?.resendAvailableAt || null);
   const [remaining, setRemaining] = useState(() => secondsUntil(initialChallenge?.resendAvailableAt));
+  const active = useRef(false);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!resendAvailableAt || remaining <= 0) return undefined;
@@ -52,12 +59,14 @@ export default function EmailVerificationPanel({
     setError("");
     try {
       const nextChallenge = await requestCode();
+      if (!active.current) return;
       setChallenge(nextChallenge);
       setResendAvailableAt(nextChallenge.resendAvailableAt);
       setRemaining(secondsUntil(nextChallenge.resendAvailableAt));
       setPin("");
       toast.success("Codigo enviado. Revisa tu correo.");
     } catch (requestError) {
+      if (!active.current) return;
       const message = getApiError(requestError, "No se pudo enviar el codigo");
       const retryAfter = Number(requestError?.response?.data?.details?.retryAfterSeconds || 0);
       if (retryAfter > 0) {
@@ -67,7 +76,7 @@ export default function EmailVerificationPanel({
       setError(message);
       toast.error(message);
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 
@@ -78,22 +87,24 @@ export default function EmailVerificationPanel({
     setError("");
     try {
       const result = await verifyCode({ challengeId: challenge.challengeId, pin });
+      if (!active.current) return;
+      await onVerified?.(result, challenge);
       toast.success("Correo verificado correctamente");
-      onVerified?.(result, challenge);
     } catch (verifyError) {
+      if (!active.current) return;
       const message = getApiError(verifyError, "No se pudo verificar el codigo");
       setError(message);
       toast.error(message);
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 
   return (
     <section className="grid gap-4 rounded-lg border border-rust-200 bg-rust-50 p-4" aria-labelledby="email-verification-title">
-      <div className="flex items-start gap-3">
+      <div className={`flex items-start gap-3 ${centerHeadingOnMobile ? "auth-mobile-heading-row" : ""}`}>
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-rust-600"><ShieldCheck size={20} /></span>
-        <div className="min-w-0">
+        <div className={`min-w-0 ${centerHeadingOnMobile ? "auth-mobile-heading" : ""}`}>
           <h3 className="m-0 text-sm font-bold text-ink-950" id="email-verification-title">{title}</h3>
           <p className="mt-1 mb-0 text-xs leading-5 text-slate-600">{description}</p>
           <span className="mt-1 block truncate text-xs font-semibold text-ink-700">{maskedEmail}</span>

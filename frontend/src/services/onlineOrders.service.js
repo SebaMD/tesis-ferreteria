@@ -1,12 +1,16 @@
 import api from "../api/httpClient.js";
+export async function quoteOnlineOrderRequest(data, { signal } = {}) {
+  const response = await api.post("/online-orders/quote", data, { signal });
+  return response.data.data;
+}
 import { getOrCreateGuestSessionId } from "../helpers/guestCheckout.js";
 import {
   resolveOrderListProductAssets,
   resolveOrderProductAssets,
 } from "../helpers/productAssets.js";
 
-export async function createOnlineOrderCheckoutRequest(data) {
-  const response = await api.post("/online-orders/checkout", data);
+export async function createOnlineOrderCheckoutRequest(data, { expectedClientId } = {}) {
+  const response = await api.post("/online-orders/checkout", data, { expectedClientId });
   return response.data.data;
 }
 
@@ -30,13 +34,13 @@ export async function restoreArchivedOnlineOrderRequest(orderId) {
   return response.data.data;
 }
 
-export async function getMyOnlineOrdersRequest() {
-  const response = await api.get("/online-orders");
+export async function getMyOnlineOrdersRequest({ signal } = {}) {
+  const response = await api.get("/online-orders", { signal });
   return resolveOrderListProductAssets(response.data.data);
 }
 
-export async function getClientDeliveryAddressRequest() {
-  const response = await api.get("/online-orders/delivery-address");
+export async function getClientDeliveryAddressRequest({ signal } = {}) {
+  const response = await api.get("/online-orders/delivery-address", { signal });
   return response.data.data || null;
 }
 
@@ -74,6 +78,7 @@ function guestOrderHeaders(accessToken) {
 export async function createGuestOnlineOrderCheckoutRequest(data) {
   const response = await api.post("/online-orders/guest/checkout", data, {
     headers: guestSessionHeaders(),
+    expectedGuest: true,
   });
   return response.data.data;
 }
@@ -120,8 +125,8 @@ export async function retryGuestOnlineOrderPaymentRequest(accessToken) {
   return response.data.data;
 }
 
-export async function getGuestDeviceOrdersRequest() {
-  const response = await api.get("/online-orders/guest/device-orders");
+export async function getGuestDeviceOrdersRequest({ signal } = {}) {
+  const response = await api.get("/online-orders/guest/device-orders", { signal });
   return resolveOrderListProductAssets(response.data.data);
 }
 

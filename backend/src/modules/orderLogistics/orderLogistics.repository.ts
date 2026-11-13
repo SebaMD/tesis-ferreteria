@@ -1,9 +1,11 @@
-import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns, orderIdentityJoin, saleIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
   onlineOrderItemsTable,
   onlineOrdersTable,
-  productsTable,
+  onlinePaymentsTable,
   saleDeliveriesTable,
   saleDetailsTable,
   salesTable,
@@ -27,7 +29,10 @@ export type LogisticsOrigin = "ONLINE" | "POS";
 export type LogisticsStatus = OnlineOrderStatus | SaleDeliveryStatus;
 export type LogisticsScope = "ALL" | "MINE";
 
+import { orderAmountColumns } from "../onlineOrders/orderAmountColumns.js";
+import { buildCommercialAmounts, type CommercialAmounts } from "../onlineOrders/commercialAmounts.js";
 const onlineColumns = {
+  ...orderAmountColumns,
   id: onlineOrdersTable.id,
   status: onlineOrdersTable.status,
   total: onlineOrdersTable.total,
@@ -62,6 +67,30 @@ const onlineColumns = {
   createdAt: onlineOrdersTable.createdAt,
   updatedAt: onlineOrdersTable.updatedAt,
 };
+
+export async function findOnlineAdministrativeOrder(orderId: number) {
+  const [order] = await db.select(onlineColumns).from(onlineOrdersTable)
+    .leftJoin(usersTable, eq(onlineOrdersTable.clientId, usersTable.id))
+    .where(eq(onlineOrdersTable.id, orderId)).limit(1);
+  if (!order) return null;
+  const [items, payments] = await Promise.all([
+    db.select({
+      productId: onlineOrderItemsTable.productId, ...historicalProductColumns,
+      quantity: onlineOrderItemsTable.quantity,
+      unitPrice: onlineOrderItemsTable.unitPrice, subtotal: onlineOrderItemsTable.subtotal,
+      discountAmount: onlineOrderItemsTable.discountAmount, promotionId: onlineOrderItemsTable.promotionId,
+      promotionTypeSnapshot: onlineOrderItemsTable.promotionTypeSnapshot,
+      promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
+      promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
+    }).from(onlineOrderItemsTable).leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
+      .where(eq(onlineOrderItemsTable.orderId, orderId)),
+    db.select({ buyOrder: onlinePaymentsTable.buyOrder, authorizationCode: onlinePaymentsTable.authorizationCode,
+      amount: onlinePaymentsTable.amount, transactionDate: onlinePaymentsTable.transactionDate })
+      .from(onlinePaymentsTable).where(and(eq(onlinePaymentsTable.orderId, orderId), eq(onlinePaymentsTable.status, "AUTHORIZED")))
+      .orderBy(desc(onlinePaymentsTable.id)).limit(1),
+  ]);
+  return { ...order, items, authorizedPayment: payments[0] ?? null };
+}
 
 const saleColumns = {
   id: saleDeliveriesTable.saleId,
@@ -99,6 +128,7 @@ const saleColumns = {
 
 type Actor = { id: number; names: string; surnames: string };
 type LogisticsItem = {
+  historicalIdentity?: import("../../db/schema/commercialIdentitySnapshots.js").HistoricalIdentity | null;
   productId: number;
   productName: string;
   unitMeasure: string | null;
@@ -108,6 +138,12 @@ type LogisticsItem = {
 };
 
 export type LogisticsTask = {
+  commercialAmounts?: CommercialAmounts;
+  productsSubtotal?: string | null;
+  productsDiscountTotal?: string | null;
+  deliveryFee?: string | null;
+  deliveryIsDemo?: boolean | null;
+  deliveryFeeReason?: string | null;
   id: number;
   origin: LogisticsOrigin;
   folio: string;
@@ -274,8 +310,7 @@ export async function findLogisticsTasks(filters: {
       ? db.select({
         taskId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -285,20 +320,19 @@ export async function findLogisticsTasks(filters: {
         promotionNameSnapshot: onlineOrderItemsTable.promotionNameSnapshot,
         promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
       }).from(onlineOrderItemsTable)
-        .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+        .leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
         .where(inArray(onlineOrderItemsTable.orderId, onlineIds))
       : Promise.resolve([]),
     saleIds.length
       ? db.select({
         taskId: saleDetailsTable.saleId,
         productId: saleDetailsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: saleDetailsTable.quantity,
         unitPrice: saleDetailsTable.unitPrice,
         subtotal: saleDetailsTable.subtotal,
       }).from(saleDetailsTable)
-        .innerJoin(productsTable, eq(saleDetailsTable.productId, productsTable.id))
+        .leftJoin(identityCapture, saleIdentityJoin(saleDetailsTable.saleId, saleDetailsTable.productId))
         .where(inArray(saleDetailsTable.saleId, saleIds))
       : Promise.resolve([]),
     actorIds.length
@@ -330,6 +364,7 @@ export async function findLogisticsTasks(filters: {
     return {
       ...publicRow,
       origin: "ONLINE",
+      commercialAmounts: buildCommercialAmounts({ ...row, items }),
       folio: `P-${String(row.id).padStart(6, "0")}`,
       status: row.status as LogisticsStatus,
       deliveryType: row.deliveryType as "PICKUP" | "DELIVERY",

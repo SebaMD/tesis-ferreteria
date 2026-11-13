@@ -1,3 +1,7 @@
+import { buildCommercialAmounts, type CommercialAmounts } from "./commercialAmounts.js";
+import { historicalIdentityNote } from "../products/historicalIdentity.js";
+import type { HistoricalIdentity } from "../../db/schema/commercialIdentitySnapshots.js";
+
 export const RECEIPT_ELIGIBLE_ORDER_STATUSES = new Set([
   "PAID",
   "PREPARING",
@@ -57,6 +61,7 @@ export function formatOrderQuantity(quantity: number, unitMeasure: string | null
 }
 
 type CommercialOrderItemSource = {
+  historicalIdentity?: HistoricalIdentity | null;
   productId: number;
   productName: string;
   unitMeasure?: string | null;
@@ -71,6 +76,12 @@ type CommercialOrderItemSource = {
 };
 
 export type CommercialOrderSource = {
+  deliveryBaseFee?: string | null;
+  productsSubtotal?: string | null;
+  productsDiscountTotal?: string | null;
+  deliveryFee?: string | null;
+  deliveryIsDemo?: boolean | null;
+  deliveryFeeReason?: string | null;
   id: number;
   status: string;
   buyerType: "CLIENT" | "GUEST";
@@ -90,6 +101,11 @@ export type CommercialOrderSource = {
 };
 
 export type OrderCommercialModel = {
+  commercialAmounts: CommercialAmounts;
+  productsNet: string;
+  deliveryFee: string | null;
+  deliveryFeeLabel: string;
+  deliveryIsDemo: boolean;
   orderId: number;
   folio: string;
   status: string;
@@ -100,6 +116,8 @@ export type OrderCommercialModel = {
     email: string;
   };
   items: Array<{
+    historicalIdentity?: HistoricalIdentity | null;
+    identityNote: string;
     productId: number;
     productName: string;
     unitMeasure: string | null;
@@ -142,6 +160,8 @@ export function isReceiptEligibleStatus(status: string) {
 export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCommercialModel {
   const deliveryType = order.deliveryType === "DELIVERY" ? "DELIVERY" : "PICKUP";
   const items = order.items.map((item) => ({
+    historicalIdentity: item.historicalIdentity,
+    identityNote: historicalIdentityNote(item.historicalIdentity),
     productId: item.productId,
     productName: item.productName,
     unitMeasure: item.unitMeasure?.trim() || null,
@@ -162,6 +182,7 @@ export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCo
   const totalDiscount = items.reduce((total, item) => total + Number(item.discountAmount), 0);
 
   return {
+    commercialAmounts: buildCommercialAmounts(order),
     orderId: order.id,
     folio: `P-${String(order.id).padStart(6, "0")}`,
     status: order.status,
@@ -172,8 +193,12 @@ export function buildOrderCommercialModel(order: CommercialOrderSource): OrderCo
       email: order.buyerEmail?.trim() || "",
     },
     items,
-    baseSubtotal: baseSubtotal.toFixed(2),
-    totalDiscount: totalDiscount.toFixed(2),
+    baseSubtotal: order.productsSubtotal ?? baseSubtotal.toFixed(2),
+    totalDiscount: order.productsDiscountTotal ?? totalDiscount.toFixed(2),
+    productsNet: (Number(order.total) - Number(order.deliveryFee ?? 0)).toFixed(2),
+    deliveryFee: order.deliveryFee ?? null,
+    deliveryFeeLabel: order.deliveryFee == null ? "Sin cargo de despacho registrado (histórico)" : order.deliveryFeeReason === "FREE_THRESHOLD" ? "Despacho gratuito por monto de productos" : "Costo de despacho",
+    deliveryIsDemo: order.deliveryIsDemo === true,
     total: order.total,
     delivery: {
       type: deliveryType,

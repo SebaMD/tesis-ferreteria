@@ -17,6 +17,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
 import EmailVerificationPanel from "../components/EmailVerificationPanel.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import ThemeToggle from "../components/ThemeToggle.jsx";
@@ -215,10 +216,10 @@ export default function ClientAccountPage() {
   return (
     <main className="relative mx-auto grid w-full max-w-220 gap-5 px-6 py-8 max-[720px]:px-3.5">
       <LoadingOverlay active={addressLoading} />
-      <div>
+      <header className="public-page-header"><div>
         <h1 className="m-0 text-2xl font-bold text-ink-950">Mi cuenta</h1>
         <p className="mt-1.5 mb-0 text-sm text-slate-500">Administra tus datos y preferencias para próximas compras.</p>
-      </div>
+      </div><InformationBackLink /></header>
 
       {!user.emailVerifiedAt && !user.emailVerified && (
         <section className="flex items-center justify-between gap-4 rounded-lg border-2 border-rust-300 bg-rust-50 p-5 max-[620px]:grid">
@@ -290,6 +291,7 @@ export default function ClientAccountPage() {
 
       <AppModal
         open={deactivationOpen}
+        fitVisualViewport
         title="Desactivar mi cuenta"
         description="Esta acción cerrará tu sesión, pero no eliminará tu información ni tu historial."
         onClose={closeDeactivation}
@@ -297,9 +299,9 @@ export default function ClientAccountPage() {
       >
         <form className="grid gap-4" onSubmit={deactivateAccount}>
           <div className="client-account-deactivation-warning rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">Para confirmar, ingresa tu contraseña actual. Si existe una compra o entrega en proceso, la cuenta permanecerá activa.</div>
-          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => { setDeactivationPassword(event.target.value); setDeactivationError(""); }} autoComplete="current-password" aria-invalid={Boolean(deactivationError)} aria-describedby={deactivationError ? "client-deactivation-error" : undefined} required autoFocus /></label>
+          <label>Contraseña actual<input type="password" value={deactivationPassword} onChange={(event) => { setDeactivationPassword(event.target.value); setDeactivationError(""); }} autoComplete="current-password" aria-invalid={Boolean(deactivationError)} aria-describedby={deactivationError ? "client-deactivation-error" : undefined} required /></label>
           {deactivationError && <p className="m-0 rounded-md border border-critical-200 bg-critical-50 px-3 py-2 text-sm font-semibold text-critical-700" id="client-deactivation-error" role="alert">{deactivationError}</p>}
-          <div className="flex justify-end gap-2 max-[480px]:grid">
+          <div className="account-mobile-actions flex justify-end gap-2 max-[480px]:grid">
             <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeDeactivation} disabled={deactivating}>Cancelar</button>
             <button className="border-critical-600 bg-critical-600 text-white hover:bg-critical-700" type="submit" disabled={deactivating || !deactivationPassword}>{deactivating ? "Desactivando..." : "Confirmar desactivación"}</button>
           </div>

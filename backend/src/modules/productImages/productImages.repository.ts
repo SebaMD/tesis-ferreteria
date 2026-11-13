@@ -1,4 +1,4 @@
-import { asc, eq, inArray, max } from "drizzle-orm";
+import { asc, eq, inArray, max, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { productImagesTable, type NewProductImage } from "../../db/schema/index.js";
 
@@ -33,6 +33,7 @@ export async function findProductImageById(productId: number, imageId: number) {
 
 export async function createProductImage(data: Omit<NewProductImage, "position" | "isPrimary">) {
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
     const [positionResult] = await tx
       .select({ value: max(productImagesTable.position) })
       .from(productImagesTable)
@@ -58,6 +59,7 @@ export async function createProductImage(data: Omit<NewProductImage, "position" 
 
 export async function setPrimaryProductImage(productId: number, imageId: number) {
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
     const [target] = await tx
       .select({ id: productImagesTable.id, productId: productImagesTable.productId })
       .from(productImagesTable)
@@ -83,6 +85,7 @@ export async function setPrimaryProductImage(productId: number, imageId: number)
 
 export async function deleteProductImage(productId: number, imageId: number) {
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
     const [image] = await tx
       .select(imageColumns)
       .from(productImagesTable)
@@ -115,6 +118,7 @@ export async function deleteProductImage(productId: number, imageId: number) {
 
 export async function reorderProductImages(productId: number, imageIds: number[]) {
   return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('fyf-product-families'))`);
     const currentImages = await tx
       .select({ id: productImagesTable.id })
       .from(productImagesTable)

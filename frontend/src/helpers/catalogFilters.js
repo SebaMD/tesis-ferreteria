@@ -7,6 +7,11 @@ export const EMPTY_CATALOG_FILTERS = {
   percentageDiscount: false,
   buy2Pay1: false,
 };
+export const ADDITIONAL_CATALOG_FILTER_KEYS = ["minPrice", "maxPrice", "brand", "availability", "percentageDiscount", "buy2Pay1"];
+
+export function mergeAdditionalCatalogFilters(applied, draft) {
+  return { ...applied, ...Object.fromEntries(ADDITIONAL_CATALOG_FILTER_KEYS.map(key => [key, draft[key]])) };
+}
 export const CATALOG_SORT_OPTIONS = [
   ["price-asc", "Precio: menor a mayor"], ["price-desc", "Precio: mayor a menor"],
   ["name-asc", "Nombre: A-Z"], ["name-desc", "Nombre: Z-A"],

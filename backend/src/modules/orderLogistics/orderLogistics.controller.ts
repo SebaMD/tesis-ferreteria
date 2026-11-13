@@ -2,8 +2,10 @@ import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import { handleErrorClient, handleErrorServer, handleSuccess } from "../../utils/helpers.js";
 import { ImageFileError } from "../../utils/imageFiles.js";
+import { UserSecurityError } from "../users/userSecurity.repository.js";
 import {
   getDeliveryProofFileService,
+  getAdministrativeOrderSummaryService,
   getLogisticsHandoffService,
   getLogisticsOrderByIdService,
   getLogisticsOrdersService,
@@ -39,7 +41,7 @@ function routeTask(req: AuthenticatedRequest) {
 }
 
 function handleControllerError(res: Response, error: unknown, fallback: string) {
-  if (error instanceof OrderLogisticsError || error instanceof ImageFileError) {
+  if (error instanceof OrderLogisticsError || error instanceof ImageFileError || error instanceof UserSecurityError) {
     return handleErrorClient(res, error.statusCode, error.message);
   }
   return handleErrorServer(
@@ -48,6 +50,18 @@ function handleControllerError(res: Response, error: unknown, fallback: string) 
     fallback,
     error instanceof Error ? error.message : "Error desconocido",
   );
+}
+
+export async function getAdministrativeOrderSummaryController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) throw new OrderLogisticsError("El id del pedido debe ser valido", 400);
+    const model = await getAdministrativeOrderSummaryService(id, authenticatedUser(req));
+    res.setHeader("Cache-Control", "private, no-store");
+    return handleSuccess(res, 200, "Ficha administrativa obtenida", model);
+  } catch (error) {
+    return handleControllerError(res, error, "No se pudo obtener la ficha administrativa");
+  }
 }
 
 export async function getLogisticsOrdersController(req: AuthenticatedRequest, res: Response) {

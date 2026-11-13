@@ -7,22 +7,21 @@ import {
   Power,
   Save,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   forwardRef,
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import useCustomerNotice from "../hooks/useCustomerNotice.js";
+import { localDateTime } from "../helpers/promotionDates.js";
+import { customerNoticeDates } from "../helpers/customerNoticeDates.js";
 import {
   createCustomerNoticeRequest,
   deleteCustomerNoticeRequest,
@@ -36,6 +35,9 @@ import {
   uploadCustomerNoticeImageRequest,
 } from "../services/customerNotice.service.js";
 import AppModal from "./AppModal.jsx";
+import DeliveryNoticeImage from "./DeliveryNoticeImage.jsx";
+import ImageField from "./NoticeImageField.jsx";
+import NoticeInlineEditor from "./NoticeInlineEditor.jsx";
 
 const EMPTY_FORM = {
   title: "",
@@ -67,14 +69,15 @@ function noticeForm(notice) {
   };
 }
 
-function noticePayload(form) {
+function noticePayload(form, original = null, now = Date.now()) {
+  const dates = customerNoticeDates(form, original, now);
   return {
     title: form.title.trim(),
     message: form.message.trim(),
     isActive: form.isActive,
     displaySeconds: Number(form.displaySeconds),
-    startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
-    endsAt: !form.indefinite && form.endsAt ? new Date(form.endsAt).toISOString() : null,
+    startsAt: dates.startsAt?.toISOString() ?? null,
+    endsAt: dates.endsAt?.toISOString() ?? null,
   };
 }
 
@@ -101,71 +104,11 @@ function formatDateTime(value) {
     : "Sin límite";
 }
 
-function useObjectUrl(file) {
-  const url = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
-  useEffect(() => {
-    if (!url) return undefined;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
-  return url;
-}
-
-function ImageField({ currentUrl, file, onFile, removeImage, onRemove }) {
-  const titleId = useId();
-  const fileInputRef = useRef(null);
-  const previewUrl = useObjectUrl(file);
-  const visibleUrl = previewUrl || (!removeImage ? currentUrl : "");
-  return (
-    <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-3" aria-labelledby={titleId}>
-      <h4 className="m-0 text-xs font-bold text-ink-700" id={titleId}>Imagen opcional</h4>
-      <p className="m-0 text-xs leading-5 text-slate-500">
-        Imagen recomendada: 1920 × 720 px (formato panorámico). Mantén el contenido principal centrado para que se vea correctamente tanto en computador como en celular.
-      </p>
-      <div className="relative aspect-video w-full max-w-96 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-        {visibleUrl ? (
-          <>
-            <img className="h-full w-full object-cover" src={visibleUrl} alt="Previsualización del slide" />
-            <button
-              className="absolute top-2 right-2 size-9 min-h-9 border-white/60 bg-ink-950/85 p-0 text-white hover:bg-ink-950"
-              type="button"
-              onClick={onRemove}
-              aria-label="Quitar imagen"
-              title="Quitar imagen"
-            ><X size={16} /></button>
-          </>
-        ) : (
-          <div className="grid h-full place-items-center text-slate-500" aria-hidden="true">
-            <span className="flex items-center gap-2 text-xs font-semibold"><ImageIcon size={18} /> Sin imagen seleccionada</span>
-          </div>
-        )}
-      </div>
-      <button
-        className="min-h-10 w-fit max-w-full border-ink-950 bg-ink-950 px-3 text-xs font-bold text-white shadow-sm hover:bg-ink-800"
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        aria-label={visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
-      >
-        <ImageIcon size={17} /> {visibleUrl ? "Cambiar imagen" : "Seleccionar imagen"}
-      </button>
-      <input
-        ref={fileInputRef}
-        className="hidden"
-        type="file"
-        tabIndex={-1}
-        accept="image/jpeg,image/png,image/webp"
-        onChange={(event) => {
-          onFile(event.target.files?.[0] || null);
-          event.target.value = "";
-        }}
-      />
-      <span className="text-[11px] text-slate-500">JPG, PNG o WebP · máximo 5 MB.</span>
-    </section>
-  );
-}
 
 const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedded = false }, ref) {
   const { refreshNotices } = useCustomerNotice();
   const [presentation, setPresentation] = useState(null);
+  const [deliveryAnnouncement, setDeliveryAnnouncement] = useState(null);
   const [notices, setNotices] = useState([]);
   const noticesRef = useRef([]);
   const noticeNodesRef = useRef(new Map());
@@ -177,11 +120,24 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const [draggingId, setDraggingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [originalNotice, setOriginalNotice] = useState(null);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [dateNow, setDateNow] = useState(Date.now);
+  const [dateTouched, setDateTouched] = useState({});
+  const [serverDateErrors, setServerDateErrors] = useState({});
   const [imageFile, setImageFile] = useState(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const dates = customerNoticeDates(form, originalNotice, dateNow);
+  const dateErrors = { ...dates.errors, ...serverDateErrors };
+
+  useEffect(() => {
+    if (!editingId || editingId === "presentation") return undefined;
+    const timer = window.setInterval(() => setDateNow(Date.now() + serverOffset), 15_000);
+    return () => window.clearInterval(timer);
+  }, [editingId, serverOffset]);
 
   const updateNotices = useCallback((next) => {
     noticesRef.current = typeof next === "function" ? next(noticesRef.current) : next;
@@ -222,8 +178,9 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
 
   const loadConfiguration = useCallback(async () => {
     try {
-      const configuration = await getCustomerNoticeConfigurationRequest();
+      const configuration = await getCustomerNoticeConfigurationRequest({ onServerTime: setServerOffset });
       setPresentation(configuration.presentation);
+      setDeliveryAnnouncement(configuration.deliveryAnnouncement);
       updateNotices(configuration.notices);
     } catch (error) {
       toast.error(getApiError(error, "No se pudieron cargar los avisos"));
@@ -233,7 +190,6 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   }, [updateNotices]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadConfiguration();
   }, [loadConfiguration]);
 
@@ -246,8 +202,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     editorRevealRef.current = { id: "new", focus };
     setEditingId("new");
     setForm(EMPTY_FORM);
+    setOriginalNotice(null);
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched({});
+    setServerDateErrors({});
     resetMedia();
-  }, []);
+  }, [serverOffset]);
 
   useImperativeHandle(ref, () => ({ startCreate }), [startCreate]);
 
@@ -255,6 +215,10 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     editorRevealRef.current = { id: notice.id, focus };
     setEditingId(notice.id);
     setForm(noticeForm(notice));
+    setOriginalNotice(notice);
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched({});
+    setServerDateErrors({});
     resetMedia();
   };
 
@@ -299,6 +263,13 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
 
   const persist = async (event) => {
     event.preventDefault();
+    if (editingId !== "presentation") {
+      const now = Date.now() + serverOffset;
+      setDateNow(now);
+      setDateTouched({ startsAt: true, endsAt: true });
+      setServerDateErrors({});
+      if (Object.keys(customerNoticeDates(form, originalNotice, now).errors).length) return;
+    }
     setSaving(true);
     let createdNoticeId = null;
     try {
@@ -312,9 +283,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
         else if (removeImage && presentation?.imageUrl) await removeCatalogPresentationImageRequest();
       } else {
         const notice = editingId === "new"
-          ? await createCustomerNoticeRequest(noticePayload(form))
-          : await updateCustomerNoticeRequest(editingId, noticePayload(form));
-        if (editingId === "new") createdNoticeId = notice.id;
+          ? await createCustomerNoticeRequest(noticePayload(form, originalNotice, Date.now() + serverOffset))
+          : await updateCustomerNoticeRequest(editingId, noticePayload(form, originalNotice, Date.now() + serverOffset));
+        if (editingId === "new") {
+          createdNoticeId = notice.id;
+          setOriginalNotice(notice);
+        }
         if (imageFile) await uploadCustomerNoticeImageRequest(notice.id, imageFile);
         else if (removeImage && editingId !== "new") await removeCustomerNoticeImageRequest(notice.id);
       }
@@ -326,7 +300,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
         setEditingId(createdNoticeId);
         await loadConfiguration();
       }
-      toast.error(getApiError(error, "No se pudieron guardar los cambios"));
+      const message = getApiError(error, "No se pudieron guardar los cambios");
+      if (editingId !== "presentation") {
+        if (/término|termino/i.test(message)) setServerDateErrors({ endsAt: message });
+        else if (/inicio/i.test(message)) setServerDateErrors({ startsAt: message });
+      }
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -335,7 +314,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
   const toggleActive = async (notice) => {
     try {
       await updateCustomerNoticeRequest(notice.id, {
-        ...noticePayload(noticeForm(notice)),
+        ...noticePayload(noticeForm(notice), notice),
         isActive: !notice.isActive,
       });
       await Promise.all([loadConfiguration(), refreshNotices()]);
@@ -420,10 +399,24 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
     ? presentation?.imageUrl
     : notices.find((notice) => notice.id === editingId)?.imageUrl;
 
+  const changeDate = (field, value) => {
+    setForm(current => ({ ...current, [field]: value }));
+    setDateNow(Date.now() + serverOffset);
+    setServerDateErrors({});
+    setDateTouched(current => ({ ...current, [field]: true, ...(field === "startsAt" && form.endsAt ? { endsAt: true } : {}) }));
+  };
+
+  const invalidDate = (event, field) => {
+    event.preventDefault();
+    const checked = customerNoticeDates(form, originalNotice, Date.now() + serverOffset);
+    setDateTouched(current => ({ ...current, [field]: true }));
+    setServerDateErrors(current => ({ ...current, [field]: checked.errors[field] || `La fecha de ${field === "startsAt" ? "inicio" : "término"} no es válida` }));
+  };
+
   const renderEditor = (kind) => {
     const isPresentation = kind === "presentation";
     return (
-      <form className="customer-notice-editor grid scroll-mt-4 gap-3 rounded-md border border-rust-500 bg-rust-50/40 p-4" ref={editorRef} onSubmit={persist}>
+      <NoticeInlineEditor ref={editorRef} onSubmit={persist} onCancel={cancelEdit} busy={saving}>
         <strong className="text-sm text-ink-950">
           {isPresentation ? "Editar presentación del catálogo" : editingId === "new" ? "Crear aviso" : "Editar aviso"}
         </strong>
@@ -444,15 +437,23 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
             <label>Mensaje
               <textarea className="min-h-28 resize-y rounded-[5px] border border-slate-300 bg-white px-2.75 py-2.5 text-sm text-ink-950" maxLength="1000" value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} required />
             </label>
-            <div className="grid grid-cols-3 gap-3 max-[680px]:grid-cols-1">
+            <div className="grid grid-cols-3 items-start gap-3 max-[680px]:grid-cols-1">
               <label>Tiempo en pantalla (segundos)
                 <input type="number" min="3" max="30" step="1" value={form.displaySeconds} onChange={(event) => setForm((current) => ({ ...current, displaySeconds: event.target.value }))} required />
               </label>
-              <label>Inicio de vigencia (opcional)
-                <input type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} />
+              <label className="min-w-0"><span className="block min-[681px]:min-h-10 min-[1024px]:min-h-5">Inicio de vigencia (opcional)</span>
+                <input aria-label="Inicio de vigencia (opcional)" className="min-w-0 max-w-full" type="datetime-local" step="60" value={form.startsAt} min={dates.startUnchanged ? undefined : localDateTime(dateNow)}
+                  aria-invalid={Boolean(dateTouched.startsAt && dateErrors.startsAt)} aria-describedby={dateTouched.startsAt && dateErrors.startsAt ? "notice-start-error" : undefined}
+                  onChange={event => changeDate("startsAt", event.target.value)} onBlur={() => setDateTouched(current => ({ ...current, startsAt: true }))} onInvalid={event => invalidDate(event, "startsAt")} />
+                {dateTouched.startsAt && dateErrors.startsAt && <span id="notice-start-error" className="text-sm text-critical-600" role="alert">{dateErrors.startsAt}</span>}
               </label>
-              <label>Término de vigencia (opcional)
-                <input type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} disabled={form.indefinite} required={!form.indefinite} />
+              <label className="min-w-0"><span className="block min-[681px]:min-h-10 min-[1024px]:min-h-5">Término de vigencia (opcional)</span>
+                <input aria-label="Término de vigencia (opcional)" className="min-w-0 max-w-full" type="datetime-local" step="60" value={form.endsAt}
+                  min={dates.endUnchanged && !dateErrors.endsAt ? undefined : localDateTime(Math.floor((dates.startsAt?.getTime() ?? dateNow) / 60_000) * 60_000 + 60_000)}
+                  aria-invalid={Boolean(dateTouched.endsAt && dateErrors.endsAt)} aria-describedby={dateTouched.endsAt && dateErrors.endsAt ? "notice-end-error" : undefined}
+                  onChange={event => changeDate("endsAt", event.target.value)} onBlur={() => setDateTouched(current => ({ ...current, endsAt: true }))} onInvalid={event => invalidDate(event, "endsAt")}
+                  disabled={form.indefinite} required={!form.indefinite} />
+                {dateTouched.endsAt && dateErrors.endsAt && <span id="notice-end-error" className="text-sm text-critical-600" role="alert">{dateErrors.endsAt}</span>}
               </label>
             </div>
             <div className="flex flex-wrap gap-5">
@@ -461,7 +462,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                 Aviso activo
               </label>
               <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm font-bold text-ink-700">
-                <input className="size-4 min-h-0 w-4" type="checkbox" checked={form.indefinite} onChange={(event) => setForm((current) => ({ ...current, indefinite: event.target.checked, endsAt: event.target.checked ? "" : current.endsAt }))} />
+                <input className="size-4 min-h-0 w-4" type="checkbox" checked={form.indefinite} onChange={event => { setForm(current => ({ ...current, indefinite: event.target.checked })); setServerDateErrors({}); }} />
                 Vigencia indefinida
               </label>
             </div>
@@ -474,11 +475,11 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
           removeImage={removeImage}
           onRemove={() => { setImageFile(null); setRemoveImage(true); }}
         />
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="admin-form-actions">
           <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={cancelEdit}>Cancelar</button>
-          <button type="submit" disabled={saving}><Save size={17} /> {saving ? "Guardando…" : "Guardar cambios"}</button>
+          <button className="product-positive-action" type="submit" disabled={saving}><Save size={17} /> {saving ? "Guardando…" : "Guardar cambios"}</button>
         </div>
-      </form>
+      </NoticeInlineEditor>
     );
   };
 
@@ -500,7 +501,7 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
                     <p className="mt-1 mb-0 line-clamp-2 text-xs leading-5 text-slate-600">{presentation?.mainText}</p>
                   </div>
                 </div>
-                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0" type="button" onClick={(event) => startPresentationEdit({ focus: event.detail === 0 })} aria-label="Editar presentación del catálogo" title="Editar presentación del catálogo"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
+                <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:absolute max-[620px]:top-3 max-[620px]:right-3 max-[620px]:size-10 max-[620px]:min-h-10 max-[620px]:p-0" type="button" onClick={(event) => startPresentationEdit({ focus: event.detail === 0 })} aria-expanded={editingId === "presentation"} aria-label="Editar presentación del catálogo" title="Editar presentación del catálogo"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
               </div>
               {presentation?.imageUrl && <img className="h-20 w-full rounded-md border border-slate-200 object-cover" src={presentation.imageUrl} alt="" />}
               <span className="text-[11px] text-slate-500">Siempre ocupa la primera posición y no puede desactivarse, moverse ni eliminarse.</span>
@@ -508,10 +509,12 @@ const CustomerNoticeManager = forwardRef(function CustomerNoticeManager({ embedd
             {editingId === "presentation" && <div className="mt-3">{renderEditor("presentation")}</div>}
           </div>
 
+          <DeliveryNoticeImage announcement={deliveryAnnouncement} onSaved={async()=>{await loadConfiguration();await refreshNotices();}} />
+
           {editingId === "new" && renderEditor("notice")}
 
           {notices.length === 0 && editingId !== "new" && (
-            <p className="m-0 rounded-md border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">Aún no existen avisos.</p>
+            <p className="m-0 rounded-md border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">Aún no existen avisos manuales.</p>
           )}
           {notices.map((notice, index) => {
             const phase = scheduleStatus(notice);

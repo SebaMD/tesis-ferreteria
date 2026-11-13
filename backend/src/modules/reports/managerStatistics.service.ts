@@ -107,6 +107,7 @@ export function buildManagerStatistics(
   const online = new Map<number, {
     date: Date;
     totalCents: number;
+    deliveryCents: number;
     items: Array<{
       productId: number;
       productName: string;
@@ -140,7 +141,8 @@ export function buildManagerStatistics(
   for (const row of source.onlineRows) {
     const order = online.get(row.orderId) ?? {
       date: row.commercialDate,
-      totalCents: toCents(row.orderTotal),
+      totalCents: toCents(row.orderTotal) - toCents(row.deliveryFee),
+      deliveryCents: toCents(row.deliveryFee),
       items: [],
     };
     order.items.push({
@@ -156,6 +158,7 @@ export function buildManagerStatistics(
   let returnedCents = 0;
   let netCents = 0;
   let unitsSold = 0;
+  let deliveryCents = 0;
 
   for (const sale of pointOfSale.values()) {
     const effectiveReturnedCents = sale.status === "CANCELLED"
@@ -190,10 +193,11 @@ export function buildManagerStatistics(
   }
 
   for (const order of online.values()) {
+    deliveryCents += order.deliveryCents;
     originalCents += order.totalCents;
     netCents += order.totalCents;
     addAmount(channels, "ONLINE", order.totalCents);
-    addAmount(paymentMethods, "WEBPAY_PLUS", order.totalCents);
+    addAmount(paymentMethods, "WEBPAY_PLUS", order.totalCents + order.deliveryCents);
 
     const day = evolution.get(dateKey(order.date));
     if (day) {
@@ -221,8 +225,16 @@ export function buildManagerStatistics(
   };
 
   return {
+    identityHistory: [...source.pointOfSaleRows, ...source.onlineRows].reduce((counts, row) => {
+      const origin = row.historicalIdentity?.origin;
+      if (origin === "ORIGINAL") counts.originalLines++; else if (origin) counts.referenceLines++; else counts.missingLines++;
+      return counts;
+    }, { originalLines: 0, referenceLines: 0, missingLines: 0 }),
     period: { from: filters.fromLabel, to: filters.toLabel },
     kpis: {
+      productsIncome: fromCents(netCents),
+      deliveryIncome: fromCents(deliveryCents),
+      totalCollected: fromCents(netCents + deliveryCents),
       netSales: fromCents(netCents),
       originalSales: fromCents(originalCents),
       returnedAmount: fromCents(returnedCents),
@@ -250,7 +262,7 @@ export function buildManagerStatistics(
       paymentMethod,
       amount: fromCents(values.amountCents),
       transactions: values.transactions,
-      percentage: percentage(values.amountCents, netCents),
+      percentage: percentage(values.amountCents, netCents + deliveryCents),
     })).sort((left, right) => right.amount - left.amount),
     topProducts: [...products.values()]
       .map((product) => ({

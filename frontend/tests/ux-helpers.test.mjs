@@ -55,8 +55,9 @@ test("buyer delivery forms use textual addresses and always clear stale coordina
     assert.doesNotMatch(source, /DeliveryLocationPicker|Usar mi ubicación|navigator\.geolocation/);
   }
   assert.doesNotMatch(checkout, /savedAddress\.latitude|savedAddress\.longitude/);
-  assert.match(checkout, /deliveryLatitude: null/);
-  assert.match(checkout, /deliveryLongitude: null/);
+  assert.doesNotMatch(checkout, /deliveryLatitude:|deliveryLongitude:/);
+  const conditions = await readFile(new URL("../src/pages/DeliveryConditionsPage.jsx", import.meta.url), "utf8");
+  assert.match(conditions, /se muestra antes de Webpay/);
   assert.match(account, /latitude: null/);
   assert.match(account, /longitude: null/);
   assert.doesNotMatch(deliveryHelper, /requestCurrentLocation|navigator\.geolocation|isSecureContext/);

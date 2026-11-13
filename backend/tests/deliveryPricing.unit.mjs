@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+process.env.DATABASE_URL = "postgresql://unused:unused@127.0.0.1:1/unused";
+const { calculateDelivery, deliveryBenefit, deliveryAnnouncement, publicDeliveryInformation, quoteFingerprint } = await import("../dist/modules/deliverySettings/deliveryPricing.js");
+const { validateDeliverySettings } = await import("../dist/modules/deliverySettings/deliverySettings.service.js");
+const policy = { id: 1, version: 1, pickupEnabled: true, deliveryEnabled: true, flatFee: "3000.00", minimumProductsTotal: null, freeShippingFrom: null, isDemo: true };
+assert.deepEqual(calculateDelivery(policy, "PICKUP", 500), { fee: 0, reason: "PICKUP" });
+assert.throws(() => calculateDelivery(policy, "DELIVERY", 500), { code: "DELIVERY_MANUAL_QUOTE_REQUIRED", statusCode: 409 });
+assert.throws(() => calculateDelivery(null, "PICKUP", 100), /configuración/);
+assert.throws(() => calculateDelivery({ ...policy, deliveryEnabled: false }, "DELIVERY", 100), /El despacho no está disponible por ahora/);
+assert.throws(() => calculateDelivery({ ...policy, pickupEnabled: false }, "PICKUP", 100), /deshabilitado/);
+for (const legacy of [{ minimumProductsTotal: "1000" }, { freeShippingFrom: "1000" }, { flatFee: "0" }, { isDemo: false }]) {
+  for (const net of [0, 999, 1000, 500000, 1000000]) assert.throws(() => calculateDelivery({ ...policy, ...legacy }, "DELIVERY", net), { code: "DELIVERY_MANUAL_QUOTE_REQUIRED" });
+}
+const body = { expectedRevisionId: null, pickupEnabled: true, deliveryEnabled: true, flatFee: 3000, minimumProductsTotal: null, freeShippingFrom: null, isDemo: true };
+assert.equal(validateDeliverySettings(body).flatFee, "3000.00");
+for (const bad of [{ flatFee: -1 }, { flatFee: 0.5 }, { flatFee: "3000" }, { isDemo: "true" }, { expectedRevisionId: -1 }, { unexpected: 1 }, { freeShippingFrom: 0 }, { pickupEnabled: false }, { minimumProductsTotal: 1 }]) assert.throws(() => validateDeliverySettings({ ...body, ...bad }));
+const { pickupEnabled, minimumProductsTotal, ...simplified } = body;
+assert.equal(validateDeliverySettings(simplified).pickupEnabled, true);
+assert.equal(validateDeliverySettings(simplified).minimumProductsTotal, null);
+assert.equal(deliveryAnnouncement(policy).kind, "MANUAL_QUOTE");
+assert.equal(deliveryAnnouncement({ ...policy, flatFee: "0", freeShippingFrom: "50000" }).kind, "MANUAL_QUOTE");
+assert.equal(deliveryAnnouncement({ ...policy, deliveryEnabled: false, freeShippingFrom: "50000" }).kind, "SUSPENDED");
+assert.doesNotMatch(JSON.stringify(deliveryAnnouncement({ ...policy, freeShippingFrom: "50000" })), /gratis|50\.000|3000|3\.000|createdBy|DEMO/);
+assert.deepEqual(deliveryBenefit({ ...policy, freeShippingFrom: "10000" }, "DELIVERY", 8000), { active: false, threshold: null, remaining: null, qualified: false });
+assert.equal(deliveryBenefit({ ...policy, freeShippingFrom: "10000" }, "PICKUP", 8000).active, false);
+assert.equal(deliveryBenefit({ ...policy, freeShippingFrom: "10000" }, "DELIVERY", 1000000).qualified, false);
+assert.equal(publicDeliveryInformation(policy).conditionalBenefitEnabled, false);
+assert.equal(publicDeliveryInformation(policy).conditionalFreeThresholdReference, 500000);
+assert.equal(publicDeliveryInformation(policy).onlineQuoteRequestsEnabled, false);
+assert.equal(publicDeliveryInformation(null).deliveryEnabled, false);
+const item = { productId: 1, quantity: 1, unitPrice: "5000.00", subtotal: "5000.00", discountAmount: "0.00", promotionId: null, promotionTypeSnapshot: null, promotionNameSnapshot: null, promotionValueSnapshot: null };
+const q = { revisionId: 1, deliveryType: "DELIVERY", items: [item], fee: 3000 };
+for (const changed of [{ ...q, fee: 4000 }, { ...q, revisionId: 2 }, { ...q, deliveryType: "PICKUP" }, { ...q, items: [{ ...item, quantity: 2 }] }]) assert.notEqual(quoteFingerprint(q), quoteFingerprint(changed));
+console.log("PASS delivery pricing: free pickup; every new delivery requires approved manual quote; no automatic threshold; suspension, public references, legacy policy validation and fingerprint retained");

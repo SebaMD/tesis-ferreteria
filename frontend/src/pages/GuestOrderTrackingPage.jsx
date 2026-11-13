@@ -17,6 +17,7 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import DeliveryProofViewer from "../components/orders/DeliveryProofViewer.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isDirectPurchaseOrder } from "../helpers/directPurchase.js";
@@ -35,6 +36,7 @@ import {
 } from "../helpers/onlineOrders.js";
 import { badgeClass } from "../helpers/uiClasses.js";
 import useCart from "../hooks/useCart.js";
+import { paymentResultAccessMessage } from "../helpers/paymentResultContext.js";
 import {
   continueGuestOnlineOrderPaymentRequest,
   getGuestOnlineOrderRequest,
@@ -61,9 +63,8 @@ function nextRefreshDelay(status) {
 }
 
 export default function GuestOrderTrackingPage() {
-  const { removePurchasedItems } = useCart();
-  const removePurchasedItemsRef = useRef(removePurchasedItems);
-  const cartAdjustedRef = useRef(false);
+  const { settlePurchasedOrder } = useCart();
+  const settlePurchasedOrderRef = useRef(settlePurchasedOrder);
   const accessTokenRef = useRef(null);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,8 +72,8 @@ export default function GuestOrderTrackingPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    removePurchasedItemsRef.current = removePurchasedItems;
-  }, [removePurchasedItems]);
+    settlePurchasedOrderRef.current = settlePurchasedOrder;
+  }, [settlePurchasedOrder]);
 
   const loadOrder = useCallback(async (notifyError = false) => {
     const accessToken = accessTokenRef.current
@@ -93,15 +94,14 @@ export default function GuestOrderTrackingPage() {
       setErrorMessage("");
       if (
         isOnlineOrderPaid(data.status)
-        && !cartAdjustedRef.current
         && !isDirectPurchaseOrder(data.id)
       ) {
-        cartAdjustedRef.current = true;
-        removePurchasedItemsRef.current(data.items || []);
+        settlePurchasedOrderRef.current?.(data);
       }
       return data;
     } catch (error) {
-      const message = getApiError(error, "Pedido no encontrado o enlace inválido");
+      const message = paymentResultAccessMessage(error?.response?.status)
+        || getApiError(error, "No pudimos consultar el pedido mediante este enlace seguro. Revisa Mis pedidos en este dispositivo.");
       setErrorMessage(message);
       if (notifyError) toast.error(message);
       return null;
@@ -151,7 +151,7 @@ export default function GuestOrderTrackingPage() {
     }
   };
 
-  const orderStatus = order ? getOnlineOrderStatus(order.status) : null;
+  const orderStatus = order ? getOnlineOrderStatus(order.status, order.payment?.status) : null;
   const paymentStatus = order?.payment ? getOnlinePaymentStatus(order.payment.status) : null;
   const isPaid = isOnlineOrderPaid(order?.status);
   const deliveryType = order ? getOnlineOrderDeliveryType(order.deliveryType) : null;
@@ -230,12 +230,12 @@ export default function GuestOrderTrackingPage() {
                 )}
                 desktop={(
               <div className="w-full max-w-full overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="fyf-data-table w-full text-sm">
                   <thead><tr><th>Producto</th><th className="text-right">Cantidad</th><th className="text-right">Precio unitario</th><th className="text-right">Subtotal</th></tr></thead>
                   <tbody>
                     {(order.items || []).map((item) => (
                       <tr key={`${item.productId}-${item.productName}`}>
-                        <td>{item.productName}<OrderItemPromotion item={item} compact /></td>
+                        <td className="table-description-cell">{item.productName}<OrderItemPromotion item={item} compact /></td>
                         <td className="text-right font-mono">{item.quantity}</td>
                         <td className="text-right font-mono">{formatClp(item.unitPrice)}</td>
                         <td className="text-right font-mono font-bold">{formatClp(item.subtotal)}</td>
@@ -247,10 +247,7 @@ export default function GuestOrderTrackingPage() {
                 )}
               />
 
-              <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
-                <span className="font-bold text-slate-600">Total</span>
-                <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
-              </div>
+              <OrderAmounts order={order} />
             </section>
           )}
 
@@ -268,7 +265,7 @@ export default function GuestOrderTrackingPage() {
 
           {order.status === "PAYMENT_REVIEW" && (
             <p className="m-0 w-full max-w-125 rounded-[5px] bg-rust-50 px-3 py-3 text-xs leading-5 text-rust-700">
-              Tu pago fue autorizado, pero requiere revisión. No vuelvas a pagar este pedido.
+              {orderStatus.description}
             </p>
           )}
 
@@ -291,7 +288,7 @@ export default function GuestOrderTrackingPage() {
             />
             {isPaid ? (
               <>
-                <Link className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/guest-orders">Ir a mis compras</Link>
+                <Link className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/guest-orders">Ir a mis pedidos</Link>
                 <Link className="inline-flex min-h-10 items-center justify-center rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">Volver al catálogo</Link>
               </>
             ) : (

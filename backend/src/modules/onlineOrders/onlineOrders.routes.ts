@@ -29,6 +29,8 @@ import {
 } from "./onlineOrders.controller.js";
 
 const router = Router();
+import { quoteOnlineOrderController } from "./onlineOrders.controller.js";
+router.post("/quote", quoteOnlineOrderController);
 
 router.get("/payments/webpay/return", webpayReturnController);
 router.post("/payments/webpay/return", webpayReturnController);

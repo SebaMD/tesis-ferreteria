@@ -84,8 +84,11 @@ test("CatalogPage restaura después de cargar y ProductDetail limita la proceden
   ]);
 
   assert.match(catalog, /readCatalogRestoration/);
-  assert.match(catalog, /pendingRestoreScrollRef/);
-  assert.match(catalog, /window\.scrollTo\(\{ top: scrollY, behavior: "auto" \}\)/);
+  assert.match(catalog, /readCatalogEntry\(location.key, owner\)/);
+  assert.match(catalog, /rememberCatalogEntry\(location.key/);
+  const restoration = await readFile(new URL("../src/components/ClientScrollRestoration.jsx", import.meta.url), "utf8");
+  assert.match(restoration, /ResizeObserver/);
+  assert.match(restoration, /history.scrollRestoration = "manual"/);
   assert.match(catalog, /snapshot: \{ filters, order, page, pageSize \}/);
   assert.match(card, /createProductDetailNavigationState\(detailOrigin, window\.scrollY\)/);
   assert.match(detail, /resolveProductDetailReturn\(location\.state\)/);

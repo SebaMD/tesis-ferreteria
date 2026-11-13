@@ -190,6 +190,125 @@
       "when": 1790814736613,
       "tag": "0026_rainy_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792428348136,
+      "tag": "0027_charming_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792530000000,
+      "tag": "0028_controlled_family_detachment",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792530000001,
+      "tag": "0029_family_archival",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792532707174,
+      "tag": "0030_delivery_tariffs",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792981141139,
+      "tag": "0031_manual_delivery_quotes",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793025179484,
+      "tag": "0032_delivery_quote_checkout",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793130071270,
+      "tag": "0033_commercial_identity_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793137229140,
+      "tag": "0034_controlled_product_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793139154961,
+      "tag": "0035_family_category_reclassification",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793141281163,
+      "tag": "0036_controlled_family_dimension",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793155000000,
+      "tag": "0037_controlled_family_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0038_controlled_family_option_labels",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793300000000,
+      "tag": "0039_simple_product_classification",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793300896691,
+      "tag": "0040_local_fixed_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793323092459,
+      "tag": "0041_attribute_measurements",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793398000000,
+      "tag": "0042_delivery_notice_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794076844462,
+      "tag": "0043_independent_checkout",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -11,6 +12,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users.js";
+import { deliveryPolicyRevisionsTable } from "./deliverySettings.js";
+import { deliveryQuoteRequestsTable, deliveryQuoteEventsTable } from "./deliveryQuotes.js";
 
 export const onlineOrdersTable = pgTable(
   "online_orders",
@@ -24,8 +27,17 @@ export const onlineOrdersTable = pgTable(
     guestSessionHash: varchar("guest_session_hash", { length: 64 }),
     guestDeviceHash: varchar("guest_device_hash", { length: 64 }),
     checkoutKey: varchar("checkout_key", { length: 64 }).notNull(),
+    checkoutRequestHash: varchar("checkout_request_hash", { length: 64 }),
     status: varchar({ length: 30 }).notNull().default("PENDING_PAYMENT"),
     total: numeric({ precision: 12, scale: 2 }).notNull(),
+    // NULL identifies legacy orders, not an explicit free delivery policy.
+    productsSubtotal: numeric("products_subtotal", { precision: 12, scale: 2 }),
+    productsDiscountTotal: numeric("products_discount_total", { precision: 12, scale: 2 }),
+    deliveryFee: numeric("delivery_fee", { precision: 12, scale: 2 }),
+    deliveryPolicyRevisionId: integer("delivery_policy_revision_id").references(() => deliveryPolicyRevisionsTable.id, { onDelete: "restrict" }),
+    deliveryFeeReason: varchar("delivery_fee_reason", { length: 30 }),
+    deliveryQuoteRequestId: integer("delivery_quote_request_id").references(()=>deliveryQuoteRequestsTable.id,{onDelete:"restrict"}),
+    deliveryQuoteAcceptanceId: integer("delivery_quote_acceptance_id"),
     deliveryType: varchar("delivery_type", { length: 20 }).notNull().default("PICKUP"),
     deliveryRecipientName: varchar("delivery_recipient_name", { length: 240 }),
     deliveryPhone: varchar("delivery_phone", { length: 20 }),
@@ -56,6 +68,18 @@ export const onlineOrdersTable = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("online_orders_delivery_quote_unique").on(table.deliveryQuoteRequestId),
+    foreignKey({name:"online_order_quote_acceptance_fk",columns:[table.deliveryQuoteAcceptanceId,table.deliveryQuoteRequestId],foreignColumns:[deliveryQuoteEventsTable.id,deliveryQuoteEventsTable.requestId]}),
+    check("online_order_manual_quote_check",sql`(${table.deliveryQuoteRequestId} is null and ${table.deliveryQuoteAcceptanceId} is null and (${table.deliveryFeeReason} is null or ${table.deliveryFeeReason} in ('PICKUP','FLAT','FREE_THRESHOLD'))) or (${table.deliveryQuoteRequestId} is not null and ${table.deliveryQuoteAcceptanceId} is not null and ${table.deliveryType}='DELIVERY' and ${table.deliveryFeeReason} in ('MANUAL_APPROVED','MANUAL_FREE_RADIUS','MANUAL_FREE_CONDITIONAL','MANUAL_FREE_EXCEPTION'))`),
+    check("online_orders_delivery_breakdown_check", sql`(
+      ${table.productsSubtotal} is null and ${table.productsDiscountTotal} is null and ${table.deliveryFee} is null and ${table.deliveryPolicyRevisionId} is null and ${table.deliveryFeeReason} is null
+    ) or (
+      ${table.productsSubtotal} is not null and ${table.productsDiscountTotal} is not null and ${table.deliveryFee} is not null and ${table.deliveryPolicyRevisionId} is not null and ${table.deliveryFeeReason} is not null
+      and ${table.productsSubtotal} >= ${table.productsDiscountTotal} and ${table.productsDiscountTotal} >= 0 and ${table.deliveryFee} >= 0
+      and ${table.total} = ${table.productsSubtotal} - ${table.productsDiscountTotal} + ${table.deliveryFee}
+      and ${table.deliveryFeeReason} in ('PICKUP', 'FLAT', 'FREE_THRESHOLD', 'MANUAL_APPROVED', 'MANUAL_FREE_RADIUS', 'MANUAL_FREE_CONDITIONAL', 'MANUAL_FREE_EXCEPTION')
+      and (${table.deliveryType} <> 'PICKUP' or (${table.deliveryFee} = 0 and ${table.deliveryFeeReason} = 'PICKUP'))
+    )`),
     index("online_orders_client_id_idx").on(table.clientId),
     index("online_orders_status_idx").on(table.status),
     index("online_orders_delivery_type_idx").on(table.deliveryType),
@@ -71,12 +95,7 @@ export const onlineOrdersTable = pgTable(
     uniqueIndex("online_orders_guest_checkout_key_unique")
       .on(table.guestSessionHash, table.checkoutKey)
       .where(sql`${table.guestSessionHash} is not null`),
-    uniqueIndex("online_orders_pending_client_unique")
-      .on(table.clientId)
-      .where(sql`${table.clientId} is not null and ${table.status} = 'PENDING_PAYMENT'`),
-    uniqueIndex("online_orders_pending_guest_session_unique")
-      .on(table.guestSessionHash)
-      .where(sql`${table.guestSessionHash} is not null and ${table.status} = 'PENDING_PAYMENT'`),
+    check("online_orders_checkout_request_hash_check", sql`${table.checkoutRequestHash} is null or ${table.checkoutRequestHash} ~ '^[a-f0-9]{64}$'`),
     check(
       "online_orders_status_check",
       sql`${table.status} in ('PENDING_PAYMENT', 'PAID', 'PAYMENT_FAILED', 'CANCELLED', 'EXPIRED', 'PAYMENT_REVIEW', 'PREPARING', 'READY_FOR_PICKUP', 'READY_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED')`,

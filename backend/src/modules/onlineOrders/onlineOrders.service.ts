@@ -1,4 +1,8 @@
 import { randomUUID } from "crypto";
+import { checkoutRequestHash, providerQueryWindowEnded } from "./checkoutIdentity.js";
+import { commercialQuoteSignature } from "../deliverySettings/deliveryPricing.js";
+import { canonicalizeDeliveryCommune } from "../../utils/delivery.js";
+import { assertManualDeliveryPaymentAuthorization } from "../deliveryQuotes/manualDeliveryAuthorization.js";
 import { db, type DbTransaction } from "../../db/index.js";
 import { logServerError } from "../../utils/helpers.js";
 import {
@@ -33,6 +37,8 @@ import {
   deleteClientDeliveryAddress,
   cancelOtherOpenPayments,
   claimPaymentReconciliationLease,
+  claimPaymentStatusQuery,
+  stopExpiredProviderQueries,
   deferSupersededProcessingPayment,
   expirePendingOrdersForClient,
   expirePendingOrdersForGuestSession,
@@ -61,9 +67,9 @@ import {
   findPaymentByToken,
   findPaymentForUpdateById,
   findPaymentLaunchByOrder,
-  findPendingOrderForClient,
   findPendingOrderForGuestSession,
   findPendingOrderDetailsForGuestSession,
+  findUnresolvedPaymentForOrder,
   markPaymentProcessing,
   markPaymentLaunchFailed,
   resetOrderReservation,
@@ -101,6 +107,61 @@ import {
   findActivePromotionsForProductsTx,
 } from "../promotions/promotions.repository.js";
 import { calculatePromotionPricing } from "../promotions/promotionPricing.js";
+import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
+import { calculateDelivery, deliveryBenefit, DeliveryPolicyError, quoteFingerprint } from "../deliverySettings/deliveryPricing.js";
+import { buildCommercialAmounts } from "./commercialAmounts.js";
+
+export async function priceCheckoutItems(tx: DbTransaction, items: CreateCheckoutBody["items"]) {
+  const ids = items.map(item => item.productId);
+  await acquirePromotionPricingLock(tx);
+  const products = await lockProductsForAvailability(tx, ids);
+  const reserved = await findActiveReservedQuantities(tx, ids);
+  const promotions = await findActivePromotionsForProductsTx(tx, ids, new Date());
+  return items.map(item => {
+    const product = products.find(p => p.id === item.productId);
+    if (!product) throw new OnlineOrderError(`Producto ${item.productId} no encontrado`, 404);
+    if (!product.status) throw new OnlineOrderError(`El producto ${product.name} ya no está disponible`, 409);
+    assertProductAllowsOnlinePurchase(product);
+    const available = calculateAvailableStock(product.currentStock, reserved.get(product.id) || 0);
+    if (item.quantity > available) throw new OnlineOrderError(`El stock disponible de ${product.name} cambió. Solo quedan ${available} unidades.`, 409);
+    const price = Number(product.price);
+    if (!Number.isInteger(price) || price <= 0) throw new OnlineOrderError(`El precio de ${product.name} no es válido para un pago en pesos chilenos.`, 409);
+    const pricing = calculatePromotionPricing(price, item.quantity, promotions.get(product.id) ?? null);
+    return { productId: product.id, quantity: item.quantity,
+      unitPrice: pricing.baseUnitPrice.toFixed(2), subtotal: pricing.finalSubtotal.toFixed(2),
+      discountAmount: pricing.discountAmount.toFixed(2), promotionId: pricing.promotion?.id ?? null,
+      promotionTypeSnapshot: pricing.promotion?.type ?? null, promotionNameSnapshot: pricing.promotion?.name ?? null,
+      promotionValueSnapshot: pricing.promotion?.type === "PERCENTAGE_DISCOUNT" ? pricing.promotion.percentage : null };
+  });
+}
+
+async function priceCheckout(tx: DbTransaction, data: Pick<CreateCheckoutBody, "items" | "deliveryType"> & {deliveryCommune?:string|null}) {
+  if(data.deliveryType==="DELIVERY"&&!canonicalizeDeliveryCommune(data.deliveryCommune))throw new DeliveryPolicyError("El despacho local solo está disponible para Santa Juana, Región del Biobío.",400,"DELIVERY_OUTSIDE_COVERAGE");
+  const policy = await currentDeliveryPolicy(tx);
+  const orderItems = await priceCheckoutItems(tx, data.items);
+  const productsSubtotal = orderItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+  const productsDiscountTotal = orderItems.reduce((sum, i) => sum + Number(i.discountAmount), 0);
+  const productsNet = productsSubtotal - productsDiscountTotal;
+  const delivery = calculateDelivery(policy, data.deliveryType, productsNet);
+  if (![productsSubtotal, productsDiscountTotal, productsNet + delivery.fee].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 9999999999)) throw new DeliveryPolicyError("El monto del pedido supera el máximo permitido.", 400);
+  const fingerprint = quoteFingerprint({ revisionId: policy!.id, deliveryType: data.deliveryType, items: orderItems, fee: delivery.fee });
+  return { orderItems, policy: policy!, delivery, fingerprint, productsSubtotal, productsDiscountTotal, productsNet, total: productsNet + delivery.fee };
+}
+
+export async function quoteOnlineOrderService(data: Pick<CreateCheckoutBody, "items" | "deliveryType"> & {deliveryCommune?:string|null}) {
+  return db.transaction(async tx => {
+    const q = await priceCheckout(tx, data);
+    const amounts = { productsSubtotal: q.productsSubtotal.toFixed(2), productsDiscountTotal: q.productsDiscountTotal.toFixed(2),
+      productsNet: q.productsNet.toFixed(2), deliveryFee: q.delivery.fee.toFixed(2), deliveryFeeReason: q.delivery.reason,
+      total: q.total.toFixed(2), quoteFingerprint: q.fingerprint, policyVersion: q.policy.version, isDemo: q.policy.isDemo };
+    const commercialAmounts = buildCommercialAmounts({ ...amounts, deliveryType: data.deliveryType, deliveryBaseFee: q.policy.flatFee });
+    const benefit = deliveryBenefit(q.policy, data.deliveryType, q.productsNet);
+    const commercialSignature = commercialQuoteSignature({ revisionId: q.policy.id, deliveryType: data.deliveryType, items: q.orderItems, fee: q.delivery.fee },
+      { commercialAmounts, benefit, isDemo: q.policy.isDemo });
+    return { ...amounts, commercialSignature, commercialAmounts,
+      deliveryBenefit: benefit };
+  });
+}
 
 export class OnlineOrderError extends Error {
   constructor(
@@ -130,7 +191,7 @@ type PreparedPayment = {
   guestAccessToken?: string;
 };
 
-type CheckoutOwner =
+export type CheckoutOwner =
   | { type: "CLIENT"; clientId: number }
   | {
     type: "GUEST";
@@ -139,15 +200,12 @@ type CheckoutOwner =
     guestName: string;
     guestEmail: string;
     guestPhone: string;
-    emailVerificationChallengeId: number;
+    emailVerificationChallengeId?: number;
   };
 
-const WEBPAY_LAUNCH_REUSE_MILLISECONDS = 4 * 60_000;
-const WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS = WEBPAY_TIMEOUT_MS + 15_000;
 const RECONCILIATION_EXTENSION_MILLISECONDS = 5 * 60_000;
 const PAYMENT_REVIEW_AFTER_MILLISECONDS = 60 * 60_000;
 const RECONCILIATION_STALE_MARGIN_MILLISECONDS = 15_000;
-const SUPERSEDED_PROCESSING_EXPIRATION_MILLISECONDS = 10 * 60_000;
 const PAYMENT_SETTLED_ORDER_STATUSES = [
   "PAID",
   "PAYMENT_REVIEW",
@@ -201,6 +259,8 @@ async function preparePaymentAttempt(
     guestAccessToken?: string;
   },
 ) {
+  try { await assertManualDeliveryPaymentAuthorization(tx, data.orderId); }
+  catch(error) { if(error instanceof DeliveryPolicyError)throw new OnlineOrderError(error.message,error.statusCode); throw error; }
   const payment = await createOnlinePayment(tx, {
     orderId: data.orderId,
     buyOrder: createBuyOrder(data.orderId),
@@ -266,26 +326,27 @@ async function issueGuestAccessInTransaction(tx: DbTransaction, orderId: number)
   return access.token;
 }
 
-async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckoutBody) {
+export type ManualCheckoutContext = {
+  authorize: (tx: DbTransaction) => Promise<void>;
+  resolve: (tx: DbTransaction) => Promise<Omit<Awaited<ReturnType<typeof priceCheckout>>, "delivery"> & {
+    delivery: {fee:number;reason:string}; deliveryQuoteRequestId:number; deliveryQuoteAcceptanceId:number;
+  }>;
+  complete: (tx: DbTransaction, orderId:number) => Promise<void>;
+};
+
+export async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckoutBody, manual?: ManualCheckoutContext) {
   await reconcileDueOnlinePaymentsService(owner.type === "CLIENT"
     ? { clientId: owner.clientId }
     : { guestSessionHash: owner.guestSessionHash });
 
   let prepared: PreparedPayment | null = null;
-  let existingLaunch: {
-    orderId: number;
-    paymentId: number;
-    token: string;
-    url: string;
-    total: number;
-    guestAccessToken?: string;
-  } | null = null;
-  let expiredLaunch = false;
+  const requestHash = checkoutRequestHash(data, owner.type === "GUEST" ? owner : undefined);
   let clientEmailVerified = false;
   const orderHistoryLabel = owner.type === "CLIENT" ? "Mis pedidos" : "el seguimiento del pedido";
 
   try {
     await db.transaction(async (tx) => {
+      if(manual) await manual.authorize(tx);
       if (owner.type === "CLIENT") {
         const client = await findActiveClientForUpdate(tx, owner.clientId);
         assertActiveClient(client);
@@ -302,70 +363,11 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         if (owner.type === "GUEST") {
           await bindGuestOrderToDevice(tx, existingOrder.id, owner.guestDeviceHash);
         }
-        const payment = await findPaymentLaunchByOrder(tx, existingOrder.id);
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && payment.token
-          && payment.redirectUrl
-          && Date.now() - payment.createdAt.getTime() < WEBPAY_LAUNCH_REUSE_MILLISECONDS
-        ) {
-          const guestAccessToken = owner.type === "GUEST"
-            ? await issueGuestAccessInTransaction(tx, existingOrder.id)
-            : undefined;
-          existingLaunch = {
-            orderId: existingOrder.id,
-            paymentId: payment.id,
-            token: payment.token,
-            url: payment.redirectUrl,
-            total: Number(existingOrder.total),
-            ...(guestAccessToken ? { guestAccessToken } : {}),
-          };
-          return;
-        }
-
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && !payment.token
-          && !payment.redirectUrl
-          && Date.now() - payment.createdAt.getTime() < WEBPAY_LAUNCH_INITIALIZATION_MILLISECONDS
-        ) {
-          throw new OnlineOrderError(
-            "El pago Webpay se esta iniciando. Espera unos segundos y vuelve a intentarlo.",
-            409,
-          );
-        }
-
-        if (
-          existingOrder.status === "PENDING_PAYMENT"
-          && payment?.status === "CREATED"
-          && !payment.token
-          && !payment.redirectUrl
-        ) {
-          await updatePaymentResult(tx, payment.id, { status: "EXPIRED" });
-          await updateOrderStatus(tx, existingOrder.id, "EXPIRED", ["PENDING_PAYMENT"]);
-          expiredLaunch = true;
-          return;
-        }
-        if (existingOrder.status === "PENDING_PAYMENT" && payment?.status === "CREATED") {
-          throw new OnlineOrderError(
-            `La sesion anterior de Webpay ya no puede reutilizarse. Revisa ${orderHistoryLabel}.`,
-            409,
-          );
+        if (!existingOrder.checkoutRequestHash || existingOrder.checkoutRequestHash !== requestHash) {
+          throw new OnlineOrderError("Esta clave corresponde a otra selección o a un pedido histórico. Inicia una compra nueva desde el catálogo o carrito.", 409);
         }
         throw new OnlineOrderError(
-          `Este intento de checkout ya fue procesado. Revisa ${orderHistoryLabel}.`,
-          409,
-        );
-      }
-
-      const pendingOrder = owner.type === "CLIENT"
-        ? await findPendingOrderForClient(tx, owner.clientId)
-        : await findPendingOrderForGuestSession(tx, owner.guestSessionHash);
-      if (pendingOrder) {
-        throw new OnlineOrderError(
-          "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
+          `Esta compra ya tiene un pedido. Revisa ${orderHistoryLabel}; no se reenviará una sesión Webpay ni se creará otro cobro con la misma clave.`,
           409,
         );
       }
@@ -376,7 +378,8 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
           403,
         );
       }
-      if (owner.type === "GUEST") {
+      if (owner.type === "GUEST" && !manual) {
+        if(!owner.emailVerificationChallengeId) throw new OnlineOrderError("Verifica el correo antes de comprar",403);
         const consumedChallenge = await consumeVerifiedGuestChallenge(tx, {
           challengeId: owner.emailVerificationChallengeId,
           guestSessionHash: owner.guestSessionHash,
@@ -390,71 +393,11 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         }
       }
 
-      const productIds = data.items.map((item) => item.productId);
-      await acquirePromotionPricingLock(tx);
-      const products = await lockProductsForAvailability(tx, productIds);
-      const productById = new Map(products.map((product) => [product.id, product]));
-      const reservedByProduct = await findActiveReservedQuantities(tx, productIds);
-      const promotionsByProduct = await findActivePromotionsForProductsTx(
-        tx,
-        productIds,
-        new Date(),
-      );
-
-      const orderItems = data.items.map((item) => {
-        const product = productById.get(item.productId);
-        if (!product) throw new OnlineOrderError(`Producto ${item.productId} no encontrado`, 404);
-        if (!product.status) {
-          throw new OnlineOrderError(`El producto ${product.name} ya no esta disponible`, 409);
-        }
-        assertProductAllowsOnlinePurchase(product);
-
-        const availableStock = calculateAvailableStock(
-          product.currentStock,
-          reservedByProduct.get(product.id) || 0,
-        );
-        if (item.quantity > availableStock) {
-          throw new OnlineOrderError(
-            `El stock disponible de ${product.name} cambio. Solo quedan ${availableStock} unidades.`,
-            409,
-          );
-        }
-
-        const unitPrice = Number(product.price);
-        if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
-          throw new OnlineOrderError(
-            `El precio de ${product.name} no es valido para un pago en pesos chilenos.`,
-            409,
-          );
-        }
-
-        const pricing = calculatePromotionPricing(
-          unitPrice,
-          item.quantity,
-          promotionsByProduct.get(product.id) ?? null,
-        );
-        const unitPriceInCents = moneyInCents(pricing.baseUnitPrice);
-        const subtotalInCents = moneyInCents(pricing.finalSubtotal);
-        return {
-          productId: product.id,
-          quantity: item.quantity,
-          unitPrice: (unitPriceInCents / 100).toFixed(2),
-          subtotal: (subtotalInCents / 100).toFixed(2),
-          discountAmount: pricing.discountAmount.toFixed(2),
-          promotionId: pricing.promotion?.id ?? null,
-          promotionTypeSnapshot: pricing.promotion?.type ?? null,
-          promotionNameSnapshot: pricing.promotion?.name ?? null,
-          promotionValueSnapshot: pricing.promotion?.type === "PERCENTAGE_DISCOUNT"
-            ? pricing.promotion.percentage
-            : null,
-          subtotalInCents,
-        };
-      });
-
-      const totalInCents = orderItems.reduce(
-        (total, item) => total + item.subtotalInCents,
-        0,
-      );
+      const quote = manual ? await manual.resolve(tx) : await priceCheckout(tx, data);
+      if (!data.quoteFingerprint || data.quoteFingerprint !== quote.fingerprint) {
+        throw new DeliveryPolicyError("La cotización cambió o venció. Revisa el resumen actualizado y confirma nuevamente.", 409, "QUOTE_CHANGED");
+      }
+      const { orderItems } = quote;
       const order = await createOnlineOrder(tx, {
         clientId: owner.type === "CLIENT" ? owner.clientId : null,
         guestName: owner.type === "GUEST" ? owner.guestName : null,
@@ -463,7 +406,14 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         guestSessionHash: owner.type === "GUEST" ? owner.guestSessionHash : null,
         guestDeviceHash: owner.type === "GUEST" ? owner.guestDeviceHash : null,
         checkoutKey: data.checkoutKey,
-        total: (totalInCents / 100).toFixed(2),
+        checkoutRequestHash: requestHash,
+        total: quote.total.toFixed(2),
+        productsSubtotal: quote.productsSubtotal.toFixed(2),
+        productsDiscountTotal: quote.productsDiscountTotal.toFixed(2),
+        deliveryFee: quote.delivery.fee.toFixed(2),
+        deliveryPolicyRevisionId: quote.policy.id,
+        deliveryFeeReason: quote.delivery.reason,
+        ...("deliveryQuoteRequestId" in quote ? {deliveryQuoteRequestId:quote.deliveryQuoteRequestId,deliveryQuoteAcceptanceId:quote.deliveryQuoteAcceptanceId} : {}),
         deliveryType: data.deliveryType,
         deliveryRecipientName: data.deliveryRecipientName,
         deliveryPhone: data.deliveryPhone,
@@ -516,24 +466,18 @@ async function createCheckoutForOwner(owner: CheckoutOwner, data: CreateCheckout
         total: order.total,
         guestAccessToken,
       });
+      if(manual) await manual.complete(tx, order.id);
     });
   } catch (error) {
     if (databaseErrorCode(error) === "23505") {
       throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de iniciar un nuevo pago.",
+        "No se pudo registrar una intención única de compra. Consulta Mis pedidos antes de volver a enviarla.",
         409,
       );
     }
     throw error;
   }
 
-  if (expiredLaunch) {
-    throw new OnlineOrderError(
-      `La sesion de Webpay vencio. Reintenta el pago desde ${orderHistoryLabel}.`,
-      409,
-    );
-  }
-  if (existingLaunch) return existingLaunch;
   if (!prepared) throw new OnlineOrderError("No se pudo preparar el pago", 500);
   return startWebpayPayment(prepared);
 }
@@ -598,11 +542,8 @@ export async function retryOnlineOrderPaymentService(clientId: number, orderId: 
     if (!["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(order.status)) {
       throw new OnlineOrderError("Este pedido no permite reintentar el pago", 409);
     }
-    if (await findPendingOrderForClient(tx, clientId, orderId)) {
-      throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza o revisa tu compra anterior antes de reintentar otro pedido.",
-        409,
-      );
+    if (await findUnresolvedPaymentForOrder(tx, order.id)) {
+      throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
     }
 
     const items = await findOrderItems(tx, order.id);
@@ -675,13 +616,10 @@ export async function continueOnlineOrderPaymentService(clientId: number, orderI
       );
     }
 
-    return {
-      orderId: order.id,
-      paymentId: payment.id,
-      token: payment.token,
-      url: payment.redirectUrl,
-      total: Number(payment.amount),
-    };
+    throw new OnlineOrderError(
+      "La sesión Webpay ya fue iniciada y no se reenviará su token. Revisa el estado del pedido; cuando se confirme el vencimiento o fallo podrás reintentar.",
+      409,
+    );
   });
 }
 
@@ -743,12 +681,23 @@ export async function getGuestPendingOrderService(guestSessionId: string) {
 
 export async function continueGuestOnlineOrderPaymentService(guestSessionId: string) {
   const guestSessionHash = guestSessionHashOrError(guestSessionId);
+  return continueGuestPaymentForSession(guestSessionHash);
+}
+
+export async function continueGuestPaymentByTokenService(accessToken:string) {
+  const orderId=await guestOrderIdFromAccessToken(accessToken);
+  const order=await db.transaction(tx=>findOrderForGuestUpdate(tx,orderId));
+  if(!order?.guestSessionHash)throw new OnlineOrderError("Pedido no encontrado",404);
+  return continueGuestPaymentForSession(order.guestSessionHash,orderId);
+}
+
+async function continueGuestPaymentForSession(guestSessionHash:string,expectedOrderId?:number) {
   await reconcileDueOnlinePaymentsService({ guestSessionHash });
 
   return db.transaction(async (tx) => {
     await expirePendingOrdersForGuestSession(tx, guestSessionHash);
     const pending = await findPendingOrderForGuestSession(tx, guestSessionHash);
-    if (!pending) throw new OnlineOrderError("No existe un pago pendiente para esta sesion", 404);
+    if (!pending || (expectedOrderId!==undefined && pending.id!==expectedOrderId)) throw new OnlineOrderError("No existe un pago pendiente para esta sesion", 404);
 
     const order = await findOrderForGuestUpdate(tx, pending.id);
     if (!order || order.guestSessionHash !== guestSessionHash) {
@@ -775,13 +724,10 @@ export async function continueGuestOnlineOrderPaymentService(guestSessionId: str
       );
     }
 
-    return {
-      orderId: order.id,
-      paymentId: payment.id,
-      token: payment.token,
-      url: payment.redirectUrl,
-      total: Number(payment.amount),
-    };
+    throw new OnlineOrderError(
+      "La sesión Webpay ya fue iniciada y no se reenviará su token. Revisa el seguimiento del pedido; cuando se confirme el vencimiento o fallo podrás reintentar.",
+      409,
+    );
   });
 }
 
@@ -839,6 +785,7 @@ export async function getGuestDeviceOrdersService(guestDeviceId: string) {
     throw new OnlineOrderError("El dispositivo invitado no es valido", 400);
   }
 
+  await reconcileDueOnlinePaymentsService({ guestDeviceHash });
   const orders = await findOrdersByGuestDeviceHash(guestDeviceHash);
   return orders.map((order) => {
     const {
@@ -887,11 +834,8 @@ async function retryGuestOrderPayment(
     if (!["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(order.status)) {
       throw new OnlineOrderError("Este pedido no permite reintentar el pago", 409);
     }
-    if (await findPendingOrderForGuestSession(tx, order.guestSessionHash, order.id)) {
-      throw new OnlineOrderError(
-        "Tienes un pago pendiente. Finaliza la compra anterior antes de reintentar.",
-        409,
-      );
+    if (await findUnresolvedPaymentForOrder(tx, order.id)) {
+      throw new OnlineOrderError("El intento anterior todavía requiere conciliación. No se iniciará otro cobro hasta conocer su resultado.", 409);
     }
 
     const items = await findOrderItems(tx, order.id);
@@ -1056,7 +1000,7 @@ async function finishProviderResponse(data: {
 
     const authorized = isAuthorizedResponse(data.response);
     if (!authorized) {
-      if (!isDefinitiveFailureResponse(data.response, data.source)) {
+      if (!isDefinitiveFailureResponse(data.response, data.source) || !responseMatchesPayment(data.response, payment)) {
         return { orderId: order.id, orderStatus: order.status, becamePaid: false };
       }
 
@@ -1068,12 +1012,15 @@ async function finishProviderResponse(data: {
       }
 
       const latestPayment = await findLatestPaymentForOrder(tx, order.id);
-      if (latestPayment?.id === payment.id && order.status === "PENDING_PAYMENT") {
+      const unresolvedReview = order.status === "PAYMENT_REVIEW"
+        && ["CREATED", "PROCESSING"].includes(payment.status)
+        && responseMatchesPayment(data.response, payment);
+      if (latestPayment?.id === payment.id && (order.status === "PENDING_PAYMENT" || unresolvedReview)) {
         const updated = await updateOrderStatus(
           tx,
           order.id,
           "PAYMENT_FAILED",
-          ["PENDING_PAYMENT"],
+          ["PENDING_PAYMENT", "PAYMENT_REVIEW"],
         );
         return {
           orderId: order.id,
@@ -1240,6 +1187,10 @@ export async function confirmWebpayPaymentService(token: string) {
   if (claim.mode === "settled") {
     return { orderId: claim.locatedPayment.orderId, orderStatus: claim.orderStatus };
   }
+  if (providerQueryWindowEnded(claim.locatedPayment.createdAt)) {
+    await stopExpiredProviderQueries(claim.locatedPayment.orderId, claim.locatedPayment.id);
+    return paymentOrderState(claim.locatedPayment.orderId);
+  }
 
   let response: WebpayTransactionResult | null = null;
   let source: ProviderResponseSource = claim.mode === "commit" ? "commit" : "status";
@@ -1267,6 +1218,33 @@ export async function confirmWebpayPaymentService(token: string) {
   });
 }
 
+// An error page is not a financial rejection. Only the provider's correlated result can settle it.
+export async function inspectWebpayReturnService(data: { token?: string; buyOrder?: string; sessionId?: string }) {
+  const payment = await findPaymentByReturnIdentifiers(data);
+  if (!payment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
+  if (providerQueryWindowEnded(payment.createdAt)) {
+    await stopExpiredProviderQueries(payment.orderId, payment.id);
+    return paymentOrderState(payment.orderId);
+  }
+  if (payment.token) {
+    try {
+      const response = await getWebpayTransactionStatus(payment.token);
+      if (responseMatchesPayment(response, payment) && (isAuthorizedResponse(response) || isDefinitiveFailureResponse(response, "status"))) {
+        return finishProviderResponse({ locatedPayment: payment, response, source: "status" });
+      }
+    } catch { /* Keep the unresolved attempt; this return must never create or re-launch a payment. */ }
+  }
+  return paymentOrderState(payment.orderId);
+}
+
+async function paymentOrderState(orderId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    if (!order) throw new OnlineOrderError("Pedido no encontrado", 404);
+    return { orderId: order.id, orderStatus: order.status };
+  });
+}
+
 export async function cancelWebpayPaymentService(data: {
   token?: string;
   buyOrder?: string;
@@ -1275,10 +1253,16 @@ export async function cancelWebpayPaymentService(data: {
 }) {
   const locatedPayment = await findPaymentByReturnIdentifiers(data);
   if (!locatedPayment) throw new OnlineOrderError("Intento de pago no encontrado", 404);
+  if (providerQueryWindowEnded(locatedPayment.createdAt)) {
+    await stopExpiredProviderQueries(locatedPayment.orderId, locatedPayment.id);
+    return paymentOrderState(locatedPayment.orderId);
+  }
 
-  if (data.token) {
+  if (!locatedPayment.token) return paymentOrderState(locatedPayment.orderId);
+  if (locatedPayment.token) {
     try {
-      const response = await getWebpayTransactionStatus(data.token);
+      const response = await getWebpayTransactionStatus(locatedPayment.token);
+      if (!responseMatchesPayment(response, locatedPayment)) return paymentOrderState(locatedPayment.orderId);
       if (
         isAuthorizedResponse(response)
         || isDefinitiveFailureResponse(response, "status")
@@ -1286,7 +1270,8 @@ export async function cancelWebpayPaymentService(data: {
         return finishProviderResponse({ locatedPayment, response, source: "status" });
       }
     } catch {
-      // Un retorno de aborto puede no permitir consultar el token.
+      // A failed status lookup is not evidence that an in-flight payment failed.
+      return paymentOrderState(locatedPayment.orderId);
     }
   }
 
@@ -1407,35 +1392,15 @@ async function protectAmbiguousPayment(
   });
 }
 
-async function expireReconciledPayment(
-  candidate: Awaited<ReturnType<typeof findPaymentsNeedingReconciliation>>[number],
-) {
-  await db.transaction(async (tx) => {
-    const order = await findOrderForUpdate(tx, candidate.orderId);
-    if (!order || order.status !== "PENDING_PAYMENT") return;
-
-    const payment = await findPaymentForUpdateById(tx, candidate.paymentId);
-    if (
-      !payment
-      || payment.orderId !== order.id
-      || payment.status !== "CREATED"
-      || payment.updatedAt.getTime() !== candidate.paymentUpdatedAt.getTime()
-    ) return;
-
-    const latestPayment = await findLatestPaymentForOrder(tx, order.id);
-    if (latestPayment?.id !== payment.id || order.reservationExpiresAt.getTime() > Date.now()) {
-      return;
-    }
-
-    await updatePaymentResult(tx, payment.id, { status: "EXPIRED" });
-    await updateOrderStatus(tx, order.id, "EXPIRED", ["PENDING_PAYMENT"]);
-  });
-}
-
 async function reconcilePaymentCandidate(
   candidate: Awaited<ReturnType<typeof findPaymentsNeedingReconciliation>>[number],
 ) {
   if (!candidate.token) return;
+  if (!await claimPaymentStatusQuery(candidate.orderId, candidate.paymentId)) return;
+  if (providerQueryWindowEnded(candidate.paymentCreatedAt)) {
+    await stopExpiredProviderQueries(candidate.orderId, candidate.paymentId);
+    return;
+  }
 
   const locatedPayment = { id: candidate.paymentId, orderId: candidate.orderId };
   let response: WebpayTransactionResult;
@@ -1478,14 +1443,11 @@ async function reconcilePaymentCandidate(
     candidate.paymentStatus === "PROCESSING"
     && candidate.orderStatus !== "PENDING_PAYMENT"
   ) {
-    const canExpire = response.status === "INITIALIZED"
-      && Date.now() - candidate.paymentCreatedAt.getTime()
-        >= SUPERSEDED_PROCESSING_EXPIRATION_MILLISECONDS;
     await deferSupersededProcessingPayment(
       candidate.orderId,
       candidate.paymentId,
       candidate.paymentUpdatedAt,
-      canExpire,
+      false,
     );
     return;
   }
@@ -1495,7 +1457,8 @@ async function reconcilePaymentCandidate(
       response.status === "INITIALIZED"
       && candidate.reservationExpiresAt.getTime() <= Date.now()
     ) {
-      await expireReconciledPayment(candidate);
+      // INITIALIZED and an expired stock lease do not prove a financial timeout.
+      await protectAmbiguousPayment(candidate);
     } else if (response.status !== "INITIALIZED") {
       await protectAmbiguousPayment(candidate);
     }
@@ -1539,6 +1502,7 @@ async function reconcilePaymentCandidate(
 export async function reconcileDueOnlinePaymentsService(scope: {
   clientId?: number;
   guestSessionHash?: string;
+  guestDeviceHash?: string;
   orderId?: number;
 } = {}) {
   const processingStaleBefore = new Date(
@@ -1558,7 +1522,7 @@ export async function reconcileDueOnlinePaymentsService(scope: {
 
   if (scope.guestSessionHash !== undefined) {
     await db.transaction((tx) => expirePendingOrdersForGuestSession(tx, scope.guestSessionHash!));
-  } else if (scope.orderId === undefined) {
+  } else if (scope.orderId === undefined && scope.guestDeviceHash === undefined) {
     await db.transaction((tx) => expirePendingOrdersForClient(tx, scope.clientId));
   }
 }

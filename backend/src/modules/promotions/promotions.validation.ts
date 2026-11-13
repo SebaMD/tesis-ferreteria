@@ -18,6 +18,14 @@ function parseDate(value: unknown, label: string, optional = false) {
     return { success: true as const, value: null };
   }
   if (typeof value !== "string") return { success: false as const, error: `${label} no es valido` };
+  // API dates must identify an instant, independently of the server's time zone.
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!parts) return { success: false as const, error: `${label} debe ser una fecha válida con zona horaria explícita` };
+  const [year, month, day, hour, minute, second] = parts.slice(1, 7).map(Number);
+  const days = [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]! || hour > 23 || minute > 59 || (second || 0) > 59) {
+    return { success: false as const, error: `${label} no es una fecha válida` };
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? { success: false as const, error: `${label} no es valido` }
@@ -69,7 +77,7 @@ export function validatePromotion(body: unknown): Result<PromotionInput> {
   const endsAt = parseDate(input.endsAt, "El termino de vigencia", true);
   if (!endsAt.success) return endsAt as Result<never>;
   if (endsAt.value && endsAt.value <= startsAt.value) {
-    return { success: false, error: "El termino de vigencia debe ser posterior al inicio" };
+    return { success: false, error: "La fecha de término debe ser posterior a la fecha y hora de inicio" };
   }
 
   const products = idList(input.productIds, "Los productos");
@@ -93,6 +101,22 @@ export function validatePromotion(body: unknown): Result<PromotionInput> {
       categoryIds: categories.value,
     },
   };
+}
+
+export function promotionPeriodError(
+  input: Pick<PromotionInput, "startsAt" | "endsAt">,
+  originalStart: Date | null = null,
+  now = new Date(),
+): string | null {
+  const start = input.startsAt.getTime();
+  if (!Number.isFinite(start)) return "La fecha de inicio no es válida";
+  // datetime-local selects minutes: the current minute is valid, not earlier minutes.
+  if (start !== originalStart?.getTime() && Math.floor(start / 60_000) < Math.floor(now.getTime() / 60_000)) {
+    return "La fecha de inicio no puede ser anterior a la fecha y hora actuales";
+  }
+  if (input.endsAt && !Number.isFinite(input.endsAt.getTime())) return "La fecha de término no es válida";
+  if (input.endsAt && input.endsAt.getTime() <= start) return "La fecha de término debe ser posterior a la fecha y hora de inicio";
+  return null;
 }
 
 export function validatePromotionStatus(body: unknown): Result<boolean> {

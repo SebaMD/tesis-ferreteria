@@ -36,8 +36,8 @@ test("catalog page requests server-side filtering and exposes accessible navigat
     readFile(new URL("../src/pages/CheckoutPage.jsx", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(page, /filterAndSortCatalog|getCatalogBrands/);
-  assert.match(page, /getCatalogProductsRequest\(catalogQuery\)/);
-  assert.match(service, /api\.get\("\/catalog\/products", \{ params \}\)/);
+  assert.match(page, /getCatalogProductsRequest\(catalogQuery, \{ signal \}\)/);
+  assert.match(service, /api\.get\("\/catalog\/products", \{ params, signal: options.signal, timeout: 15000 \}\)/);
   assert.match(service, /getCatalogProductsByIdsRequest/);
   assert.match(page, /promotionTypes/);
   assert.match(page, /catalogStartRef/);

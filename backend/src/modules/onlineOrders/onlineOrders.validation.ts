@@ -12,6 +12,7 @@ export type OnlineOrderItemInput = {
 
 export type CreateCheckoutBody = {
   checkoutKey: string;
+  quoteFingerprint?: string;
   items: OnlineOrderItemInput[];
   deliveryType: "PICKUP" | "DELIVERY";
   deliveryRecipientName: string | null;
@@ -147,6 +148,7 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
   const input = body as Record<string, unknown>;
 
   const allowedFields = new Set([
+    "quoteFingerprint",
     "checkoutKey",
     "items",
     "deliveryType",
@@ -164,6 +166,10 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     if (!allowedFields.has(field)) {
       return { success: false, error: `El campo ${field} no esta permitido` };
     }
+  }
+
+  if (input.quoteFingerprint !== undefined && (typeof input.quoteFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(input.quoteFingerprint))) {
+    return { success: false, error: "La cotización no es válida" };
   }
 
   if (
@@ -226,6 +232,7 @@ export function validateCreateCheckoutBody(body: unknown): ValidationResult<Crea
     success: true,
     value: {
       checkoutKey: input.checkoutKey.trim(),
+      quoteFingerprint: input.quoteFingerprint as string | undefined,
       items,
       deliveryType: input.deliveryType,
       deliveryRecipientName: delivery?.value.recipientName ?? null,
@@ -257,6 +264,7 @@ export function validateCreateGuestCheckoutBody(
     "emailVerificationChallengeId",
   ]);
   const checkoutFields = new Set([
+    "quoteFingerprint",
     "checkoutKey",
     "items",
     "deliveryType",

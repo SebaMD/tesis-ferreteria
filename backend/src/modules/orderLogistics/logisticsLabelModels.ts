@@ -3,6 +3,7 @@ import {
   formatOrderQuantity,
 } from "../onlineOrders/orderCommercialModel.js";
 import type { LogisticsTask } from "./orderLogistics.repository.js";
+import { historicalIdentityNote } from "../products/historicalIdentity.js";
 
 type OperationalLabelItem = {
   productName: string;
@@ -28,7 +29,7 @@ export function buildPreparationLabelModel(
     date: formatOrderDate(task.paidAt ?? task.createdAt),
     status: task.status,
     items: task.items.map((item) => ({
-      productName: item.productName,
+      productName: `${item.productName}\n${historicalIdentityNote(item.historicalIdentity)}`,
       quantityLabel: formatOrderQuantity(item.quantity, item.unitMeasure),
     })),
     handoffUrl,

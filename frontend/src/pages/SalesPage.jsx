@@ -1,10 +1,12 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, EyeOff, Plus, RotateCcw, ScanBarcode, Search, Send, ShoppingCart, Store, Trash2, Truck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import HistoricalIdentityNote from "../components/HistoricalIdentityNote.jsx";
+import DownloadSaleSummaryButton from "../components/orders/DownloadSaleSummaryButton.jsx";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
@@ -16,6 +18,7 @@ import { getAvailableStockStatus } from "../helpers/inventory.js";
 import {
   getCancellationRequestStatusLabel,
   getPaymentMethodLabel,
+  getPendingReturnNoticeLabel,
   getSaleStatusLabel,
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
@@ -936,7 +939,7 @@ export default function SalesPage() {
   const saleActionsFor = (sale) => (
     <>
       <button
-        className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0!`}
+        className={`${secondaryButtonClass} ${tableActionButtonClass} sale-detail-action mr-0!`}
         type="button"
         onClick={() => openDetailModal(sale)}
         disabled={loadingSaleDetail}
@@ -960,17 +963,18 @@ export default function SalesPage() {
       )}
       {canReviewCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && (
         <button
-          className={`${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-review-action ${user?.role === "ADMIN" ? "sale-review-action--admin" : ""} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
           type="button"
+          aria-label="Revisar solicitud de devolución"
           onClick={() => openReviewModal(sale)}
           disabled={submitting}
         >
-          <Send size={16} /> Revisar solicitud
+          <Send size={16} aria-hidden="true" /> Revisar
         </button>
       )}
       {canCancel && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && (
         <button
-          className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
+          className={`${secondaryButtonClass} ${tableActionButtonClass} sale-return-action border-rust-500 text-rust-600`}
           type="button"
           onClick={() => openDirectReturnModal(sale)}
           disabled={submitting}
@@ -991,19 +995,21 @@ export default function SalesPage() {
           <p>{canCreate && activeView === "sales" ? "Punto de venta presencial con carrito." : "Historial de ventas presenciales registradas."}</p>
         </div>
         {canReviewCancellation && pendingCancellationSales.length > 0 && (
-          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
-            <span className="text-sm font-bold">
-              Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes
+          <div className="sale-return-pending-notice ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:gap-2">
+            <span className="min-w-0 flex-1 text-left text-sm font-bold">
+              <span className="max-[720px]:hidden">Tienes </span>{getPendingReturnNoticeLabel(pendingCancellationSales.length)}
             </span>
             <button
-              className="min-h-8 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700"
+              className="min-h-8 shrink-0 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700 max-[720px]:size-11 max-[720px]:min-h-11 max-[720px]:p-0"
               type="button"
+              aria-label={salesFilter === "pending" ? "Volver a ventas vigentes" : "Ver solicitudes pendientes"}
               onClick={() => {
                 setActiveView("history");
                 applySalesFilter(salesFilter === "pending" ? "current" : "pending");
               }}
             >
-              {salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}
+              <span className="max-[720px]:hidden">{salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}</span>
+              <span className="hidden max-[720px]:inline-flex" aria-hidden="true">{salesFilter === "pending" ? <EyeOff size={20} /> : <Eye size={20} />}</span>
             </button>
           </div>
         )}
@@ -1217,7 +1223,7 @@ export default function SalesPage() {
               <div className="mt-3 grid gap-1.5 border-t border-slate-200 pt-3 text-sm">
                 {(requestToReverse.details || []).map((detail) => (
                   <div className="flex justify-between gap-3" key={`${requestToReverse.id}-${detail.productId}`}>
-                    <span>{detail.productName}</span>
+                    <span>{detail.productName}<HistoricalIdentityNote capture={detail.historicalIdentity}/></span>
                     <strong className="font-mono">{detail.requestedQuantity}</strong>
                   </div>
                 ))}
@@ -1297,7 +1303,7 @@ export default function SalesPage() {
                         aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`}
                       />
                       <div className="min-w-0">
-                        <strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                        <strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                         <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
                       </div>
                     </div>
@@ -1341,7 +1347,7 @@ export default function SalesPage() {
                 }}
                 desktop={(
               <div className={tableScrollClass}>
-                <table className="min-w-205">
+                <table className="fyf-data-table min-w-205">
                   <thead>
                     <tr>
                       <th aria-label="Seleccionar producto" />
@@ -1375,9 +1381,9 @@ export default function SalesPage() {
                               aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`}
                             />
                           </td>
-                          <td>
+                          <td className="table-description-cell">
                             <div className="grid gap-0.5">
-                              <strong className="text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                              <strong className="text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                               <span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span>
                             </div>
                           </td>
@@ -1548,7 +1554,7 @@ export default function SalesPage() {
               emptyMessage="No hay productos asociados a esta solicitud."
               renderSummary={(detail) => (
                 <div className="grid min-w-0 gap-2">
-                  <strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong>
+                  <strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span>Solicitada: {detail.requestedQuantity}</span>
                     <strong className="font-mono">{formatClp(detail.requestedSubtotal)}</strong>
@@ -1566,7 +1572,7 @@ export default function SalesPage() {
               )}
               desktop={(
             <div className={tableScrollClass}>
-              <table>
+              <table className="fyf-data-table">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -1582,7 +1588,7 @@ export default function SalesPage() {
                   {(requestToReview?.details || []).map((detail) => (
                     <tr key={`${requestToReview.id}-${detail.productId}`}>
                       <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                      <td>{detail.productName || `Producto #${detail.productId}`}</td>
+                      <td className="table-description-cell">{detail.productName || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                       <td className={numericCellClass}>{detail.soldQuantity}</td>
                       <td className={numericCellClass}>{detail.returnedQuantity}</td>
                       <td className={numericCellClass}>{detail.requestedQuantity}</td>
@@ -1650,6 +1656,8 @@ export default function SalesPage() {
 
           {saleDetail && (
             <>
+              <div className="flex flex-wrap gap-2"><DownloadSaleSummaryButton saleId={saleDetail.id} /></div>
+              <p className="m-0 text-xs leading-5 text-slate-500">La fecha y las cantidades no devueltas son informativas; no constituyen autorización legal ni comercial para una devolución.</p>
               <div className="grid grid-cols-3 gap-3 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3.5 max-[900px]:grid-cols-2 max-[720px]:grid-cols-1">
                 <div>
                   <span className="text-xs font-semibold text-slate-500">Folio</span>
@@ -1703,7 +1711,7 @@ export default function SalesPage() {
                   emptyMessage="No hay productos asociados a esta venta."
                   renderSummary={(detail) => (
                     <div className="grid min-w-0 gap-2">
-                      <strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong>
+                      <strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong><HistoricalIdentityNote capture={detail.historicalIdentity}/>
                       <div className="flex items-center justify-between gap-3 text-xs">
                         <span>Vendida: {detail.quantity}</span>
                         <strong className="font-mono">{formatClp(detail.subtotal)}</strong>
@@ -1714,21 +1722,21 @@ export default function SalesPage() {
                     <MobileDetailGrid>
                       <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
                       <MobileDetailField label="Devuelta">{detail.returnedQuantity || 0}</MobileDetailField>
-                      <MobileDetailField label="Disponible">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
+                      <MobileDetailField label="No devuelta">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
                       <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
                       <MobileDetailField label="Subtotal">{formatClp(detail.subtotal)}</MobileDetailField>
                     </MobileDetailGrid>
                   )}
                   desktop={(
                 <div className={tableScrollClass}>
-                  <table>
+                  <table className="fyf-data-table">
                     <thead>
                       <tr>
                         <th>ID</th>
                         <th>Producto</th>
                         <th>Vendida</th>
                         <th>Devuelta</th>
-                        <th>Disponible</th>
+                        <th>No devuelta</th>
                         <th>Precio unitario</th>
                         <th>Subtotal</th>
                       </tr>
@@ -1737,7 +1745,7 @@ export default function SalesPage() {
                       {getSaleDetails(saleDetail).map((detail) => (
                         <tr key={`${detail.saleId}-${detail.productId}`}>
                           <td className="font-mono text-xs font-semibold text-ink-950">#{detail.productId}</td>
-                          <td>{detail.productName || detail.name || `Producto #${detail.productId}`}</td>
+                          <td className="table-description-cell">{detail.productName || detail.name || `Producto #${detail.productId}`}<HistoricalIdentityNote capture={detail.historicalIdentity}/></td>
                           <td className={numericCellClass}>{detail.quantity}</td>
                           <td className={numericCellClass}>{detail.returnedQuantity || 0}</td>
                           <td className={numericCellClass}>{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</td>
@@ -1787,7 +1795,7 @@ export default function SalesPage() {
                                 onClick={() => setExpandedReturnRequestId((current) => current === request.id ? null : request.id)}
                                 aria-expanded={requestOpen}
                               >
-                                <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2">
+                                <div className="sale-return-summary flex w-full flex-wrap items-center gap-x-4 gap-y-2">
                                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <span className={badgeClass(getCancellationRequestTone(request.status))}>
                                       {getCancellationRequestStatusLabel(request.status)}
@@ -1828,14 +1836,14 @@ export default function SalesPage() {
                                   <div className="grid gap-1.5 border-t border-slate-200 pt-2 text-xs">
                                     {(request.details || []).map((detail) => (
                                       <div
-                                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 max-[720px]:grid-cols-[minmax(0,1fr)_auto]"
+                                        className="sale-return-product"
                                         key={`${request.id}-${detail.productId}`}
                                       >
-                                        <span className="truncate text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span>
-                                        <span className="font-mono text-slate-500">{detail.requestedQuantity} unidades</span>
-                                        <strong className="font-mono text-ink-950 max-[720px]:col-span-2 max-[720px]:justify-self-end">
+                                        <div className="min-w-0"><span className="block break-words text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/></div>
+                                        <div className="sale-return-values font-mono"><span className="return-quantity text-slate-500">{detail.requestedQuantity} {Number(detail.requestedQuantity) === 1 ? "unidad" : "unidades"}</span><span aria-hidden="true">·</span>
+                                        <strong className="text-ink-950">
                                           {formatClp(detail.requestedSubtotal)}
-                                        </strong>
+                                        </strong></div>
                                       </div>
                                     ))}
                                   </div>
@@ -1862,7 +1870,7 @@ export default function SalesPage() {
                                   )}
 
                                   {canCancel && request.status === "APPROVED" && (
-                                    <div className="flex justify-end border-t border-slate-200 pt-2">
+                                    <div className="return-undo-actions flex justify-end border-t border-slate-200 pt-2">
                                       <button
                                         className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0`}
                                         type="button"
@@ -2152,10 +2160,14 @@ export default function SalesPage() {
               </div>
               <MobileTableTools
                 hasActiveFilters={hasSalesFilters}
-                onClear={() => { setSearch(""); setScannedSalesProduct(null); applySalesFilter("current"); }}
+                value={{ filter: salesFilter, clear: false }}
+                clearValue={{ filter: "current", clear: true }}
+                onApply={next => { if (next.clear) { setSearch(""); setScannedSalesProduct(null); } if (next.clear || next.filter !== salesFilter) applySalesFilter(next.filter); }}
               >
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "partial" ? "current" : "partial")} aria-pressed={salesFilter === "partial"}>{salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
-                <button type="button" onClick={() => applySalesFilter(salesFilter === "cancelled" ? "current" : "cancelled")} aria-pressed={salesFilter === "cancelled"}>{salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                {(draft, setDraft) => <>
+                  <button type="button" onClick={() => setDraft(current => ({ ...current, filter: current.filter === "partial" ? "current" : "partial" }))} aria-pressed={draft.filter === "partial"}>{draft.filter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                  <button type="button" onClick={() => setDraft(current => ({ ...current, filter: current.filter === "cancelled" ? "current" : "cancelled" }))} aria-pressed={draft.filter === "cancelled"}>{draft.filter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                </>}
               </MobileTableTools>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
                 <button
@@ -2219,7 +2231,7 @@ export default function SalesPage() {
               )}
               desktop={(
             <div className={tableScrollClass}>
-              <table>
+              <table className="fyf-data-table">
                 <thead>
                   <tr>
                     <th>Folio</th>
@@ -2258,7 +2270,7 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className="text-left">
-                        <div className="flex flex-wrap items-center gap-1.5">{saleActionsFor(sale)}</div>
+                        <div className="table-row-actions flex flex-wrap items-center gap-1.5">{saleActionsFor(sale)}</div>
                       </td>
                     </tr>
                   ))}

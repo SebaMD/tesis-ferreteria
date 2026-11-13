@@ -2,7 +2,8 @@ import { CheckCircle2, LogIn, ShoppingBag, UserPlus } from "lucide-react";
 import { useMemo } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { readDirectPurchaseItem } from "../helpers/directPurchase.js";
-import { createCheckoutIntent, readCheckoutIntent } from "../helpers/checkoutIntent.js";
+import { createCheckoutIntent, readCheckoutIntent, checkoutReturn } from "../helpers/checkoutIntent.js";
+import CompactBackLink from "../components/CompactBackLink.jsx";
 import useAuth from "../hooks/useAuth.js";
 import useCart from "../hooks/useCart.js";
 
@@ -11,26 +12,26 @@ export default function CheckoutChoicePage() {
   const { isAuthenticated, user } = useAuth();
   const { items } = useCart();
   const directPurchase = readDirectPurchaseItem(location.state);
-  const checkoutIntent = useMemo(() => readCheckoutIntent(location.state) || (
+  const checkoutIntent = useMemo(() => (location.state?.checkoutIntent ? readCheckoutIntent(location.state) || { expired: true, source: location.state.checkoutIntent.source === "DIRECT" ? "DIRECT" : undefined } : null) || (
     !isAuthenticated
       ? createCheckoutIntent(directPurchase ? "DIRECT" : "GUEST_CART", directPurchase ? [directPurchase] : items)
       : null
   ), [directPurchase, isAuthenticated, items, location.state]);
-  const checkoutState = checkoutIntent ? { checkoutIntent } : directPurchase ? { directPurchase } : undefined;
+  const checkoutState = checkoutIntent ? { checkoutIntent, checkoutReturn: location.state?.checkoutReturn } : directPurchase ? { directPurchase } : undefined;
 
   if (isAuthenticated && user?.role === "CLIENT") {
     return <Navigate to="/checkout" replace state={checkoutState} />;
   }
-  if (items.length === 0 && !directPurchase) return <Navigate to="/cart" replace />;
+  if (items.length === 0 && !directPurchase && !checkoutIntent) return <Navigate to="/cart" replace />;
 
   return (
     <main className="mx-auto grid w-full max-w-220 gap-5 px-6 py-10 max-[720px]:px-3.5">
-      <div className="text-center">
+      <header className="public-page-header checkout-choice-heading"><div className="text-center">
         <h1 className="m-0 text-2xl font-bold text-ink-950">¿Cómo quieres continuar?</h1>
         <p className="mt-2 mb-0 text-sm text-slate-500">
           Puedes comprar sin crear una cuenta o ingresar para reutilizar tus datos.
         </p>
-      </div>
+      </div><CompactBackLink {...checkoutReturn(checkoutState)} /></header>
 
       <section className="grid grid-cols-2 gap-4 max-[720px]:grid-cols-1">
         <article className="grid content-start gap-4 rounded-lg border-2 border-rust-500 bg-white p-6 shadow-sm">
@@ -67,7 +68,6 @@ export default function CheckoutChoicePage() {
         </article>
       </section>
 
-      <Link className="justify-self-center text-sm font-bold text-rust-600" to="/cart">Volver al carrito</Link>
     </main>
   );
 }

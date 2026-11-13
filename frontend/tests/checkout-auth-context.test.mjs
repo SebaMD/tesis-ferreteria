@@ -54,8 +54,10 @@ for (const [name, source, selection] of [
     assert.equal((verification.match(/navigate\(destination, \{ replace: true, state: checkoutState \}\)/g) || []).length, 2);
     assert.match(checkout, /&& emailVerifiedForCheckout/);
     assert.match(checkout, /if \(!canStartPayment \|\| submittingRef\.current\) return/);
-    assert.match(checkout, /Debes verificar tu correo antes de continuar con esta compra/);
-    assert.match(checkout, /setClientEmailVerified\(true\)/);
+    assert.match(checkout, /title="Verifica el correo de tu cuenta"/);
+    assert.match(checkout, /description="Solo debes hacerlo una vez antes de iniciar tu próxima compra\."/);
+    assert.match(checkout, /const clientEmailVerified = Boolean\(user\?\.emailVerifiedAt \|\| user\?\.emailVerified\)/);
+    assert.match(checkout, /replaceSession\(session\)/);
   });
 }
 

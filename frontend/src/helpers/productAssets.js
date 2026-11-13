@@ -12,6 +12,7 @@ export function resolveProductAssets(product, apiBaseUrl) {
   if (!product || typeof product !== "object") return product;
   return {
     ...product,
+    ...(Array.isArray(product.variants) ? { variants: product.variants.map(variant => resolveProductAssets(variant, apiBaseUrl)) } : {}),
     images: Array.isArray(product.images)
       ? product.images.map((image) => resolveProductImageAsset(image, apiBaseUrl))
       : product.images,

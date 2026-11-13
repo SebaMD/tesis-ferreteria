@@ -1,7 +1,10 @@
 import api from "../api/httpClient.js";
 
-export async function getPromotionsRequest() {
-  const { data } = await api.get("/promotions");
+export async function getPromotionsRequest({ onServerTime } = {}) {
+  const requestedAt = Date.now();
+  const { data, headers } = await api.get("/promotions");
+  const serverTime = Date.parse(headers?.date);
+  if (Number.isFinite(serverTime)) onServerTime?.(serverTime - (requestedAt + Date.now()) / 2);
   return data.data || [];
 }
 

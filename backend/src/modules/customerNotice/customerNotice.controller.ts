@@ -53,6 +53,7 @@ export async function getPublicCustomerNotice(_req: Request, res: Response) {
 
 export async function getCustomerNoticeConfiguration(_req: Request, res: Response) {
   try {
+    res.append("Access-Control-Expose-Headers", "Date");
     return handleSuccess(res, 200, "Configuracion de avisos obtenida", await getCustomerNoticeConfigurationService());
   } catch (error) {
     return handleErrorServer(res, 500, "No se pudo obtener la configuracion", error);

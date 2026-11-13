@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { buildCommercialAmounts } from "../dist/modules/onlineOrders/commercialAmounts.js";
+const base = { productsSubtotal: "10000.00", productsDiscountTotal: "2000.00", deliveryFee: "3000.00", deliveryBaseFee: "3000.00", deliveryType: "DELIVERY", deliveryFeeReason: "FLAT", total: "11000.00" };
+const assertBalanced = source => {
+  const result = buildCommercialAmounts(source);
+  assert.equal(result.consistent, true);
+  const terms = result.lines.filter(line => line.key !== "total");
+  assert.equal(terms.reduce((sum, line) => sum + Number(line.amount ?? 0) * (line.discount ? -1 : 1), 0), Number(source.total));
+  return result;
+};
+assert.deepEqual(assertBalanced(base).lines.map(line => line.key), ["productsSubtotal", "deliveryBaseFee", "productsDiscount", "total"]);
+const free = assertBalanced({ ...base, deliveryFee: "0.00", deliveryFeeReason: "FREE_THRESHOLD", total: "8000.00" });
+assert.equal(free.lines[1].amount, "3000.00");
+assert.equal(free.lines[3].amount, "3000.00");
+assert.equal(free.lines[3].key, "deliveryDiscount");
+assert.equal(assertBalanced({ ...base, deliveryType: "PICKUP", deliveryFee: "0.00", deliveryFeeReason: "PICKUP", total: "8000.00" }).lines.length, 4);
+const legacy = assertBalanced({ ...base, deliveryFee: null, deliveryBaseFee: null, total: "8000.00" });
+assert.equal(legacy.legacy, true); assert.equal(legacy.lines[1].amount, null); assert.match(legacy.lines[1].label, /histórico/);
+const unknown = assertBalanced({ ...base, deliveryFee: "0.00", deliveryBaseFee: null, deliveryFeeReason: "FREE_THRESHOLD", total: "8000.00" });
+assert.equal(unknown.lines.length, 4); assert.match(unknown.note, /no está disponible/);
+assert.equal(buildCommercialAmounts({ ...base, total: "999.00" }).consistent, false);
+assert.equal(buildCommercialAmounts({ ...base, productsSubtotal: "10000.50" }).consistent, false);
+assertBalanced({ ...base, productsSubtotal: "9999999999.00", productsDiscountTotal: "3000.00", total: "9999999999.00" });
+console.log("PASS ordered integer CLP contract: fixed/free/pickup/legacy/missing revision/inconsistency/large amounts, no duplicated discounts");

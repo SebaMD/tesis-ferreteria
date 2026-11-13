@@ -1,0 +1,22 @@
+[
+  {
+    "productKey": "CATALOGO COM. CADENA.pdf:1364",
+    "prompt": "Use case: product-mockup. Asset: one square catalog illustration of the PHYSICAL ARTICLE, not a text card or infographic. Subject: One flexible PLASTIC putty knife / paint scraper, Ancho 3 pulgadas, molded pale ivory polypropylene blade and integral short handle with hanging hole. Smooth straight blade edge. Blade width must be physically plausible relative to hand-size grip. No metal blade, no trowel, no serrations.\nStyle: realistic original high-detail 3D/studio illustration, convincing material texture and anatomy, white seamless background, soft contact shadow, entire object(s) inside frame with generous margins, 70-80% image occupancy, three-quarter view suitable for a hardware store. Not manufacturer photography; commercial identity cannot be certified. No brand name, logo, product code, price, arbitrary measurements text or fake packaging print. Only small bottom caption exactly \"Ilustración referencial\". No decorative extra tools, people or props. Render this SKU separately; do not collage different variants.",
+    "generatedFile": "exec-21f81857-ec7c-4d5e-ab0e-16c613197b1c.png"
+  },
+  {
+    "productKey": "CATALOGO COM. CADENA.pdf:1543",
+    "prompt": "Use case: product-mockup. Asset: one square catalog illustration of the PHYSICAL ARTICLE, not a text card or infographic. Subject: One molded PLASTIC plastering trowel/float with a flat rectangular base and raised comfortable integral handle. SMOOTH straight base edges, no teeth. No steel blade or wooden handle. Generic design, dimensions not invented.\nStyle: realistic original high-detail 3D/studio illustration, convincing material texture and anatomy, white seamless background, soft contact shadow, entire object(s) inside frame with generous margins, 70-80% image occupancy, three-quarter view suitable for a hardware store. Not manufacturer photography; commercial identity cannot be certified. No brand name, logo, product code, price, arbitrary measurements text or fake packaging print. Only small bottom caption exactly \"Ilustración referencial\". No decorative extra tools, people or props. Render this SKU separately; do not collage different variants.",
+    "generatedFile": "exec-a8f88ccb-ffe2-41dc-b2e1-54409f050f0f.png"
+  },
+  {
+    "productKey": "CATALOGO COM. CADENA.pdf:2018",
+    "prompt": "Use case: product-mockup. Asset: one square catalog illustration of the PHYSICAL ARTICLE, not a text card or infographic. Subject: One molded PLASTIC plastering trowel/float with a flat rectangular base and raised comfortable integral handle. Clearly NOTCHED perimeter with regular rectangular teeth. No steel blade or wooden handle. Generic design, dimensions not invented.\nStyle: realistic original high-detail 3D/studio illustration, convincing material texture and anatomy, white seamless background, soft contact shadow, entire object(s) inside frame with generous margins, 70-80% image occupancy, three-quarter view suitable for a hardware store. Not manufacturer photography; commercial identity cannot be certified. No brand name, logo, product code, price, arbitrary measurements text or fake packaging print. Only small bottom caption exactly \"Ilustración referencial\". No decorative extra tools, people or props. Render this SKU separately; do not collage different variants.",
+    "generatedFile": "exec-b06b0f84-ecd3-4255-b2c9-2e82a138f451.png"
+  },
+  {
+    "productKey": "CATALOGO COM. CADENA.pdf:710",
+    "prompt": "Use case: product-mockup. Asset: one square catalog illustration of the PHYSICAL ARTICLE, not a text card or infographic. Subject: One simple unbranded molded plastic paint tray with a deep paint reservoir and sloping ribbed roller-loading ramp. No rollers or kit accessories. Size and color not asserted as exact because original SKU lacks dimensions.\nStyle: realistic original high-detail 3D/studio illustration, convincing material texture and anatomy, white seamless background, soft contact shadow, entire object(s) inside frame with generous margins, 70-80% image occupancy, three-quarter view suitable for a hardware store. Not manufacturer photography; commercial identity cannot be certified. No brand name, logo, product code, price, arbitrary measurements text or fake packaging print. Only small bottom caption exactly \"Ilustración referencial\". No decorative extra tools, people or props. Render this SKU separately; do not collage different variants.",
+    "generatedFile": "exec-adb9ea56-2455-4ee3-bdf8-7fc1b4c7588d.png"
+  }
+]

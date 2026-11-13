@@ -9,6 +9,7 @@ import {
   getProductByIdService,
   getProductsService,
   ProductError,
+  parseProductRevision,
 } from "./products.service.js";
 import { validateBarcode, validateCreateProductBody, validateEditProductBody } from "./products.validation.js";
 
@@ -98,16 +99,17 @@ export async function createProductController(req: Request, res: Response) {
   try {
     const validation = validateCreateProductBody(req.body);
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
-    return handleSuccess(res, 201, "Producto creado exitosamente", await createProductService(validation.value));
+    return handleSuccess(res, 201, "Producto creado exitosamente", await createProductService(validation.value, (req as Request & { user?: { id: number } }).user?.id ?? null));
   } catch (error) {
     if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     if (databaseErrorCode(error) === "23505") {
       if (databaseErrorConstraint(error) === "products_barcode_unique") {
         return handleErrorClient(res, 409, "El codigo de barra ya esta asociado a otro producto");
       }
-      return handleErrorClient(res, 409, "Ya existe un producto con ese nombre en la categoria seleccionada");
+      return handleErrorClient(res, 409, "Ya existe el nombre, código o combinación de variante");
     }
-    if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoria seleccionada no existe");
+    if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoría, familia u opción seleccionada no existe o no es compatible");
+    if (databaseErrorCode(error) === "23514") return handleErrorClient(res, 409, "Combinación inválida o cambio de identidad de un producto con historial");
     return handleErrorServer(res, 500, "Error al crear producto", msg(error));
   }
 }
@@ -118,7 +120,7 @@ export async function editProduct(req: Request, res: Response) {
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
     const validation = validateEditProductBody(req.body);
     if (!validation.success) return handleErrorClient(res, 400, "Parametros invalidos", validation.error);
-    return handleSuccess(res, 200, "Producto actualizado exitosamente", await editProductService(id, validation.value));
+    return handleSuccess(res, 200, "Producto actualizado exitosamente", await editProductService(id, validation.value, (req as Request & { user?: { id: number } }).user?.id ?? null, parseProductRevision(req.get("If-Match"))));
   } catch (error) {
     if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     const message = msg(error);
@@ -127,9 +129,10 @@ export async function editProduct(req: Request, res: Response) {
       if (databaseErrorConstraint(error) === "products_barcode_unique") {
         return handleErrorClient(res, 409, "El codigo de barra ya esta asociado a otro producto");
       }
-      return handleErrorClient(res, 409, "Ya existe un producto con ese nombre en la categoria seleccionada");
+      return handleErrorClient(res, 409, "Ya existe el nombre, código o combinación de variante");
     }
-    if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoria seleccionada no existe");
+    if (databaseErrorCode(error) === "23503") return handleErrorClient(res, 409, "La categoría, familia u opción seleccionada no existe o no es compatible");
+    if (databaseErrorCode(error) === "23514") return handleErrorClient(res, 409, "Combinación inválida o cambio de identidad de un producto con historial");
     return handleErrorServer(res, 500, "Error al actualizar producto", message);
   }
 }
@@ -138,9 +141,10 @@ export async function deleteProduct(req: Request, res: Response) {
   try {
     const id = parseId(req.params.id);
     if (!id) return handleErrorClient(res, 400, "El id debe ser valido");
-    if (!(await deleteProductService(id))) return handleErrorClient(res, 404, "Producto no encontrado");
+    if (!(await deleteProductService(id, parseProductRevision(req.get("If-Match"))))) return handleErrorClient(res, 404, "Producto no encontrado");
     return handleSuccess(res, 200, "Producto desactivado exitosamente");
   } catch (error) {
+    if (error instanceof ProductError) return handleErrorClient(res, error.statusCode, error.message);
     return handleErrorServer(res, 500, "Error al desactivar producto", msg(error));
   }
 }

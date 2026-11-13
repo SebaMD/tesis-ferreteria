@@ -11,6 +11,7 @@ import {
   createPasswordResetToken,
   findActiveUserForPasswordReset,
   findLatestPasswordResetRequest,
+  findPasswordResetOwner,
   lockPasswordResetUser,
   markPasswordResetSent,
   markPasswordResetUndeliverable,
@@ -52,7 +53,8 @@ export async function requestPasswordResetService(email: string) {
   const expiresAt = new Date(now.getTime() + PASSWORD_RESET_EXPIRES_MINUTES * 60_000);
 
   const created = await db.transaction(async (tx) => {
-    await lockPasswordResetUser(tx, user.id);
+    const current = await lockPasswordResetUser(tx, user.id);
+    if (!current || current.status !== "ACTIVE" || current.correo !== normalizedEmail) return null;
     const latest = await findLatestPasswordResetRequest(tx, user.id);
     if (latest) {
       const elapsed = Math.floor((now.getTime() - latest.createdAt.getTime()) / 1000);
@@ -85,9 +87,12 @@ export async function requestPasswordResetService(email: string) {
 export async function confirmPasswordResetService(token: string, password: string) {
   const hash = tokenHash(token);
   const passwordHash = await bcrypt.hash(password, 10);
-  const now = new Date();
-
   const updated = await db.transaction(async (tx) => {
+    const owner = await findPasswordResetOwner(tx, hash);
+    if (!owner) return null;
+    const current = await lockPasswordResetUser(tx, owner.userId);
+    if (!current || current.status !== "ACTIVE") return null;
+    const now = new Date();
     const resetToken = await consumeValidPasswordResetToken(tx, hash, now);
     if (!resetToken) return null;
     const user = await replaceActiveUserPassword(tx, resetToken.userId, passwordHash, now);

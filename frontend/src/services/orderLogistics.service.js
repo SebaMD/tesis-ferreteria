@@ -14,6 +14,11 @@ export async function getOperationalOrderByIdRequest(origin, orderId) {
   return response.data.data;
 }
 
+export async function getAdministrativeOrderSummaryRequest(orderId) {
+  const response = await api.get(`/order-logistics/online/${orderId}/administrative-summary`);
+  return response.data.data;
+}
+
 export async function startOrderPreparationRequest(origin, orderId) {
   const response = await api.post(`${logisticsPath(origin, orderId)}/start-preparation`);
   return response.data.data;

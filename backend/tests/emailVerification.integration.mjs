@@ -1,5 +1,6 @@
 // EMAIL_VERIFICATION_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55441/postgres node tests/emailVerification.integration.mjs
 import assert from "node:assert/strict";
+import { initializeTestDelivery, acceptTestQuote } from "./helpers/deliveryQuote.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
@@ -181,8 +182,10 @@ try {
   httpServer = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => httpServer.once("listening", resolve));
   const base = `http://127.0.0.1:${httpServer.address().port}/api`;
+  await initializeTestDelivery((await pool.query("select id from users where correo='admin-email-test@example.test'")).rows[0].id);
 
   const request = async (method, route, { token, guestSession, body } = {}, expected = 200) => {
+    if (method === "POST" && ["/online-orders/checkout", "/online-orders/guest/checkout"].includes(route) && expected === 201) body = await acceptTestQuote(base, body);
     const response = await fetch(base + route, {
       method,
       headers: {

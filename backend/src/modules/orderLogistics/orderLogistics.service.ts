@@ -1,4 +1,5 @@
 import { db } from "../../db/index.js";
+import { lockActiveWarehouseUser } from "../users/userSecurity.repository.js";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import { normalizeName } from "../auth/auth.validation.js";
 import { isValidRut, normalizeRut } from "../../utils/rut.js";
@@ -26,6 +27,7 @@ import {
   findLogisticsTaskById,
   findLogisticsTaskForUpdate,
   findLogisticsTasks,
+  findOnlineAdministrativeOrder,
   OPERATIONAL_ORDER_STATUSES,
   updateLogisticsTask,
   type LogisticsOrigin,
@@ -33,6 +35,16 @@ import {
   type LogisticsStatus,
   type LogisticsTask,
 } from "./orderLogistics.repository.js";
+import { buildAdministrativeOrderModel } from "./administrativeOrderModel.js";
+
+export async function getAdministrativeOrderSummaryService(orderId: number, user: { role: string }) {
+  if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    throw new OrderLogisticsError("No tienes permisos para consultar la ficha administrativa", 403);
+  }
+  const order = await findOnlineAdministrativeOrder(orderId);
+  if (!order) throw new OrderLogisticsError("Pedido no encontrado", 404);
+  return buildAdministrativeOrderModel(order);
+}
 
 export class OrderLogisticsError extends Error {
   constructor(message: string, public readonly statusCode: number) {
@@ -297,6 +309,7 @@ export async function transitionLogisticsOrderService(
 
   try {
     const transitionResult = await db.transaction(async (tx) => {
+      await lockActiveWarehouseUser(tx, warehouseUserId);
       const task = await findLogisticsTaskForUpdate(tx, origin, taskId);
       if (!task) throw new OrderLogisticsError("Compra no encontrada", 404);
 

@@ -6,6 +6,7 @@ import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import DownloadReceiptButton from "../components/orders/DownloadReceiptButton.jsx";
 import OrderItemPromotion from "../components/orders/OrderItemPromotion.jsx";
+import OrderAmounts from "../components/orders/OrderAmounts.jsx";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import { formatClp, formatDate } from "../helpers/formatters.js";
 import { isDirectPurchaseOrder } from "../helpers/directPurchase.js";
@@ -19,6 +20,8 @@ import {
 } from "../helpers/onlineOrders.js";
 import { badgeClass } from "../helpers/uiClasses.js";
 import useCart from "../hooks/useCart.js";
+import useAuth from "../hooks/useAuth.js";
+import { paymentResultAccessMessage } from "../helpers/paymentResultContext.js";
 import {
   getMyOnlineOrderByIdRequest,
   getMyOnlineOrderReceiptRequest,
@@ -37,27 +40,27 @@ function resultIcon(status) {
 
 function missingResultMessage(statusHint) {
   if (statusHint === "INVALID_RETURN") {
-    return "No pudimos identificar el retorno de Webpay. Revisa Mis pedidos antes de volver a pagar.";
+    return "El retorno de Webpay no contiene un contexto válido para consultar este pago. No indica aprobación ni rechazo. Revisa Mis pedidos antes de volver a pagar.";
   }
   return "No pudimos confirmar el resultado todavía. Revisa Mis pedidos para conocer el estado actualizado.";
 }
 
 export default function PaymentResultPage() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const parsedOrderId = Number(searchParams.get("orderId"));
   const orderId = Number.isInteger(parsedOrderId) && parsedOrderId > 0 ? parsedOrderId : null;
   const statusHint = searchParams.get("status") || "PROCESSING";
-  const { removePurchasedItems } = useCart();
-  const removePurchasedItemsRef = useRef(removePurchasedItems);
-  const cartAdjustedRef = useRef(false);
+  const { settlePurchasedOrder } = useCart();
+  const settlePurchasedOrderRef = useRef(settlePurchasedOrder);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(Boolean(orderId));
   const [errorMessage, setErrorMessage] = useState("");
   const [paymentAction, setPaymentAction] = useState("");
 
   useEffect(() => {
-    removePurchasedItemsRef.current = removePurchasedItems;
-  }, [removePurchasedItems]);
+    settlePurchasedOrderRef.current = settlePurchasedOrder;
+  }, [settlePurchasedOrder]);
 
   useEffect(() => {
     if (!orderId) return undefined;
@@ -74,11 +77,9 @@ export default function PaymentResultPage() {
         setErrorMessage("");
         if (
           isOnlineOrderPaid(data.status)
-          && !cartAdjustedRef.current
           && !isDirectPurchaseOrder(data.id)
         ) {
-          cartAdjustedRef.current = true;
-          removePurchasedItemsRef.current(data.items || []);
+          settlePurchasedOrderRef.current?.(data);
         }
 
         if (data.status === "PENDING_PAYMENT" && attempts < 40) {
@@ -86,10 +87,11 @@ export default function PaymentResultPage() {
         }
       } catch (error) {
         if (!active) return;
-        const message = getApiError(error, "No se pudo consultar el resultado del pago");
+        const accessMessage = paymentResultAccessMessage(error?.response?.status);
+        const message = accessMessage || getApiError(error, "No se pudo consultar el resultado del pago");
         setErrorMessage(message);
         if (attempts === 1) toast.error(message);
-        if (attempts < 40) refreshTimer = window.setTimeout(loadResult, 5_000);
+        if (!accessMessage && attempts < 40) refreshTimer = window.setTimeout(loadResult, 5_000);
       } finally {
         if (active) setLoading(false);
       }
@@ -103,7 +105,7 @@ export default function PaymentResultPage() {
     };
   }, [orderId]);
 
-  const orderStatus = order ? getOnlineOrderStatus(order.status) : null;
+  const orderStatus = order ? getOnlineOrderStatus(order.status, order.payment?.status) : null;
   const paymentStatus = order?.payment ? getOnlinePaymentStatus(order.payment.status) : null;
   const isPaid = isOnlineOrderPaid(order?.status);
   const deliveryType = order ? getOnlineOrderDeliveryType(order.deliveryType) : null;
@@ -204,14 +206,14 @@ export default function PaymentResultPage() {
                 )}
                 desktop={(
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="fyf-data-table w-full text-sm">
                   <thead>
                     <tr><th>Producto</th><th className="text-right">Cantidad</th><th className="text-right">Precio unitario</th><th className="text-right">Subtotal</th></tr>
                   </thead>
                   <tbody>
                     {(order.items || []).map((item) => (
                       <tr key={`${item.productId}-${item.productName}`}>
-                        <td>{item.productName}<OrderItemPromotion item={item} compact /></td>
+                        <td className="table-description-cell">{item.productName}<OrderItemPromotion item={item} compact /></td>
                         <td className="text-right font-mono">{item.quantity}</td>
                         <td className="text-right font-mono">{formatClp(item.unitPrice)}</td>
                         <td className="text-right font-mono font-bold">{formatClp(item.subtotal)}</td>
@@ -223,10 +225,7 @@ export default function PaymentResultPage() {
                 )}
               />
 
-              <div className="flex items-center justify-end gap-4 border-t border-slate-200 pt-4">
-                <span className="font-bold text-slate-600">Total</span>
-                <strong className="font-mono text-2xl text-ink-950">{formatClp(order.total)}</strong>
-              </div>
+              <OrderAmounts order={order} />
             </section>
           )}
 
@@ -239,7 +238,7 @@ export default function PaymentResultPage() {
 
           {order.status === "PAYMENT_REVIEW" && (
             <p className="m-0 w-full max-w-125 rounded-[5px] bg-rust-50 px-3 py-3 text-xs leading-5 text-rust-700">
-              Tu pago fue autorizado, pero requiere revisión. No vuelvas a pagar este pedido.
+              {orderStatus.description}
             </p>
           )}
 
@@ -262,7 +261,7 @@ export default function PaymentResultPage() {
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 border-slate-300 bg-white text-ink-700 hover:bg-slate-100"
             />
             <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to={`/orders#order-${order.id}`}>
-              {isPaid ? "Ir a mis compras" : "Ver mis pedidos"}
+              {isPaid ? "Ir a mis pedidos" : "Ver mis pedidos"}
             </Link>
             {isPaid ? (
               <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/catalog">Volver al catálogo</Link>
@@ -281,7 +280,7 @@ export default function PaymentResultPage() {
             </p>
           </div>
           <div className="flex w-full max-w-125 flex-wrap justify-center gap-3 max-[520px]:flex-col">
-            <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to="/orders">
+            <Link className="inline-flex min-h-10 flex-1 items-center justify-center rounded-[5px] border border-ink-950 bg-ink-950 px-4 text-sm font-bold text-white no-underline hover:bg-ink-700" to={user?.role === "CLIENT" ? "/orders" : "/guest-orders"}>
               Ver mis pedidos
             </Link>
             <Link className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-[5px] border border-slate-300 px-4 text-sm font-bold text-ink-700 no-underline hover:bg-slate-100" to="/cart">

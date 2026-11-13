@@ -1,5 +1,7 @@
-import { AlertTriangle, CreditCard, EyeOff, PackageSearch, RefreshCw, ShoppingCart } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, CreditCard, EyeOff, PackageSearch, RefreshCw } from "lucide-react";
+import { InformationBackLink } from "../components/InformationNavigation.jsx";
+import { useEffect, useMemo, useRef, useState } from "react";
+import useBuyerOrders from "../hooks/useBuyerOrders.js";
 import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -7,7 +9,8 @@ import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import AppModal from "../components/AppModal.jsx";
 import OrderDetailModal from "../components/orders/OrderDetailModal.jsx";
 import OrderSummaryCard from "../components/orders/OrderSummaryCard.jsx";
-import { groupBuyerOrders } from "../helpers/buyerOrderGroups.js";
+import PaymentAttentionNotice from "../components/orders/PaymentAttentionNotice.jsx";
+import { groupBuyerOrders, isIncompleteOrder } from "../helpers/buyerOrderGroups.js";
 import { submitWebpayForm } from "../helpers/onlineOrders.js";
 import { dangerButtonClass } from "../helpers/uiClasses.js";
 import {
@@ -20,15 +23,15 @@ import {
   retryOnlineOrderPaymentRequest,
 } from "../services/onlineOrders.service.js";
 
-function OrdersSection({ title, description, orders, renderOrder, emptyText }) {
+function OrdersSection({ title, description, orders, renderOrder, emptyText, headerAction }) {
   return (
     <section className="grid gap-3">
-      <header className="flex items-end justify-between gap-3">
+      <header className="buyer-orders-heading flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="m-0 text-xl font-bold text-ink-950 max-[520px]:text-lg">{title}</h2>
           {description && <p className="mt-1 mb-0 text-xs leading-5 text-slate-500">{description}</p>}
         </div>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{headerAction}<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{orders.length}</span></div>
       </header>
       {orders.length ? <div className="grid gap-3">{orders.map(renderOrder)}</div> : (
         <p className="m-0 rounded-lg border border-dashed border-slate-300 bg-white px-5 py-8 text-center text-sm text-slate-500">{emptyText}</p>
@@ -39,52 +42,26 @@ function OrdersSection({ title, description, orders, renderOrder, emptyText }) {
 
 export default function ClientOrdersPage() {
   const location = useLocation();
-  const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const { orders, setOrders, selectedOrder, setSelectedOrder, loading, refreshing, error: loadError, loadOrders } = useBuyerOrders(getMyOnlineOrdersRequest, "No se pudieron cargar tus pedidos");
   const [paymentActionOrderIds, setPaymentActionOrderIds] = useState(() => new Set());
   const [archivingOrderId, setArchivingOrderId] = useState(null);
   const [archiveCandidate, setArchiveCandidate] = useState(null);
   const paymentActionRefs = useRef(new Set());
   const archiveActionRef = useRef(null);
 
-  const loadOrders = useCallback(async ({ showLoading = true, notifyError = true } = {}) => {
-    if (showLoading) setLoading(true);
-    try {
-      const data = await getMyOnlineOrdersRequest();
-      setOrders(data);
-      setSelectedOrder((current) => current
-        ? data.find((order) => order.id === current.id) || null
-        : null);
-      setLoadError("");
-    } catch (error) {
-      const message = getApiError(error, "No se pudieron cargar tus pedidos");
-      setLoadError(message);
-      if (notifyError) toast.error(message);
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
-
+  const scrolledLocation = useRef(null);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadOrders();
-    const refreshOrders = () => loadOrders({ showLoading: false, notifyError: false });
-    const refreshTimer = window.setInterval(refreshOrders, 30_000);
-    window.addEventListener("focus", refreshOrders);
-    return () => {
-      window.clearInterval(refreshTimer);
-      window.removeEventListener("focus", refreshOrders);
-    };
-  }, [loadOrders]);
-
-  useEffect(() => {
-    if (loading || !location.hash.startsWith("#order-")) return;
-    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [loading, location.hash, orders]);
+    if (loading || !location.hash.startsWith("#order-") || scrolledLocation.current === location.key) return;
+    scrolledLocation.current = location.key;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({
+      behavior: reducedMotion ? "instant" : "smooth",
+      block: "center",
+    });
+  }, [loading, location.hash, location.key, orders]);
 
   const grouped = useMemo(() => groupBuyerOrders(orders), [orders]);
+  const refreshButton = <button type="button" className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" aria-label="Actualizar estado" onClick={() => loadOrders({ showLoading: false })} disabled={refreshing}><RefreshCw size={16} className={refreshing ? "animate-spin" : ""} aria-hidden="true" />{refreshing ? "Actualizando…" : "Actualizar estado"}</button>;
 
   const handlePaymentAction = async (order, action) => {
     const canRun = action === "continue" ? order.canContinuePayment : order.canRetryPayment;
@@ -148,25 +125,25 @@ export default function ClientOrdersPage() {
     }
   };
 
-  const actionsFor = (order) => {
+  const actionsFor = (order, { payment = true, archive = true } = {}) => {
     const isProcessing = paymentActionOrderIds.has(order.id);
     const isArchiving = archivingOrderId === order.id;
     if (!order.canContinuePayment && !order.canRetryPayment && !order.canArchive) return null;
     return (
       <>
-        {order.canContinuePayment && (
+        {payment && order.canContinuePayment && (
           <button type="button" onClick={() => handlePaymentAction(order, "continue")} disabled={isProcessing || isArchiving}>
             {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <CreditCard size={16} />}
             {isProcessing ? "Abriendo Webpay..." : "Continuar pago"}
           </button>
         )}
-        {order.canRetryPayment && (
+        {payment && order.canRetryPayment && (
           <button type="button" onClick={() => handlePaymentAction(order, "retry")} disabled={isProcessing || isArchiving}>
             {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <CreditCard size={16} />}
             {isProcessing ? "Iniciando..." : "Reintentar pago"}
           </button>
         )}
-        {order.canArchive && (
+        {archive && order.canArchive && (
           <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={() => setArchiveCandidate(order)} disabled={isArchiving || isProcessing}>
             {isArchiving ? <RefreshCw className="animate-spin" size={16} /> : <EyeOff size={16} />}
             {isArchiving ? "Ocultando..." : "Ocultar"}
@@ -181,7 +158,7 @@ export default function ClientOrdersPage() {
       key={order.id}
       order={order}
       onView={setSelectedOrder}
-      actions={actionsFor(order)}
+      actions={actionsFor(order, { archive: !isIncompleteOrder(order) })}
       requestReceipt={({ id }) => getMyOnlineOrderReceiptRequest(id)}
       secondary={secondary}
     />
@@ -190,16 +167,12 @@ export default function ClientOrdersPage() {
   return (
     <main className="mx-auto grid w-full max-w-260 gap-8 px-6 py-8 max-[720px]:px-3.5 max-[720px]:py-6">
       <LoadingOverlay active={loading} />
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="public-page-header">
         <div>
-          <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis compras</h1>
+          <h1 className="m-0 text-3xl font-bold text-ink-950 max-[520px]:text-2xl">Mis pedidos</h1>
           <p className="mt-1.5 mb-0 text-sm text-slate-500">Sigue tus pedidos en curso y consulta tus compras anteriores.</p>
         </div>
-        {!loading && !loadError && orders.length > 0 && (
-          <Link className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-rust-600 no-underline" to="/catalog">
-            <ShoppingCart size={17} /> Volver al catálogo
-          </Link>
-        )}
+        <InformationBackLink />
       </header>
 
       {!loading && loadError ? (
@@ -222,11 +195,11 @@ export default function ClientOrdersPage() {
         </section>
       ) : !loading && (
         <>
-          {grouped.payments.length > 0 && (
-            <OrdersSection title="Pagos pendientes" description="Intentos pendientes o en revisión antes de convertirse en pedidos operativos." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" />
-          )}
+          <PaymentAttentionNotice orders={grouped.payments} />
           <OrdersSection title="Pedidos en curso" description="Compras pagadas que todavía están en preparación, retiro o entrega." orders={grouped.active} renderOrder={renderOrder()} emptyText="No tienes pedidos en curso." />
+          {grouped.review.length > 0 && <OrdersSection title="Pagos autorizados · Pedidos en revisión" description="La autorización está registrada; su cumplimiento requiere revisión de la ferretería." orders={grouped.review} renderOrder={renderOrder()} emptyText="" headerAction={refreshButton} />}
           <OrdersSection title="Historial" description="Compras que ya fueron entregadas o retiradas." orders={grouped.delivered} renderOrder={renderOrder()} emptyText="Todavía no tienes compras entregadas." />
+          {grouped.payments.length > 0 && <OrdersSection title="Pagos pendientes" description="Resultados financieros todavía desconocidos. Actualizar estado no inicia otra compra." orders={grouped.payments} renderOrder={renderOrder(true)} emptyText="" headerAction={refreshButton} />}
           {grouped.incomplete.length > 0 && (
             <OrdersSection title="No completados" description="Intentos fallidos, cancelados o expirados que se conservan por trazabilidad." orders={grouped.incomplete} renderOrder={renderOrder(true)} emptyText="" />
           )}
@@ -236,7 +209,7 @@ export default function ClientOrdersPage() {
         order={selectedOrder}
         onClose={() => setSelectedOrder(null)}
         requestDeliveryProof={({ id }) => getMyOnlineOrderDeliveryProofRequest(id)}
-        actions={selectedOrder ? actionsFor(selectedOrder) : null}
+        actions={selectedOrder ? <>{["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(selectedOrder.status) && refreshButton}{actionsFor(selectedOrder)}</> : null}
       />
       <AppModal
         open={Boolean(archiveCandidate)}

@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   integer,
   numeric,
   pgTable,
@@ -10,10 +11,13 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { categoriesTable } from "./categories.js";
+import { productFamiliesTable } from "./productFamilies.js";
 
 export const productsTable = pgTable(
   "products", {
     id: integer().primaryKey().generatedByDefaultAsIdentity(),
+    familyId: integer("family_id").references(() => productFamiliesTable.id, { onDelete: "restrict" }),
+    variantKey: varchar("variant_key", { length: 500 }),
     categoryId: integer("category_id")
       .notNull()
       .references(() => categoriesTable.id),
@@ -36,6 +40,9 @@ export const productsTable = pgTable(
       sql`lower(${table.name})`,
     ),
     uniqueIndex("products_barcode_unique").on(table.barcode),
+    uniqueIndex("products_family_variant_unique").on(table.familyId, table.variantKey),
+    uniqueIndex("products_id_family_unique").on(table.id, table.familyId),
+    check("products_family_key_pair", sql`(${table.familyId} is null) = (${table.variantKey} is null)`),
   ],
 );
 

@@ -11,10 +11,12 @@ import {
   ShoppingBag,
   TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
-import AppSelect from "../components/AppSelect.jsx";
+import { customPeriodError, customRangeBounds, initializeCustomRange, validCustomRange } from "../helpers/dateFilters.js";
+import PeriodFilterPanel from "../components/PeriodFilterPanel.jsx";
+import { statisticsPeriodIndicator } from "../helpers/periodPresentation.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import { formatClp } from "../helpers/formatters.js";
 import {
@@ -23,6 +25,7 @@ import {
   dateInputValue,
   getStatisticsPeriodRange,
   STATISTICS_PERIOD_OPTIONS,
+  statisticsRangeError,
 } from "../helpers/managerStatistics.js";
 import {
   dashboardPanelClass,
@@ -30,7 +33,6 @@ import {
   emptyStateClass,
   pageClass,
   pageHeaderClass,
-  panelClass,
   panelCountClass,
   secondaryButtonClass,
 } from "../helpers/uiClasses.js";
@@ -141,7 +143,7 @@ function DistributionChart({ title, description, items = [], labelFor }) {
         <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-5 p-5 max-[560px]:grid-cols-1">
           <div className="relative mx-auto size-[142px] rounded-full" style={{ background: gradient }} role="img" aria-label={`${title}: distribución porcentual`}>
             <div className="absolute inset-[26px] grid place-items-center rounded-full bg-white text-center">
-              <span className="text-[11px] font-bold uppercase text-slate-500">Total neto</span>
+              <span className="text-[11px] font-bold uppercase text-slate-500">Total</span>
               <strong className="font-mono text-sm text-ink-950">{formatClp(usefulItems.reduce((sum, item) => sum + Number(item.amount), 0))}</strong>
             </div>
           </div>
@@ -231,18 +233,23 @@ function LowStockProducts({ lowStock }) {
 export default function StatisticsPage() {
   const initialRange = useMemo(() => getStatisticsPeriodRange("last30"), []);
   const [period, setPeriod] = useState("last30");
+  const customRangeRef = useRef(null);
   const [filters, setFilters] = useState(initialRange);
-  const [appliedFilters, setAppliedFilters] = useState(initialRange);
+  const [appliedSelection, setAppliedSelection] = useState(null);
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const today = dateInputValue(new Date());
+  const dateError = statisticsRangeError(filters) || customPeriodError(filters, period);
+  const dateBounds = customRangeBounds(filters, today, 366);
 
-  const loadStatistics = async (nextFilters) => {
+  const loadStatistics = async (nextFilters, requestedPeriod) => {
+    const error = statisticsRangeError(nextFilters);
+    if (error) { toast.error(error); return; }
     setLoading(true);
     try {
       const data = await getManagerStatisticsRequest(nextFilters);
       setStatistics(data);
-      setAppliedFilters(nextFilters);
+      setAppliedSelection({period: requestedPeriod, from: nextFilters.from, to: nextFilters.to});
     } catch (error) {
       toast.error(getApiError(error, "No se pudieron cargar las estadísticas"));
     } finally {
@@ -252,33 +259,48 @@ export default function StatisticsPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadStatistics(initialRange);
+    loadStatistics(initialRange, "last30");
   }, [initialRange]);
 
   const handlePeriodChange = (nextPeriod) => {
     setPeriod(nextPeriod);
-    if (nextPeriod !== "custom") setFilters(getStatisticsPeriodRange(nextPeriod));
+    if (nextPeriod === "custom") {
+      if (period === "custom") return;
+      const next = initializeCustomRange(customRangeRef.current, dateInputValue(new Date()), 366);
+      customRangeRef.current = next;
+      setFilters(next);
+    } else if (nextPeriod === "day") setFilters(current => ({ from: current.from, to: current.from }));
+    else if (nextPeriod !== "custom") setFilters(getStatisticsPeriodRange(nextPeriod));
   };
 
   const handleDateChange = (event) => {
     const { name, value } = event.target;
-    setFilters((current) => ({ ...current, [name]: value > today ? today : value }));
+    if (period === "custom") {
+      const next = { ...filters, [name]: value };
+      if (validCustomRange(next, dateInputValue(new Date()), 366)) customRangeRef.current = { ...next };
+      setFilters(next);
+      return;
+    }
+    setFilters((current) => period === "day"
+      ? { from: value, to: value }
+      : { ...current, [name]: value });
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    if (filters.from > filters.to) {
-      toast.error("La fecha desde no puede ser posterior a la fecha hasta");
+    const error = dateError;
+    if (error) {
+      toast.error(error);
       return;
     }
-    loadStatistics(filters);
+    loadStatistics(filters, period);
   };
 
   const handleReset = () => {
     const next = getStatisticsPeriodRange("last30");
     setPeriod("last30");
     setFilters(next);
-    loadStatistics(next);
+    loadStatistics(next, "last30");
   };
 
   const kpis = statistics?.kpis || {};
@@ -289,38 +311,36 @@ export default function StatisticsPage() {
       <div className={pageHeaderClass}>
         <div>
           <h1>Estadísticas</h1>
+          {statistics?.identityHistory && <p className="text-xs text-slate-500">Identidades de las operaciones: {statistics.identityHistory.originalLines} originales, {statistics.identityHistory.referenceLines} capturas posteriores de referencia y {statistics.identityHistory.missingLines} sin captura. Los importes no se recalculan con el catálogo actual.</p>}
           <p>Indicadores descriptivos para apoyar decisiones comerciales y de stock.</p>
         </div>
       </div>
 
-      <form className={`${panelClass} grid-cols-[minmax(210px,300px)_minmax(0,1fr)_auto] items-end max-[920px]:grid-cols-1`} onSubmit={handleSubmit}>
-        <label>
-          Período
-          <AppSelect value={period} onChange={handlePeriodChange} options={STATISTICS_PERIOD_OPTIONS} ariaLabel="Seleccionar período estadístico" />
-        </label>
-        <div className={`grid gap-3 ${period === "custom" ? "grid-cols-2 max-[560px]:grid-cols-1" : "grid-cols-1"}`}>
+      <PeriodFilterPanel title="Período de Estadísticas" period={period} onPeriodChange={handlePeriodChange}
+        options={STATISTICS_PERIOD_OPTIONS} selectLabel="Seleccionar período estadístico" onSubmit={handleSubmit}
+        indicator={statisticsPeriodIndicator(appliedSelection,today)} error={dateError} errorId="statistics-range-error"
+        dates={<>
           {period === "custom" ? (
             <>
-              <label>Desde<input type="date" name="from" value={filters.from} max={filters.to || today} onChange={handleDateChange} required /></label>
-              <label>Hasta<input type="date" name="to" value={filters.to} min={filters.from} max={today} onChange={handleDateChange} required /></label>
+              <label>Desde<input type="date" name="from" value={filters.from} min={dateBounds.fromMin} max={dateBounds.fromMax} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "statistics-range-error" : undefined} onChange={handleDateChange} required /></label>
+              <label>Hasta<input type="date" name="to" value={filters.to} min={dateBounds.toMin} max={dateBounds.toMax} aria-invalid={Boolean(dateError)} aria-describedby={dateError ? "statistics-range-error" : undefined} onChange={handleDateChange} required /></label>
             </>
-          ) : (
+          ) : period === "day" ? <label>Fecha<input type="date" value={filters.from} max={today} onChange={handleDateChange} required /></label> : (
             <div className="flex min-h-10.25 items-center gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-ink-700">
               <CalendarDays size={17} className="text-rust-600" />
-              {filters.from} al {filters.to}
+              {filters.from === filters.to ? filters.from : `${filters.from} al ${filters.to}`}
             </div>
           )}
-        </div>
-        <div className="flex gap-2 max-[560px]:flex-col">
-          <button type="submit" disabled={loading}><BarChart3 size={17} /> Consultar</button>
+        </>}
+        actions={<>
+          <button type="submit" disabled={loading || Boolean(dateError)}><BarChart3 size={17} /> Consultar</button>
           <button className={secondaryButtonClass} type="button" onClick={handleReset} disabled={loading}><RotateCcw size={16} /> Restablecer</button>
-        </div>
-      </form>
-
-      <p className="m-0 text-xs font-semibold text-slate-500">Período consultado: {appliedFilters.from} al {appliedFilters.to}</p>
+        </>}/>
 
       <div className="grid grid-cols-4 gap-3.5 max-[1180px]:grid-cols-2 max-[620px]:grid-cols-1">
-        <MetricCard icon={CircleDollarSign} label="Monto neto vendido" value={formatClp(kpis.netSales)} detail="Presencial neto + online pagado" tone="positive" />
+        <MetricCard icon={CircleDollarSign} label="Monto neto vendido" value={formatClp(kpis.netSales)} detail="Productos netos, sin incluir despacho" tone="positive" />
+        <MetricCard icon={CircleDollarSign} label="Despachos cobrados" value={formatClp(kpis.deliveryIncome ?? 0)} detail="Solo pedidos online pagados" />
+        <MetricCard icon={CircleDollarSign} label="Total cobrado neto" value={formatClp(kpis.totalCollected ?? kpis.netSales)} detail="Productos netos + despacho" />
         <MetricCard icon={ReceiptText} label="Monto original" value={formatClp(kpis.originalSales)} detail="Antes de devoluciones presenciales" />
         <MetricCard icon={Percent} label="Monto devuelto" value={formatClp(kpis.returnedAmount)} detail={`${Number(kpis.returnPercentage || 0).toLocaleString("es-CL")}% del monto original`} tone="warning" />
         <MetricCard icon={ShoppingBag} label="Operaciones pagadas" value={kpis.transactions ?? 0} detail="Ventas presenciales y pedidos online" />
@@ -334,7 +354,7 @@ export default function StatisticsPage() {
 
       <div className="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">
         <DistributionChart title="Distribución por canal" description="Participación sobre el monto neto" items={statistics?.channels} labelFor={(item) => item.label} />
-        <DistributionChart title="Distribución por método de pago" description="Métodos presentes en operaciones concretadas" items={statistics?.paymentMethods} labelFor={(item) => paymentMethodLabel(item.paymentMethod)} />
+        <DistributionChart title="Distribución por método de pago" description="Cobros netos, incluyendo despacho online" items={statistics?.paymentMethods} labelFor={(item) => paymentMethodLabel(item.paymentMethod)} />
       </div>
 
       <div className="grid grid-cols-2 items-start gap-4 max-[900px]:grid-cols-1">

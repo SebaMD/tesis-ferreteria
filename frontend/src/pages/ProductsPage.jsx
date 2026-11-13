@@ -1,21 +1,35 @@
-import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Pencil, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, CheckCircle, FileSpreadsheet, FolderPlus, Info, PackagePlus, Plus, ScanBarcode, Search, SlidersHorizontal, XCircle } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
+import HistoricalIdentityNote from "../components/HistoricalIdentityNote.jsx";
+import ProductNameCorrectionAction from "../components/ProductNameCorrectionAction.jsx";
+import ProductClassificationAction from "../components/ProductClassificationAction.jsx";
+import InventoryNavigation from "../components/InventoryNavigation.jsx";
+import FamilyDeactivationDialog from "../components/FamilyDeactivationDialog.jsx";
+import { productNameDraftIsDirty } from "../helpers/productNameCorrection.js";
+import { identityProvenance } from "../helpers/historicalIdentity.js";
 import MobileTableTools from "../components/MobileTableTools.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
 import ProductImagesManager from "../components/ProductImagesManager.jsx";
-import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import ProductBundleEditor from "../components/ProductBundleEditor.jsx";
+import CreatedProductsStockDialog from "../components/CreatedProductsStockDialog.jsx";
+import { reviewAfterEntry } from "../helpers/createdProductsStock.js";
+import { creationStockAction } from "../helpers/creationStock.js";
+import { ProductCategoryField, ProductUnitField } from "../components/ProductFormFields.jsx";
+import GroupedInventoryTable from "../components/GroupedInventoryTable.jsx";
+import { groupInventoryProducts, inventoryExportRows, inventoryVariantLabel, filterInventoryProducts } from "../helpers/inventoryGroups.js";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
 import TableRecordCount from "../components/TableRecordCount.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
-import { compareByNewest, formatClp, formatDate } from "../helpers/formatters.js";
-import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
+import { compareByNewest, formatDate } from "../helpers/formatters.js";
+import { getMovementTone } from "../helpers/inventory.js";
 import { MOVEMENT_LABELS } from "../helpers/labels.js";
-import { ADJUSTMENT_REASONS, UNIT_OPTIONS } from "../helpers/options.js";
+import { ADJUSTMENT_REASONS } from "../helpers/options.js";
 import { formatQuantityWithUnit, getDisplayUnit } from "../helpers/units.js";
 import useAuth from "../hooks/useAuth.js";
 import useBarcodeScanner from "../hooks/useBarcodeScanner.js";
@@ -34,7 +48,6 @@ import {
 } from "../services/products.service.js";
 import {
   badgeClass,
-  codeCellClass,
   dangerButtonClass,
   dateCellClass,
   emptyTableCellClass,
@@ -43,7 +56,6 @@ import {
   pageClass,
   pageHeaderClass,
   secondaryButtonClass,
-  tableActionButtonClass,
   tableHeadingClass,
   tablePanelClass,
   tableScrollClass,
@@ -94,6 +106,9 @@ function compareCategoriesByNewest(left, right) {
 }
 
 const emptyForm = {
+  familyId: null,
+  variantOptionIds: [],
+  associationReason: "",
   categoryId: "",
   name: "",
   brand: "",
@@ -104,6 +119,7 @@ const emptyForm = {
   minimumStock: 0,
   inStoreOnly: false,
   status: true,
+  initialStock: "",
 };
 
 function initialMovementForm(movementType = "ENTRY") {
@@ -124,29 +140,50 @@ export default function ProductsPage() {
   const [movements, setMovements] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [movementForm, setMovementForm] = useState(initialMovementForm);
+  const movementFormId = useId();
   const [editingProductId, setEditingProductId] = useState(null);
+  const [nameCorrectionOpen, setNameCorrectionOpen] = useState(false);
   const [activeForm, setActiveForm] = useState(null);
+  const [bundleEditor, setBundleEditor] = useState(null);
+  const [variantsEnabled, setVariantsEnabled] = useState(false);
+  const [bundleDialogActive, setBundleDialogActive] = useState(false);
+  const [variantsSeen, setVariantsSeen] = useState(false);
+  const [bundleSaving, setBundleSaving] = useState(false);
+  const bundleReviewRef = useRef(null);
+  const simpleProductFormRef = useRef(null);
+  const [bundleAction, setBundleAction] = useState({ label: "Revisar variantes", disabled: true });
+  const [creationReview, setCreationReview] = useState(null);
+  const entryReviewRef = useRef(null);
+  const movementGuard = useRef(false);
+  const simpleModeRef = useRef(null);
+  const inventoryStartRef = useRef(null);
+  const inventoryScrollKeyRef = useRef(null);
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [categoryListSearch, setCategoryListSearch] = useState("");
   const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
-  const [categorySearch, setCategorySearch] = useState("");
-  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [outOfStockOnly, setOutOfStockOnly] = useState(false);
   const [showInactiveProducts, setShowInactiveProducts] = useState(false);
+  const [variantsOnly, setVariantsOnly] = useState(false);
   const [unitSearch, setUnitSearch] = useState("unidad");
-  const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
+
   const [submittingMovement, setSubmittingMovement] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [showMovementProductSuggestions, setShowMovementProductSuggestions] = useState(false);
   const [activeView, setActiveView] = useState("inventory");
   const [inventoryScannerOpen, setInventoryScannerOpen] = useState(false);
   const [productStatusTarget, setProductStatusTarget] = useState(null);
+  const [familyStatusTarget, setFamilyStatusTarget] = useState(null);
+  const [familyActivationTarget, setFamilyActivationTarget] = useState(null);
   const [linkedRegistration, setLinkedRegistration] = useState(null);
+  const reviewEntry = activeForm === "ENTRY" && linkedRegistration?.returnToReview;
+  const quickReviewEntry = activeForm === "ENTRY" && linkedRegistration?.step === "ENTRY"
+    && linkedRegistration.returnToReview && linkedRegistration.origin === "CATEGORY_QUICK";
   const [submittingCategory, setSubmittingCategory] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
   const [pendingProductImages, setPendingProductImages] = useState([]);
@@ -161,9 +198,22 @@ export default function ProductsPage() {
   const canViewInactiveProducts = ["ADMIN", "MANAGER"].includes(user?.role);
   const canViewLowStockFilter = ["ADMIN", "MANAGER", "WAREHOUSE"].includes(user?.role);
   const canViewAdministrativeStock = user?.role !== "CASHIER";
-  const inventoryTableColumnCount = 8 + (canViewAdministrativeStock ? 1 : 0) + (canManage ? 1 : 0);
   const viewParam = searchParams.get("view");
   const filterParam = searchParams.get("filter");
+  useEffect(() => {
+    if (loading || (!viewParam && !filterParam)) return undefined;
+    const key = `${viewParam || ""}:${filterParam || ""}`;
+    if (inventoryScrollKeyRef.current === key) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const section = inventoryStartRef.current;
+      if (!section) return;
+      const navbar = document.querySelector('[data-loading-navbar]');
+      section.style.scrollMarginTop = `${(navbar?.getBoundingClientRect().height || 72) + 12}px`;
+      section.scrollIntoView({ block: "start", behavior: "instant" });
+      inventoryScrollKeyRef.current = key;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [loading, viewParam, filterParam]);
 
   useBarcodeScanner({
     captureInModal: inventoryScannerOpen,
@@ -213,36 +263,12 @@ export default function ProductsPage() {
     () => products.filter((product) => product.status !== false),
     [products],
   );
-  const visibleStatusProducts = useMemo(
-    () => {
-      if (!canViewInactiveProducts) return activeProducts;
-      return products.filter((product) => (showInactiveProducts ? product.status === false : product.status !== false));
-    },
-    [activeProducts, canViewInactiveProducts, products, showInactiveProducts],
-  );
+  const visibleStatusProducts = canViewInactiveProducts ? products : activeProducts;
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const filteredProducts = useMemo(
-    () => visibleStatusProducts.filter((product) => {
-      const matchesCategory = !categoryFilter || String(product.categoryId) === categoryFilter;
-      const matchesLowStock = !lowStockOnly || isLowStockProduct(product);
-      const matchesOutOfStock = !outOfStockOnly || isOutOfStockProduct(product);
-      if (!matchesCategory) return false;
-      if (!matchesLowStock) return false;
-      if (!matchesOutOfStock) return false;
-      if (!normalizedSearch) return true;
-
-      return (
-        String(product.id).includes(normalizedSearch) ||
-        String(product.barcode || "").includes(normalizedSearch) ||
-        product.name.toLocaleLowerCase("es").includes(normalizedSearch) ||
-        product.categoryName.toLocaleLowerCase("es").includes(normalizedSearch)
-      );
-    }).sort(compareByNewest),
-    [categoryFilter, lowStockOnly, normalizedSearch, outOfStockOnly, visibleStatusProducts],
-  );
-  const productById = useMemo(
-    () => new Map(products.map((product) => [String(product.id), product])),
-    [products],
+    () => filterInventoryProducts(products, { category: categoryFilter, search: normalizedSearch,
+      inactive: showInactiveProducts, low: lowStockOnly, out: outOfStockOnly, variantsOnly, canViewInactive: canViewInactiveProducts }),
+    [products, categoryFilter, normalizedSearch, showInactiveProducts, lowStockOnly, outOfStockOnly, variantsOnly, canViewInactiveProducts],
   );
   const categoryProductCounts = useMemo(
     () => products.reduce((counts, product) => {
@@ -252,17 +278,7 @@ export default function ProductsPage() {
     }, new Map()),
     [products],
   );
-  const filteredFormCategories = useMemo(() => {
-    const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase("es");
 
-    return [...categories]
-      .filter((category) =>
-        !normalizedCategorySearch ||
-        category.name.toLocaleLowerCase("es").includes(normalizedCategorySearch) ||
-        String(category.id).includes(normalizedCategorySearch),
-      )
-      .sort((left, right) => left.name.localeCompare(right.name, "es"));
-  }, [categories, categorySearch]);
   const normalizedCategoryListSearch = categoryListSearch.trim().toLocaleLowerCase("es");
   const filteredExistingCategories = useMemo(
     () =>
@@ -277,24 +293,17 @@ export default function ProductsPage() {
         .sort(compareCategoriesByNewest),
     [categories, normalizedCategoryListSearch],
   );
-  const normalizedUnitSearch = unitSearch.trim().toLocaleLowerCase("es");
-  const filteredUnitOptions = useMemo(
-    () =>
-      UNIT_OPTIONS.filter((unit) =>
-        !normalizedUnitSearch ||
-        unit.toLocaleLowerCase("es").includes(normalizedUnitSearch),
-      ),
-    [normalizedUnitSearch],
-  );
-  const productsPagination = usePagination(filteredProducts, {
-    resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}|${visibleStatusProducts.length}`,
+
+  const groupedProducts = useMemo(() => groupInventoryProducts(filteredProducts, visibleStatusProducts), [filteredProducts, visibleStatusProducts]);
+  const productsPagination = usePagination(groupedProducts, {
+    resetKey: `${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}|${visibleStatusProducts.length}`,
   });
-  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || outOfStockOnly || showInactiveProducts);
+  const hasListFilters = Boolean(categoryFilter || normalizedSearch || lowStockOnly || outOfStockOnly || showInactiveProducts || variantsOnly);
   const sortedMovements = useMemo(() => [...movements].sort(compareByNewest), [movements]);
   const filteredMovements = useMemo(
     () => sortedMovements.filter((movement) => {
-      const product = productById.get(String(movement.productId));
-      const matchesCategory = !categoryFilter || String(product?.categoryId || "") === categoryFilter;
+      const category = movement.historicalIdentity?.identity?.category;
+      const matchesCategory = !categoryFilter || String(category?.id || "") === categoryFilter;
 
       if (!matchesCategory) return false;
       if (!normalizedSearch) return true;
@@ -303,10 +312,10 @@ export default function ProductsPage() {
         String(movement.id).includes(normalizedSearch) ||
         String(movement.productId || "").includes(normalizedSearch) ||
         String(movement.productName || "").toLocaleLowerCase("es").includes(normalizedSearch) ||
-        String(product?.categoryName || "").toLocaleLowerCase("es").includes(normalizedSearch)
+        String(category?.name || "").toLocaleLowerCase("es").includes(normalizedSearch)
       );
     }),
-    [categoryFilter, normalizedSearch, productById, sortedMovements],
+    [categoryFilter, normalizedSearch, sortedMovements],
   );
   const movementsPagination = usePagination(filteredMovements, {
     resetKey: `${categoryFilter}|${normalizedSearch}|${movements.length}`,
@@ -367,7 +376,7 @@ export default function ProductsPage() {
     if (viewParam === "history" && canViewHistory) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveView("history");
-    } else if (viewParam === "inventory") {
+    } else {
       setActiveView("inventory");
     }
 
@@ -399,11 +408,7 @@ export default function ProductsPage() {
       setShowInactiveProducts(false);
     }
 
-    if (showInactiveProducts && (lowStockOnly || outOfStockOnly)) {
-      setLowStockOnly(false);
-      setOutOfStockOnly(false);
-    }
-  }, [canViewInactiveProducts, lowStockOnly, outOfStockOnly, showInactiveProducts]);
+  }, [canViewInactiveProducts, showInactiveProducts]);
 
   const selectedMovementProduct = products.find((product) => product.id === Number(movementForm.productId));
   const estimatedStock = selectedMovementProduct
@@ -453,6 +458,56 @@ export default function ProductsPage() {
   );
   const parsedProductPrice = Number(form.price);
   const parsedMinimumStock = Number(form.minimumStock);
+  const canAddVariants = Boolean(form.categoryId) && form.name.trim().length >= 2 && form.name.trim().length <= 150
+    && unitSearch.trim().length > 0 && unitSearch.trim().length <= 50 && form.price !== ""
+    && Number.isSafeInteger(parsedProductPrice) && parsedProductPrice >= 0 && parsedProductPrice <= 9999999999
+    && Number.isSafeInteger(parsedMinimumStock) && parsedMinimumStock >= 0 && productBarcodeIsValid && !productBarcodeHasDuplicate;
+  const openVariants = () => {
+    if (!canAddVariants && !variantsEnabled) return;
+    if (editingProductId && !variantsEnabled && (["name","brand","categoryId","status"].some(key => String(form[key] ?? "") !== String(editingProduct[key] ?? "")) || unitSearch !== editingProduct.unitMeasure)) {
+      toast.warning("La conversión conserva nombre, marca, categoría, unidad y estado del original. Guarda o descarta esos cambios antes de convertir. Tu borrador se conserva."); return;
+    }
+    if (!editingProductId) bundleReviewRef.current?.resume({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    else if (variantsSeen) bundleReviewRef.current?.resumeConversion({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    setVariantsSeen(true); setVariantsEnabled(true);
+  };
+  const selectVariantMode = () => {
+    bundleReviewRef.current?.resume({ ...form, unitMeasure: unitSearch }, pendingProductImages);
+    setVariantsSeen(true); setVariantsEnabled(true);
+  };
+  const useSimpleDraft = ({ fields, files }) => {
+    setForm(current => ({ ...current, ...fields })); setUnitSearch(fields.unitMeasure);
+    setPendingProductImages(files); setVariantsEnabled(false);
+    requestAnimationFrame(() => requestAnimationFrame(() => (simpleProductFormRef.current?.querySelector('[data-new-product-name]') || simpleModeRef.current)?.focus({ preventScroll: true })));
+  };
+  const finishNewBundle = async (result, creation) => {
+    const origin = linkedRegistration?.origin === "CATEGORY_QUICK" ? "CATEGORY_QUICK" : "INVENTORY_CREATE";
+    const quickCategory = linkedRegistration?.category;
+    try {
+      const saved = await getProductsRequest();
+      const items = result.productIds.map((id, index) => ({ product: saved.find(product => product.id === id), ...creation?.[index] }));
+      if (items.some(item => !item.product)) throw new Error("No se pudieron recuperar los productos guardados");
+      const category = quickCategory || categories.find(item => item.id === items[0].product.categoryId);
+      const review = { origin, familyId: result.familyId, items, category,
+        confirmation: result.familyId ? "Productos guardados correctamente" : "Producto guardado correctamente" };
+      if (origin === "CATEGORY_QUICK" && !result.familyId && creation && String(form.initialStock ?? "").trim() === "" && items[0].product.status !== false) {
+        entryReviewRef.current = review;
+        goToLinkedEntry({ origin, category, product: items[0].product, entryCompleted: false, entryResult: null, returnToReview: true });
+      } else {
+        setLinkedRegistration(null); setActiveForm(null);
+        setCreationReview(review);
+      }
+    } catch {
+      setLinkedRegistration(null); setActiveForm(null);
+      toast.warning("Guardado confirmado. Consulta Inventario para revisar las existencias; no vuelvas a crear los productos.");
+    }
+    setBundleSaving(false); setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
+    setEditingProductId(null); setPendingProductImages([]); setForm(emptyForm);
+  };
+  const returnFromConversion = ({ fields, files }) => {
+    setForm(current => ({ ...current, price: fields.price, barcode: fields.barcode || "", minimumStock: fields.minimumStock, description: fields.description || "", inStoreOnly: fields.inStoreOnly }));
+    setPendingProductImages(files); setVariantsEnabled(false);
+  };
   const linkedProductIsSaved =
     linkedRegistration?.step === "product" &&
     linkedRegistration.product?.id === editingProductId;
@@ -469,8 +524,9 @@ export default function ProductsPage() {
     Boolean(form.inStoreOnly) !== Boolean(linkedRegistration.product.inStoreOnly) ||
     Boolean(form.status) !== Boolean(linkedRegistration.product.status)
   );
-  const showProductContinueAction = linkedRegistration?.step === "product";
+  const showProductContinueAction = linkedRegistration?.step === "product" && Boolean(editingProductId);
   const canSaveProductAndContinue =
+    !variantsEnabled &&
     showProductContinueAction &&
     Boolean(form.categoryId) &&
     form.name.trim().length >= 2 &&
@@ -488,9 +544,10 @@ export default function ProductsPage() {
   const categoryContinueLabel = linkedCategoryIsSaved
     ? "Actualizar y continuar"
     : "Guardar y agregar producto";
-  const productContinueLabel = linkedProductIsSaved
-    ? "Actualizar y registrar entrada"
-    : "Guardar y registrar entrada";
+  const newProductAction = creationStockAction([form.initialStock]);
+  const productContinueLabel = linkedRegistration?.entryCompleted
+    ? "Actualizar y revisar entrada"
+    : "Actualizar y registrar entrada";
 
   const handleProductImageFiles = (files) => {
     const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -584,9 +641,11 @@ export default function ProductsPage() {
 
       const belongsToLinkedFlow = linkedRegistration?.category?.id === category.id;
       const nextRegistration = {
+        origin: "CATEGORY_QUICK",
         step: "category",
         direction: "idle",
         category,
+        productDraft: belongsToLinkedFlow ? linkedRegistration.productDraft : undefined,
         product: belongsToLinkedFlow && linkedRegistration.product?.categoryId === category.id
           ? { ...linkedRegistration.product, categoryName: category.name }
           : belongsToLinkedFlow
@@ -637,6 +696,8 @@ export default function ProductsPage() {
 
   const handleCreateProduct = async (event, shouldContinue = false) => {
     event.preventDefault();
+    if (variantsEnabled) { bundleReviewRef.current?.review(); return; }
+    if (!editingProductId) { if (!newProductAction.valid) { toast.warning("El stock inicial debe estar vacío o ser un entero no negativo."); return; } bundleReviewRef.current?.saveSimple(); return; }
     const wasEditing = Boolean(editingProductId);
 
     const finalUnitMeasure = unitSearch.trim().replace(/\s+/g, " ");
@@ -675,8 +736,10 @@ export default function ProductsPage() {
 
     try {
       setSubmittingProduct(true);
+      const commercialForm = { ...form };
+      delete commercialForm.initialStock;
       const productData = {
-        ...form,
+        ...commercialForm,
         barcode: normalizedProductBarcode || null,
         brand: String(form.brand || "").trim().replace(/\s+/g, " ") || null,
         categoryId: Number(form.categoryId),
@@ -736,20 +799,17 @@ export default function ProductsPage() {
           minimumStock: product.minimumStock,
           inStoreOnly: Boolean(product.inStoreOnly),
           status: product.status,
+          familyId: product.familyId ?? null,
+          variantOptionIds: product.variantOptionIds || [],
+          associationReason: "",
         });
-        setCategorySearch(product.categoryName || "");
-        setShowCategorySuggestions(false);
         setUnitSearch(product.unitMeasure || "unidad");
-        setShowUnitSuggestions(false);
         setEditingProductId(product.id);
         if (shouldContinue) goToLinkedEntry(nextRegistration);
         else setLinkedRegistration(nextRegistration);
       } else {
         setForm(emptyForm);
-        setCategorySearch("");
-        setShowCategorySuggestions(false);
         setUnitSearch("unidad");
-        setShowUnitSuggestions(false);
         setEditingProductId(null);
         setPendingProductImages([]);
         setActiveForm(null);
@@ -789,6 +849,7 @@ export default function ProductsPage() {
 
   const handleCreateMovement = async (event) => {
     event.preventDefault();
+    if (movementGuard.current || submittingMovement) return;
 
     if (!movementForm.productId) {
       toast.warning("Selecciona un producto desde el buscador");
@@ -810,6 +871,7 @@ export default function ProductsPage() {
     }
 
     try {
+      movementGuard.current = true;
       setSubmittingMovement(true);
       const reason = movementForm.movementType === "ADJUSTMENT"
         ? `${movementForm.adjustmentReason}${movementForm.reason.trim() ? `: ${movementForm.reason.trim()}` : ""}`
@@ -821,7 +883,13 @@ export default function ProductsPage() {
         reason,
       });
 
-      if (linkedRegistration?.step === "ENTRY") {
+      if (entryReviewRef.current) {
+        const review = reviewAfterEntry(entryReviewRef.current, Number(movementForm.productId), movement);
+        entryReviewRef.current = null;
+        setCreationReview(review);
+        setLinkedRegistration(null); setActiveForm(null);
+        setMovementForm(initialMovementForm()); setProductSearch("");
+      } else if (linkedRegistration?.step === "ENTRY") {
         setLinkedRegistration((current) => current ? {
           ...current,
           entryCompleted: true,
@@ -850,10 +918,17 @@ export default function ProductsPage() {
         toast.warning(`${movement.stock.productName} quedó con stock bajo: ${movement.stock.currentStock} unidades. Mínimo: ${movement.stock.minimumStock}.`);
       }
 
-      await loadData();
+      try { await loadData(); } catch { toast.warning("Entrada confirmada. Actualiza Inventario; no repitas la entrada."); }
     } catch (err) {
+      if (entryReviewRef.current && (!err.response || err.response.status >= 500)) {
+        setCreationReview({ ...entryReviewRef.current, confirmation: null, uncertainProductIds: [...new Set([...(entryReviewRef.current.uncertainProductIds || []), Number(movementForm.productId)])],
+          uncertainty: "No se pudo confirmar el resultado de la entrada. Consulta el historial y el stock antes de registrar otra para este SKU. No se reintentará automáticamente." });
+        entryReviewRef.current = null;
+        setLinkedRegistration(null); setActiveForm(null);
+      }
       toast.error(getApiError(err, "No se pudo registrar el movimiento"));
     } finally {
+      movementGuard.current = false;
       setSubmittingMovement(false);
     }
   };
@@ -876,10 +951,7 @@ export default function ProductsPage() {
     setCategoryListSearch("");
     setCategoryDeleteTarget(null);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setMovementForm(initialMovementForm());
     setProductSearch("");
     setShowMovementProductSuggestions(false);
@@ -893,7 +965,8 @@ export default function ProductsPage() {
     const category = linkedRegistration?.category;
     if (!category) return;
 
-    setLinkedRegistration((current) => current ? { ...current, step: "category", direction: "backward" } : current);
+    const productDraft = { form, unitSearch, files: pendingProductImages, editingProductId, variantsEnabled, variantsSeen, bundle: bundleReviewRef.current?.snapshot() };
+    setLinkedRegistration((current) => current ? { ...current, productDraft, step: "category", direction: "backward" } : current);
     setEditingCategoryId(category.id);
     setCategoryName(category.name);
     setCategoryDescription(category.description || "");
@@ -904,8 +977,19 @@ export default function ProductsPage() {
     const category = registration?.category;
     const product = registration?.product;
     if (!category) return;
+    if (registration.origin !== "CATEGORY_QUICK") {
+      if (product) startEditing(product, true);
+      else { openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) }); }
+      return;
+    }
 
     setLinkedRegistration({ ...registration, step: "product", direction });
+    if (registration.productDraft) {
+      const saved = registration.productDraft;
+      setEditingProductId(saved.editingProductId); setForm(saved.form); setUnitSearch(saved.unitSearch);
+      setPendingProductImages(saved.files); setVariantsEnabled(saved.variantsEnabled); setVariantsSeen(saved.variantsSeen);
+      setActiveForm("product"); return;
+    }
     setEditingProductId(product?.id ?? null);
     setPendingProductImages([]);
     setForm(product ? {
@@ -919,14 +1003,14 @@ export default function ProductsPage() {
       minimumStock: product.minimumStock,
       inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
+      familyId: product.familyId ?? null,
+      variantOptionIds: product.variantOptionIds || [],
+      associationReason: "",
     } : {
       ...emptyForm,
       categoryId: String(category.id),
     });
-    setCategorySearch(product?.categoryName || category.name);
-    setShowCategorySuggestions(false);
     setUnitSearch(product?.unitMeasure || "unidad");
-    setShowUnitSuggestions(false);
     setActiveForm("product");
   };
 
@@ -949,6 +1033,10 @@ export default function ProductsPage() {
   const addAnotherProductToLinkedCategory = () => {
     const category = linkedRegistration?.category;
     if (!category) return;
+    if (linkedRegistration.origin !== "CATEGORY_QUICK") {
+      openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) });
+      return;
+    }
 
     setLinkedRegistration((current) => current ? {
       ...current,
@@ -964,17 +1052,17 @@ export default function ProductsPage() {
       ...emptyForm,
       categoryId: String(category.id),
     });
-    setCategorySearch(category.name);
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setMovementForm(initialMovementForm());
     setProductSearch("");
     setShowMovementProductSuggestions(false);
     setActiveForm("product");
   };
 
-  const startEditing = (product) => {
+  const startEditing = (product, individual = false) => {
+    setLinkedRegistration(null); entryReviewRef.current = null; setCreationReview(null);
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
+    if (product.familyId && !individual) { setActiveForm(null); setBundleEditor({ familyId: product.familyId }); return; }
     setEditingProductId(product.id);
     setActiveForm("product");
     setPendingProductImages([]);
@@ -989,21 +1077,20 @@ export default function ProductsPage() {
       minimumStock: product.minimumStock,
       inStoreOnly: Boolean(product.inStoreOnly),
       status: product.status,
+      familyId: product.familyId ?? null,
+      variantOptionIds: product.variantOptionIds || [],
+      associationReason: "",
     });
-    setCategorySearch(product.categoryName || "");
-    setShowCategorySuggestions(false);
     setUnitSearch(product.unitMeasure || "");
-    setShowUnitSuggestions(false);
   };
 
   const cancelEditing = () => {
+    if (bundleSaving) return;
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false);
     setEditingProductId(null);
     setPendingProductImages([]);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
     setActiveForm(null);
   };
 
@@ -1020,10 +1107,10 @@ export default function ProductsPage() {
 
     try {
       if (productStatusTarget.status === false) {
-        await updateProductRequest(productStatusTarget.id, { status: true });
+        await updateProductRequest(productStatusTarget.id, { status: true }, productStatusTarget.updatedAt);
         toast.success("Producto activado exitosamente");
       } else {
-        await deactivateProductRequest(productStatusTarget.id);
+        await deactivateProductRequest(productStatusTarget.id, productStatusTarget.updatedAt);
         toast.success("Producto desactivado exitosamente");
       }
 
@@ -1035,6 +1122,7 @@ export default function ProductsPage() {
   };
 
   const openCategoryForm = () => {
+    entryReviewRef.current = null; setCreationReview(null);
     setLinkedRegistration(null);
     setActiveForm("category");
     setEditingProductId(null);
@@ -1045,25 +1133,22 @@ export default function ProductsPage() {
     setCategoryListSearch("");
     setCategoryDeleteTarget(null);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
   };
 
   const openProductForm = () => {
+    entryReviewRef.current = null; setCreationReview(null);
+    setVariantsEnabled(false); setBundleDialogActive(false); setVariantsSeen(false); setBundleSaving(false);
     setLinkedRegistration(null);
     setActiveForm("product");
     setEditingProductId(null);
     setPendingProductImages([]);
     setForm(emptyForm);
-    setCategorySearch("");
-    setShowCategorySuggestions(false);
     setUnitSearch("unidad");
-    setShowUnitSuggestions(false);
   };
 
   const openMovementForm = (movementType) => {
+    entryReviewRef.current = null; setCreationReview(null);
     setLinkedRegistration(null);
     setActiveForm(movementType);
     setMovementForm(initialMovementForm(movementType));
@@ -1129,6 +1214,14 @@ export default function ProductsPage() {
   };
 
   const closeMovementForm = () => {
+    if (movementGuard.current) return;
+    if (entryReviewRef.current) {
+      setCreationReview(entryReviewRef.current);
+      entryReviewRef.current = null;
+      setLinkedRegistration(null); setActiveForm(null);
+      setMovementForm(initialMovementForm()); setProductSearch("");
+      return;
+    }
     if (linkedRegistration) {
       closeLinkedRegistration();
       return;
@@ -1140,27 +1233,6 @@ export default function ProductsPage() {
     setShowMovementProductSuggestions(false);
   };
 
-  const applyUnitMeasure = (value) => {
-    const unitMeasure = value.trim().replace(/\s+/g, " ");
-    if (!unitMeasure) return;
-
-    setUnitSearch(unitMeasure);
-    setShowUnitSuggestions(false);
-    setForm((current) => ({
-      ...current,
-      unitMeasure,
-    }));
-  };
-
-  const selectProductCategory = (category) => {
-    setForm((current) => ({ ...current, categoryId: String(category.id) }));
-    setCategorySearch(category.name);
-    setShowCategorySuggestions(false);
-  };
-
-  const selectUnitSuggestion = (unit) => {
-    applyUnitMeasure(unit);
-  };
 
   const selectMovementProduct = (product) => {
     setProductSearch(product.name);
@@ -1168,28 +1240,6 @@ export default function ProductsPage() {
     setMovementForm((current) => ({ ...current, productId: String(product.id) }));
   };
 
-  const handleProductCategorySearchKeyDown = (event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    const category = getSingleOrExactSuggestion(
-      filteredFormCategories,
-      categorySearch,
-      (item) => [item.name, item.id, `#${item.id}`],
-    );
-
-    if (category) selectProductCategory(category);
-  };
-
-  const handleUnitSearchKeyDown = (event) => {
-    if (event.key !== "Enter") return;
-
-    event.preventDefault();
-    const unit = getSingleOrExactSuggestion(filteredUnitOptions, unitSearch, (item) => [item]);
-
-    if (unit) selectUnitSuggestion(unit);
-    else if (unitSearch.trim()) applyUnitMeasure(unitSearch);
-  };
 
   const handleMovementProductSearchKeyDown = (event) => {
     if (event.key !== "Enter") return;
@@ -1211,7 +1261,9 @@ export default function ProductsPage() {
   };
 
   const handleExportProducts = () => {
-    const filename = showInactiveProducts
+    const filename = [showInactiveProducts, lowStockOnly, outOfStockOnly].filter(Boolean).length > 1
+      ? "inventario-filtrado.xlsx"
+      : showInactiveProducts
       ? "productos-desactivados.xlsx"
       : outOfStockOnly
         ? "productos-sin-stock.xlsx"
@@ -1232,18 +1284,10 @@ export default function ProductsPage() {
         { key: "unidad", header: "Unidad" },
         { key: "stockMinimo", header: "Stock mínimo" },
         { key: "estado", header: "Estado de stock" },
+        { key: "familia", header: "Familia" },
+        { key: "atributos", header: "Atributos de variante" },
       ],
-      rows: filteredProducts.map((product) => ({
-        id: product.id,
-        producto: product.name,
-        codigoBarra: product.barcode || "",
-        categoria: product.categoryName,
-        precio: Number(product.price || 0),
-        stockActual: Number(product.currentStock || 0),
-        unidad: product.unitMeasure,
-        stockMinimo: Number(product.minimumStock || 0),
-        estado: getStockStatus(product, user?.role).label,
-      })),
+      rows: inventoryExportRows(filteredProducts, user?.role),
     });
     toast.success("Inventario exportado exitosamente");
   };
@@ -1257,6 +1301,7 @@ export default function ProductsPage() {
         { key: "producto", header: "Producto" },
         { key: "tipo", header: "Tipo de movimiento" },
         { key: "cantidad", header: "Cantidad" },
+        { key: "identidad", header: "Procedencia de identidad" },
         { key: "responsable", header: "Responsable" },
         { key: "motivo", header: "Motivo" },
       ],
@@ -1265,6 +1310,7 @@ export default function ProductsPage() {
         producto: movement.productName,
         tipo: MOVEMENT_LABELS[movement.movementType] || movement.movementType,
         cantidad: Number(movement.quantity || 0),
+        identidad: identityProvenance(movement.historicalIdentity),
         responsable: movement.userNames || movement.userSurnames
           ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim()
           : "Sistema",
@@ -1275,39 +1321,29 @@ export default function ProductsPage() {
   };
 
   return (
-    <section className={pageClass}>
+    <section ref={inventoryStartRef} className={`${pageClass} inventory-compact-page`}>
       <LoadingOverlay active={loading} />
+      <CreatedProductsStockDialog result={creationReview} onClose={() => setCreationReview(null)} onEntry={product => {
+        const category = creationReview.category || categories.find(item => item.id === product.categoryId);
+        entryReviewRef.current = creationReview;
+        setCreationReview(null); goToLinkedEntry({ origin: creationReview.origin, category, product, entryCompleted: false, entryResult: null, returnToReview: true });
+      }} onAnother={() => {
+        const { category, origin } = creationReview; setCreationReview(null);
+        if (origin === "CATEGORY_QUICK") goToLinkedProduct("forward", { origin, category, product: null, entryCompleted: false, entryResult: null });
+        else { openProductForm(); setForm({ ...emptyForm, categoryId: String(category.id) }); }
+      }} />
 
-      <div className={pageHeaderClass}>
+      <div className={`${pageHeaderClass} inventory-section-header`}>
         <div>
-          <h1>Inventario</h1>
-          <p>Listado y gestión de productos</p>
+          <h1>{activeView === "history" ? "Historial de inventario" : "Inventario"}</h1>
+          <p>{activeView === "history" ? "Movimientos de unidades de inventario: entradas, ventas, ajustes y devoluciones." : "Listado y gestión de productos"}</p>
         </div>
-        {canViewHistory && (
-          <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
-            <button
-              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "inventory" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
-              type="button"
-              onClick={() => setActiveView("inventory")}
-              aria-pressed={activeView === "inventory"}
-            >
-              Inventario
-            </button>
-            <button
-              className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "history" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
-              type="button"
-              onClick={() => setActiveView("history")}
-              aria-pressed={activeView === "history"}
-            >
-              Historial de inventario
-            </button>
-          </div>
-        )}
+        {canViewHistory && <InventoryNavigation active={activeView} />}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-        <div className={`flex min-w-0 items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-wrap ${activeView === "inventory" ? (canManage || canCreateMovement ? "min-[721px]:min-w-120 flex-1" : "w-full max-w-215 flex-none") : "w-full max-w-190 flex-none"}`}>
-          <label className="relative block min-w-0 flex-1 max-[720px]:min-w-60 max-[720px]:max-w-none">
+      <div className="inventory-toolbar flex flex-wrap items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
+        <div data-scanner={activeView === "inventory"} className="inventory-search-controls flex min-w-0 flex-none items-center gap-2.5 max-[720px]:w-full max-[720px]:flex-wrap">
+          <label className="inventory-search relative block min-w-0 max-[720px]:w-full">
             <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
             <input
               className="pl-9.75"
@@ -1329,7 +1365,7 @@ export default function ProductsPage() {
             </button>
           )}
           <AppSelect
-            className={`w-full shrink-0 max-[720px]:max-w-none ${activeView === "inventory" ? (canManage || canCreateMovement ? "max-w-40" : "max-w-55") : "max-w-55"}`}
+            className="w-48 shrink-0 max-[720px]:w-full"
             value={categoryFilter}
             onChange={(value) => setCategoryFilter(String(value))}
             ariaLabel="Filtrar productos por categoría"
@@ -1337,7 +1373,7 @@ export default function ProductsPage() {
           />
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center justify-end gap-2.25 [&>button]:px-3 max-[1180px]:flex-wrap max-[980px]:ml-0 max-[980px]:w-full max-[980px]:shrink max-[980px]:justify-start max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2 [&>button]:mr-0! [&>button]:px-3 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
             {canManage && (
               <>
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
@@ -1366,6 +1402,8 @@ export default function ProductsPage() {
         )}
       </div>
 
+      {canManage && familyStatusTarget && <FamilyDeactivationDialog familyId={familyStatusTarget} userId={user.id} onClose={() => setFamilyStatusTarget(null)} onSaved={async () => { setFamilyStatusTarget(null); await loadData(); }} />}
+      {canManage && familyActivationTarget && <FamilyDeactivationDialog activate familyId={familyActivationTarget} userId={user.id} onClose={() => setFamilyActivationTarget(null)} onSaved={async () => { setFamilyActivationTarget(null); await loadData(); }} />}
       <AppModal
         open={inventoryScannerOpen}
         title="Escanear producto"
@@ -1397,18 +1435,8 @@ export default function ProductsPage() {
         description="Organiza los productos dentro del catálogo."
         onClose={closeCategoryForm}
         size="medium"
+        flowActions={canSaveCategoryAndContinue ? { right: <button className="product-positive-action creation-continue-action" type="button" onClick={handleCategoryContinue} disabled={submittingCategory}><span>{categoryContinueLabel}</span><ArrowRight size={18} aria-hidden="true" /></button> } : undefined}
       >
-        {canSaveCategoryAndContinue && !submittingCategory && (
-          <button
-            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--medium"
-            type="button"
-            onClick={handleCategoryContinue}
-            aria-label={categoryContinueLabel}
-          >
-            <span>{categoryContinueLabel}</span>
-            <ArrowRight size={22} />
-          </button>
-        )}
         <div
           className={linkedRegistration?.step === "category" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
@@ -1428,7 +1456,7 @@ export default function ProductsPage() {
             <div className="grid gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-3">
               <div className="flex items-center justify-between gap-3 max-[620px]:items-start max-[620px]:flex-col">
                 <span className="text-[13px] font-[650] text-ink-700">Categorías existentes</span>
-                <span className="text-[11px] font-semibold text-slate-500">
+                <span className="table-result-count text-[11px] font-semibold">
                   {filteredExistingCategories.length} de {categories.length}
                 </span>
               </div>
@@ -1483,7 +1511,7 @@ export default function ProductsPage() {
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+            <div className={formActionsClass}>
               {linkedRegistration?.step === "category" ? (
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={closeLinkedRegistration} disabled={submittingCategory}>
                   Finalizar
@@ -1497,21 +1525,11 @@ export default function ProductsPage() {
                   Cancelar
                 </button>
               )}
-              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-                {canSaveCategoryAndContinue && !submittingCategory && (
-                  <button
-                    className="linked-flow-mobile-action"
-                    type="button"
-                    onClick={handleCategoryContinue}
-                  >
-                    {categoryContinueLabel}
-                    <ArrowRight size={17} />
-                  </button>
-                )}
-                <button className="mr-0" type="submit" disabled={submittingCategory}>
+              <>
+                <button className="product-positive-action" type="submit" disabled={submittingCategory}>
                   {submittingCategory ? "Guardando..." : editingCategoryId ? "Actualizar categoría" : "Guardar categoría"}
                 </button>
-              </div>
+              </>
             </div>
           </form>
         </div>
@@ -1538,84 +1556,40 @@ export default function ProductsPage() {
 
       <AppModal
         open={canManage && activeForm === "product"}
-        title={linkedRegistration?.step === "product" ? "Nuevo producto" : editingProductId ? "Editar producto" : "Nuevo producto"}
+        suspended={bundleDialogActive || nameCorrectionOpen}
+        title={editingProductId && variantsEnabled ? "Convertir producto en variantes" : editingProductId ? "Editar producto" : "Nuevo producto"}
+        initialFocusSelector={!editingProductId && !variantsEnabled ? '[data-new-product-name]' : undefined}
         description="Completa la información comercial y de inventario."
-        onClose={linkedRegistration ? closeLinkedRegistration : cancelEditing}
-        size="large"
+        onClose={() => { if (!bundleSaving) { if (linkedRegistration) closeLinkedRegistration(); else cancelEditing(); } }}
+        size={variantsEnabled ? "xlarge" : "large"}
+        flowActions={linkedRegistration?.step === "product" ? {
+          left: <button className="product-positive-action creation-continue-action" type="button" onClick={goToLinkedCategory} disabled={submittingProduct || bundleSaving}><ArrowLeft size={18} aria-hidden="true" /><span>Volver a categoría</span></button>,
+          right: <button className="product-positive-action creation-continue-action" type="button"
+            disabled={submittingProduct || managingProductImages || bundleSaving || (variantsEnabled ? bundleAction.disabled : editingProductId ? !canSaveProductAndContinue : !canAddVariants || !newProductAction.valid)}
+            onClick={event => { if (variantsEnabled) bundleReviewRef.current?.review(); else if (editingProductId && canSaveProductAndContinue) handleProductContinue(event); else simpleProductFormRef.current?.requestSubmit(); }}>
+            <span>{submittingProduct || bundleSaving ? "Guardando…" : variantsEnabled ? bundleAction.label : editingProductId ? productContinueLabel : newProductAction.label}</span><ArrowRight size={18} aria-hidden="true" />
+          </button>,
+        } : undefined}
       >
-        {linkedRegistration?.step === "product" && (
-          <button
-            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
-            type="button"
-            onClick={goToLinkedCategory}
-            disabled={submittingProduct}
-            aria-label="Volver a categoría"
-          >
-            <ArrowLeft size={22} />
-            <span>Volver a categoría</span>
-          </button>
-        )}
-        {canSaveProductAndContinue && !submittingProduct && (
-          <button
-            className="linked-flow-side-action linked-flow-side-action--right linked-flow-side-action--large"
-            type="button"
-            onClick={handleProductContinue}
-            aria-label={productContinueLabel}
-          >
-            <span>{productContinueLabel}</span>
-            <ArrowRight size={22} />
-          </button>
-        )}
         <div
           className={linkedRegistration?.step === "product" ? `linked-registration-step linked-registration-step--${linkedRegistration.direction}` : ""}
         >
-          <form className="grid gap-3.75" onSubmit={handleCreateProduct}>
-            <label className="relative">
-              Buscar categoría
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={categorySearch}
-                  onChange={(event) => {
-                    setCategorySearch(event.target.value);
-                    setForm((current) => ({ ...current, categoryId: "" }));
-                    setShowCategorySuggestions(Boolean(event.target.value.trim()));
-                  }}
-                  onFocus={() => setShowCategorySuggestions(Boolean(categorySearch.trim()))}
-                  onKeyDown={handleProductCategorySearchKeyDown}
-                  placeholder="Nombre o ID de categoría"
-                  required
-                />
-              </div>
-              {showCategorySuggestions && categorySearch.trim() && (
-                filteredFormCategories.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredFormCategories.slice(0, 6).map((category) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={category.id}
-                        onClick={() => selectProductCategory(category)}
-                      >
-                        <span>{category.name}</span>
-                        <span className="font-mono text-[11px] text-slate-500">#{category.id}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron categorías</p>
-                )
-              )}
-            </label>
-            <label>
-              Nombre
-              <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
-            </label>
-            <label>
+          {!editingProductId && <div className="product-mode-switch mb-4 grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Tipo de producto nuevo">
+            <button ref={simpleModeRef} type="button" className={variantsEnabled ? secondaryButtonClass : "product-positive-action"} aria-pressed={!variantsEnabled} disabled={bundleSaving} onClick={()=>{if(variantsEnabled)bundleReviewRef.current?.continueAsSimple();}}>Producto simple</button>
+            <button type="button" className={variantsEnabled ? "product-positive-action" : secondaryButtonClass} aria-pressed={variantsEnabled} disabled={bundleSaving} onClick={()=>{if(!variantsEnabled)selectVariantMode();}}>Producto con variantes</button>
+          </div>}
+          <div hidden={variantsEnabled} className={variantsEnabled ? "hidden" : ""}>
+          <form ref={simpleProductFormRef} className="grid gap-3.75" onSubmit={handleCreateProduct}>
+            <fieldset disabled={bundleSaving || Boolean(editingProductId && variantsEnabled)} className="m-0 grid min-w-0 gap-3.75 border-0 p-0" aria-label="Datos comerciales del producto">
+            {editingProduct?.hasHistory&&!editingProduct.familyId?<ProductClassificationAction field="category" key={`category-${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} categories={categories} dirty={productNameDraftIsDirty(form,unitSearch,editingProduct,pendingProductImages)} busy={bundleSaving||submittingProduct||managingProductImages} onOpenChange={setNameCorrectionOpen} onSaved={async r=>{setForm(p=>({...p,categoryId:String(r.value)}));await loadData();}}/>
+              :<ProductCategoryField categories={categories} value={form.categoryId} onChange={categoryId=>setForm(current=>({...current,categoryId}))}/>}
+            {editingProduct ? <ProductNameCorrectionAction asField label="Nombre" key={`${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} dirty={productNameDraftIsDirty(form, unitSearch, editingProduct, pendingProductImages)} busy={bundleSaving || submittingProduct || managingProductImages} onOpenChange={setNameCorrectionOpen}
+              onConflict={()=>toast.warning("Recarga el editor y revisa los datos antes de guardar.")} onRenamed={async result=>{setForm(p=>({...p,name:result.name}));await loadData();}}/>
+              : <label>Nombre<input data-new-product-name value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} required/></label>}
+            {editingProduct?.hasHistory&&!editingProduct.familyId?<ProductClassificationAction field="brand" key={`brand-${editingProductId}-${editingProduct.updatedAt}`} product={editingProduct} categories={categories} dirty={productNameDraftIsDirty(form,unitSearch,editingProduct,pendingProductImages)} busy={bundleSaving||submittingProduct||managingProductImages} onOpenChange={setNameCorrectionOpen} onSaved={async r=>{setForm(p=>({...p,brand:r.value}));await loadData();}}/>:<label>
               Marca (opcional)
               <input value={form.brand} maxLength={100} onChange={(event) => setForm((current) => ({ ...current, brand: event.target.value }))} placeholder="Sin marca registrada" />
-            </label>
+            </label>}
             <label>
               Código de barra (opcional)
               <div className="relative">
@@ -1643,48 +1617,9 @@ export default function ProductsPage() {
             </label>
             <label>
               Descripción
-              <input
-                value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              />
+              <textarea className="min-h-20 w-full min-w-0 resize-y rounded border border-slate-300 bg-white p-2 text-ink-950" value={form.description} onChange={event=>setForm(current=>({...current,description:event.target.value}))}/>
             </label>
-            <label className="relative">
-              Buscar unidad de medida
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-slate-500" size={17} />
-                <input
-                  className="pl-9.75"
-                  value={unitSearch}
-                  onChange={(event) => {
-                    setUnitSearch(event.target.value);
-                    setForm((current) => ({ ...current, unitMeasure: event.target.value }));
-                    setShowUnitSuggestions(Boolean(event.target.value.trim()));
-                  }}
-                  onFocus={() => setShowUnitSuggestions(Boolean(unitSearch.trim()))}
-                  onKeyDown={handleUnitSearchKeyDown}
-                  placeholder="Ej: caja, kg, metro"
-                  required
-                />
-              </div>
-              {showUnitSuggestions && unitSearch.trim() && (
-                filteredUnitOptions.length > 0 ? (
-                  <div className={`${suggestionListClass} absolute top-full right-0 left-0 z-30`}>
-                    {filteredUnitOptions.slice(0, 6).map((unit) => (
-                      <button
-                        className={suggestionButtonClass}
-                        type="button"
-                        key={unit}
-                        onClick={() => selectUnitSuggestion(unit)}
-                      >
-                        <span>{unit}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={`${suggestionEmptyClass} absolute top-full right-0 left-0 z-30 mt-2`}>No se encontraron unidades (presione Enter para agregar)</p>
-                )
-              )}
-            </label>
+            <ProductUnitField value={unitSearch} onChange={unitMeasure=>{setUnitSearch(unitMeasure);setForm(current=>({...current,unitMeasure}));}}/>
             <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
               <label>
                 Precio
@@ -1692,7 +1627,7 @@ export default function ProductsPage() {
                   type="number"
                   value={form.price}
                   onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
-                  required
+                  required={!variantsEnabled}
                 />
               </label>
               <label>
@@ -1705,7 +1640,9 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
-            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[5px] border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-ink-950">
+            {!editingProductId && <label>Stock inicial<input type="number" min="0" max="2147483647" step="1" value={form.initialStock} onChange={event=>setForm(current=>({...current,initialStock:event.target.value}))}/><span className="text-xs text-slate-500">Vacío: podrás registrar una entrada después. Cero: se crea sin existencias. Una cantidad positiva registra su entrada al guardar.</span></label>}
+            {editingProduct && <p className="m-0 text-sm">Stock actual: <strong>{formatQuantityWithUnit(editingProduct.currentStock,editingProduct.unitMeasure)}</strong></p>}
+            <label className="variant-online-control rounded border border-slate-200 bg-slate-50 px-3!">
               <input
                 className="mt-0.5 size-4 shrink-0"
                 type="checkbox"
@@ -1715,12 +1652,13 @@ export default function ProductsPage() {
               <span>
                 <strong className="block">Solo presencial</strong>
                 <small className="mt-0.5 block font-normal leading-5 text-slate-500">
-                  El producto se mostrará en el catálogo, pero no podrá comprarse en línea.
+                  Visible en catálogo, sin compra online.
                 </small>
               </span>
             </label>
+            </fieldset>
             <ProductImagesManager
-              disabled={submittingProduct || managingProductImages}
+              disabled={submittingProduct || managingProductImages || bundleSaving || Boolean(editingProductId && variantsEnabled)}
               images={editingProduct?.images || []}
               pendingFiles={pendingProductImages}
               onFilesSelected={handleProductImageFiles}
@@ -1729,35 +1667,38 @@ export default function ProductsPage() {
               onDelete={handleDeleteProductImage}
               onMove={handleMoveProductImage}
             />
-            <div className={formActionsClass}>
+            {variantsEnabled && <p className="m-0 text-xs text-slate-500">La configuración de variantes se conserva. Guardar registrará el conjunto completo, sin crear un producto general adicional.</p>}
+            {!editingProductId && variantsSeen && <p className="m-0 text-xs text-slate-500">Se guardará solo este artículo. Los atributos y otras variantes no se guardarán; su borrador se conserva si vuelves al modo con variantes.</p>}
+            <div className={`product-footer-actions ${linkedRegistration?.step === "product" ? "min-[721px]:grid-cols-2!" : ""}`}>
               {linkedRegistration?.step === "product" ? (
-                <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct}>
+                <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingProduct || bundleSaving}>
                   Finalizar
                 </button>
               ) : (
-                <button className={secondaryButtonClass} type="button" onClick={cancelEditing} disabled={submittingProduct}>
+                <button className={secondaryButtonClass} type="button" onClick={cancelEditing} disabled={submittingProduct || bundleSaving}>
                   Cancelar
                 </button>
               )}
-              <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-                {linkedRegistration?.step === "product" && (
-                  <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={goToLinkedCategory} disabled={submittingProduct}>
-                    <ArrowLeft size={17} />
-                    Volver
-                  </button>
-                )}
-                {canSaveProductAndContinue && !submittingProduct && (
-                  <button className="linked-flow-mobile-action" type="button" onClick={handleProductContinue}>
-                    {productContinueLabel}
-                    <ArrowRight size={17} />
-                  </button>
-                )}
-                <button type="submit" disabled={submittingProduct || managingProductImages}>
-                  {submittingProduct ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : "Guardar producto"}
+              <button type="button" className={`${secondaryButtonClass} mx-auto! min-h-11 max-w-full`}
+                aria-describedby={!canAddVariants && !variantsEnabled ? "variants-base-requirements" : undefined}
+                title={!canAddVariants && !variantsEnabled ? "Completa nombre, categoría, precio, unidad, stock mínimo y un código de barras válido si corresponde" : undefined}
+                disabled={Boolean(editingProduct?.familyId) || bundleSaving || (!canAddVariants && !variantsEnabled)} onClick={openVariants}>
+                {editingProductId ? "Convertir en producto con variantes" : "Agregar variantes"}
+              </button>
+              {linkedRegistration?.step !== "product" && <div className="flex min-w-0 items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
+                <button type="submit" className="product-positive-action creation-continue-action" disabled={submittingProduct || managingProductImages || bundleSaving || (!editingProductId && (!canAddVariants || !newProductAction.valid))}>
+                  <span>{submittingProduct || bundleSaving ? "Guardando..." : managingProductImages ? "Actualizando imágenes..." : editingProductId ? "Actualizar producto" : newProductAction.label}</span>{!editingProductId && <ArrowRight size={18} aria-hidden="true" />}
                 </button>
-              </div>
+              </div>}
             </div>
+            {!canAddVariants && !variantsEnabled && !editingProduct?.familyId && <p id="variants-base-requirements" className="m-0 text-xs text-slate-500">Para agregar variantes, completa nombre, categoría, unidad, precio y stock mínimo. Si ingresas un código de barras, debe ser válido y no estar repetido.</p>}
           </form>
+          </div>
+          {!editingProductId && activeForm === "product" && <ProductBundleEditor inline initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled} simpleModeEnabled commonData={{ ...form, unitMeasure: unitSearch }} initialData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages}
+            reviewRef={bundleReviewRef} externalActions={linkedRegistration?.step === "product"} onActionChange={setBundleAction} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive} categories={categories} products={products} onSaved={loadData} onClose={cancelEditing} onSimple={useSimpleDraft} onCreated={finishNewBundle} />}
+          {editingProductId && variantsSeen && activeForm === "product" && !editingProduct?.familyId && <ProductBundleEditor inline conversionId={editingProductId} initialSnapshot={linkedRegistration?.productDraft?.bundle} modalOpen={variantsEnabled}
+            commonData={{ ...form, unitMeasure: unitSearch }} pendingFiles={pendingProductImages} reviewRef={bundleReviewRef} externalActions={linkedRegistration?.step === "product"} onActionChange={setBundleAction} onBusyChange={setBundleSaving} onDialogChange={setBundleDialogActive}
+            categories={categories} onSaved={loadData} onBack={returnFromConversion} onClose={cancelEditing} onCreated={finishNewBundle} />}
         </div>
       </AppModal>
 
@@ -1799,22 +1740,28 @@ export default function ProductsPage() {
       <AppModal
         open={canCreateMovement && (activeForm === "ENTRY" || activeForm === "ADJUSTMENT")}
         title={activeForm === "ENTRY" ? "Registrar entrada" : "Registrar ajuste administrativo"}
+        initialFocusSelector={linkedRegistration?.step === "ENTRY" ? 'input[type="number"]' : 'input[placeholder="Buscar por producto, ID o categoría"]'}
         description={activeForm === "ENTRY"
           ? "Aumenta el stock disponible del producto seleccionado."
           : "Establece el stock exacto después de una revisión administrativa."}
         onClose={closeMovementForm}
         size="large"
+        flowActions={quickReviewEntry ? { left: <button className="product-positive-action creation-continue-action" type="button" onClick={closeMovementForm} disabled={submittingMovement}><ArrowLeft size={18} aria-hidden="true" /><span>Volver a productos guardados</span></button> } : undefined}
+        footer={reviewEntry ? <>
+          {!quickReviewEntry && <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>Volver al resumen</button>}
+          <button className="product-positive-action" type="submit" form={movementFormId} disabled={submittingMovement}>{submittingMovement ? "Registrando..." : "Confirmar entrada"}</button>
+        </> : undefined}
       >
-        {linkedRegistration?.step === "ENTRY" && (
+        {linkedRegistration?.step === "ENTRY" && !reviewEntry && (
           <button
-            className="linked-flow-side-action linked-flow-side-action--left linked-flow-side-action--large"
+            className="linked-flow-back"
             type="button"
-            onClick={() => goToLinkedProduct("backward")}
+            onClick={() => entryReviewRef.current ? closeMovementForm() : goToLinkedProduct("backward")}
             disabled={submittingMovement}
-            aria-label="Volver a producto"
+            aria-label={linkedRegistration?.returnToReview ? "Volver a productos guardados" : "Volver a producto"}
           >
             <ArrowLeft size={22} />
-            <span>Volver a producto</span>
+            <span>{linkedRegistration?.returnToReview ? "Volver a productos guardados" : "Volver a producto"}</span>
           </button>
         )}
         <div
@@ -1838,7 +1785,7 @@ export default function ProductsPage() {
               </span>
             </div>
             <div className="flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-stretch">
-              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
+              <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>
                 Finalizar
               </button>
               <button type="button" onClick={addAnotherProductToLinkedCategory} disabled={submittingMovement}>
@@ -1848,7 +1795,7 @@ export default function ProductsPage() {
             </div>
           </div>
         ) : (
-        <form className="grid gap-3.75" onSubmit={handleCreateMovement}>
+        <form id={movementFormId} className="grid gap-3.75" onSubmit={handleCreateMovement}>
           {movementForm.movementType === "ADJUSTMENT" && (
             <div className="inventory-adjustment-note flex items-start gap-2.75 rounded-[5px] border border-l-4 border-slate-200 border-l-rust-500 bg-[#f8fafc] px-3.5 py-3 text-ink-700">
               <Info className="shrink-0 text-rust-600" size={19} />
@@ -1935,6 +1882,8 @@ export default function ProductsPage() {
           )}
           {selectedMovementProduct && (
             <div className={`grid gap-1 border-l-4 px-3.25 py-2.75 ${estimatedLowStock ? "border-l-rust-500 bg-rust-50 text-[#92400e]" : "border-l-positive-600 bg-positive-50"}`}>
+              <strong className="break-words text-sm">#{selectedMovementProduct.id} · {selectedMovementProduct.name}</strong>
+              {inventoryVariantLabel(selectedMovementProduct) && <span className="break-words text-xs">{inventoryVariantLabel(selectedMovementProduct)}</span>}
               <span className="text-xs">Stock final estimado</span>
               <strong>
                 {estimatedStock} unidades · mínimo {selectedMovementProduct.minimumStock}
@@ -1942,16 +1891,16 @@ export default function ProductsPage() {
               {estimatedLowStock && <span className="text-xs">Este movimiento dejará el producto con stock bajo.</span>}
             </div>
           )}
-          <div className={formActionsClass}>
+          {!reviewEntry && <div className={formActionsClass}>
             {linkedRegistration?.step === "ENTRY" ? (
-              <button className={secondaryButtonClass} type="button" onClick={closeLinkedRegistration} disabled={submittingMovement}>
-                Finalizar
+              <button className={secondaryButtonClass} type="button" onClick={linkedRegistration?.returnToReview ? closeMovementForm : closeLinkedRegistration} disabled={submittingMovement}>
+                {linkedRegistration?.returnToReview ? "Volver al resumen" : "Finalizar"}
               </button>
             ) : (
               <button className={secondaryButtonClass} type="button" onClick={closeMovementForm} disabled={submittingMovement}>Cancelar</button>
             )}
             <div className="flex items-center justify-end gap-2 max-[900px]:flex-col max-[900px]:items-stretch">
-              {linkedRegistration?.step === "ENTRY" && (
+              {linkedRegistration?.step === "ENTRY" && !linkedRegistration?.returnToReview && (
                 <button className="linked-flow-mobile-action linked-flow-mobile-action--neutral" type="button" onClick={() => goToLinkedProduct("backward")} disabled={submittingMovement}>
                   <ArrowLeft size={17} />
                   Volver
@@ -1965,92 +1914,44 @@ export default function ProductsPage() {
                     : "Confirmar ajuste administrativo"}
               </button>
             </div>
-          </div>
+          </div>}
         </form>
         )}
         </div>
       </AppModal>
 
       {activeView === "inventory" && (
-      <div className={tablePanelClass}>
+      <div className={`${tablePanelClass} inventory-data-panel`}>
         <div className={tableHeadingClass}>
           <div>
-            <p className="m-0!"><TableRecordCount
-              visibleCount={productsPagination.paginatedItems.length}
-              totalCount={visibleStatusProducts.length}
-              filteredCount={filteredProducts.length}
-              hasFilters={hasListFilters}
-              mobileTotalCount={products.length}
-              mobilePage={productsPagination.page}
-              mobilePageSize={productsPagination.pageSize}
-            /></p>
+            <p className="m-0! inventory-result-count table-result-count" aria-live="polite"><span>Mostrando {productsPagination.paginatedItems.length} de {groupedProducts.length} {groupedProducts.length===1?"grupo":"grupos"}</span><span className="inventory-count-separator" aria-hidden="true"> · </span><span>{filteredProducts.length} {filteredProducts.length===1?"artículo":"artículos"} {hasListFilters ? (filteredProducts.length===1?"filtrado":"filtrados") : (filteredProducts.length===1?"visible":"visibles")}</span></p>
           </div>
           <MobileTableTools
-            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly}
-            onClear={() => { setShowInactiveProducts(false); setLowStockOnly(false); setOutOfStockOnly(false); }}
+            hasActiveFilters={showInactiveProducts || lowStockOnly || outOfStockOnly || variantsOnly}
+            value={{ variantsOnly, showInactiveProducts, lowStockOnly, outOfStockOnly }}
+            clearValue={{ variantsOnly: false, showInactiveProducts: false, lowStockOnly: false, outOfStockOnly: false }}
+            onApply={next => { setVariantsOnly(next.variantsOnly); setShowInactiveProducts(next.showInactiveProducts); setLowStockOnly(next.lowStockOnly); setOutOfStockOnly(next.outOfStockOnly); }}
             exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
-            showFilters={canViewInactiveProducts || canViewLowStockFilter}
+            showFilters
           >
-            {canViewInactiveProducts && (
-              <button type="button" onClick={() => { setShowInactiveProducts((current) => !current); setLowStockOnly(false); setOutOfStockOnly(false); }} aria-pressed={showInactiveProducts}>
-                {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
-              </button>
-            )}
-            {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setLowStockOnly((current) => !current); setShowInactiveProducts(false); setOutOfStockOnly(false); }} aria-pressed={lowStockOnly}>
-                {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
-              </button>
-            )}
-            {canViewLowStockFilter && (
-              <button type="button" onClick={() => { setOutOfStockOnly((current) => !current); setShowInactiveProducts(false); setLowStockOnly(false); }} aria-pressed={outOfStockOnly}>
-                {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
-              </button>
-            )}
+            {(draft, setDraft) => [
+              [true, "variantsOnly", "Mostrar productos con variantes"],
+              [canViewInactiveProducts, "showInactiveProducts", "Mostrar productos desactivados"],
+              [canViewLowStockFilter, "lowStockOnly", "Mostrar productos a reponer"],
+              [canViewLowStockFilter, "outOfStockOnly", "Mostrar productos sin stock"],
+            ].filter(([visible]) => visible).map(([, key, label]) => (
+              <button key={key} type="button" className={`inventory-filter-button ${draft[key] ? "inventory-filter-button--active" : ""}`} onClick={() => setDraft(current => ({ ...current, [key]: !current[key] }))} aria-pressed={draft[key]}>{label}</button>
+            ))}
           </MobileTableTools>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
-            {canViewInactiveProducts && (
-              <button
-                className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
-                type="button"
-                onClick={() => {
-                  setShowInactiveProducts((current) => !current);
-                  setLowStockOnly(false);
-                  setOutOfStockOnly(false);
-                }}
-                disabled={lowStockOnly || outOfStockOnly}
-                aria-pressed={showInactiveProducts}
-              >
-                {showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}
-              </button>
-            )}
-            {canViewLowStockFilter && (
-              <button
-                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : lowStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
-                type="button"
-                onClick={() => {
-                  setLowStockOnly((current) => !current);
-                  setOutOfStockOnly(false);
-                }}
-                disabled={showInactiveProducts || outOfStockOnly}
-                aria-pressed={lowStockOnly}
-              >
-                {lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}
-              </button>
-            )}
-            {canViewLowStockFilter && (
-              <button
-                className={`mr-0 min-h-9 px-3 text-xs ${showInactiveProducts || lowStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : outOfStockOnly ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
-                type="button"
-                onClick={() => {
-                  setOutOfStockOnly((current) => !current);
-                  setLowStockOnly(false);
-                }}
-                disabled={showInactiveProducts || lowStockOnly}
-                aria-pressed={outOfStockOnly}
-              >
-                {outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}
-              </button>
-            )}
+            {[
+              [true, variantsOnly, setVariantsOnly, "Mostrar productos con variantes"],
+              [canViewInactiveProducts, showInactiveProducts, setShowInactiveProducts, "Mostrar productos desactivados"],
+              [canViewLowStockFilter, lowStockOnly, setLowStockOnly, "Mostrar productos a reponer"],
+              [canViewLowStockFilter, outOfStockOnly, setOutOfStockOnly, "Mostrar productos sin stock"],
+            ].filter(([visible]) => visible).map(([, enabled, setEnabled, label]) => (
+              <button key={label} type="button" className={`inventory-filter-button ${enabled ? "inventory-filter-button--active" : ""}`} onClick={() => setEnabled(value => !value)} aria-pressed={enabled}>{label}</button>
+            ))}
             {canExportInventory && (
               <button
                 className="mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
@@ -2064,128 +1965,12 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
-        <ResponsiveTableView
-          rows={productsPagination.paginatedItems}
-          getRowKey={(product) => product.id}
-          getRowLabel={(product) => product.name}
-          resetKey={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}`}
-          emptyMessage="No se encontraron productos con los filtros seleccionados."
-          renderSummary={(product) => {
-            const stockStatus = getStockStatus(product, user?.role);
-            return (
-              <div className="grid min-w-0 gap-2">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm text-ink-950">{product.name}</strong>
-                    {product.brand && <span className="block truncate text-xs text-slate-500">{product.brand}</span>}
-                  </div>
-                  <span className={badgeClass(product.status === false ? "neutral" : stockStatus.tone)}>
-                    {product.status === false ? "Desactivado" : stockStatus.label}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <strong className="font-mono text-ink-950">{formatClp(product.price)}</strong>
-                  <span className="font-semibold text-slate-600">Stock: {product.currentStock}</span>
-                </div>
-              </div>
-            );
-          }}
-          renderDetails={(product) => (
-            <>
-              <MobileDetailGrid>
-                <MobileDetailField label="ID">#{product.id}</MobileDetailField>
-                <MobileDetailField label="Código de barra">{product.barcode || "Sin código"}</MobileDetailField>
-                <MobileDetailField label="Categoría">{product.categoryName}</MobileDetailField>
-                <MobileDetailField label="Marca">{product.brand || "Sin marca"}</MobileDetailField>
-                <MobileDetailField label="Unidad">{getDisplayUnit(product.unitMeasure)}</MobileDetailField>
-                {canViewAdministrativeStock && <MobileDetailField label="Stock mínimo">{product.minimumStock}</MobileDetailField>}
-              </MobileDetailGrid>
-              {canManage && (
-                <MobileRowActions>
-                  <button className={secondaryButtonClass} type="button" onClick={() => startEditing(product)}><Pencil size={17} /> Editar</button>
-                  {product.status === false ? (
-                    <button type="button" onClick={() => openProductStatusModal(product)}><CheckCircle size={17} /> Activar</button>
-                  ) : (
-                    <button className={dangerButtonClass} type="button" onClick={() => openProductStatusModal(product)}><XCircle size={17} /> Desactivar</button>
-                  )}
-                </MobileRowActions>
-              )}
-            </>
-          )}
-          desktop={(
-        <div className={tableScrollClass}>
-          <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Producto</th>
-              <th>Código de barra</th>
-              <th>Categoria</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th>Unidad</th>
-              {canViewAdministrativeStock && <th>Minimo</th>}
-              <th>Estado stock</th>
-              {canManage && <th>Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {productsPagination.paginatedItems.map((product) => {
-              const stockStatus = getStockStatus(product, user?.role);
-
-              return (
-                <tr key={product.id}>
-                  <td className={codeCellClass}>#{product.id}</td>
-                  <td>{product.name}{product.brand && <small className="block text-xs text-slate-500">{product.brand}</small>}</td>
-                  <td className={codeCellClass}>{product.barcode || "Sin código"}</td>
-                  <td>{product.categoryName}</td>
-                  <td className={numericCellClass}>{formatClp(product.price)}</td>
-                  <td className={numericCellClass}>{product.currentStock}</td>
-                  <td>{product.unitMeasure}</td>
-                  {canViewAdministrativeStock && <td className={numericCellClass}>{product.minimumStock}</td>}
-                  <td>
-                    {product.status === false ? (
-                      <span className={badgeClass("neutral")}>Desactivado</span>
-                    ) : (
-                      <span className={badgeClass(stockStatus.tone)}>{stockStatus.label}</span>
-                    )}
-                  </td>
-                  {canManage && (
-                    <td className="w-[1%] whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5">
-                        <button className={`${secondaryButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => startEditing(product)}>
-                          <Pencil size={17} />
-                          Editar
-                        </button>
-                        {product.status === false ? (
-                          <button className={`${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                            <CheckCircle size={17} />
-                            Activar
-                          </button>
-                        ) : (
-                          <button className={`${dangerButtonClass} ${tableActionButtonClass} mr-0 px-2.5`} type="button" onClick={() => openProductStatusModal(product)}>
-                            <XCircle size={17} />
-                            Desactivar
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {filteredProducts.length === 0 && (
-              <tr>
-                <td className={emptyTableCellClass} colSpan={inventoryTableColumnCount}>
-                  No se encontraron productos con los filtros seleccionados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-          </table>
-        </div>
-          )}
-        />
+        {(showInactiveProducts || lowStockOnly || outOfStockOnly) && <p className="m-0 px-4 py-2 text-xs text-slate-600">Se incluyen los artículos que cumplen cualquiera de los estados seleccionados. El selector familiar también permite consultar variantes desactivadas a usuarios autorizados; no se suman a los resultados ni a la exportación si no coinciden con los filtros.</p>}
+        <GroupedInventoryTable key={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${variantsOnly}|${normalizedSearch}`}
+          groups={productsPagination.paginatedItems} allProducts={products} role={user?.role} userId={user?.id} canManage={canManage} canViewMinimum={canViewAdministrativeStock}
+          search={normalizedSearch}
+          onEdit={startEditing} onStatus={openProductStatusModal} onFamilyStatus={setFamilyStatusTarget} onFamilyActivate={setFamilyActivationTarget}
+          />
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -2233,7 +2018,7 @@ export default function ProductsPage() {
             emptyMessage={sortedMovements.length === 0 ? "No hay movimientos registrados." : "No se encontraron movimientos con los filtros seleccionados."}
             renderSummary={(movement) => (
               <div className="grid min-w-0 gap-2">
-                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong>
+                <strong className="truncate text-sm text-ink-950">{movement.productName}</strong><HistoricalIdentityNote capture={movement.historicalIdentity}/>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className={badgeClass(getMovementTone(movement))}>{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span>
                   <strong className="font-mono text-sm text-ink-950">{movement.quantity}</strong>
@@ -2251,13 +2036,13 @@ export default function ProductsPage() {
             )}
             desktop={(
           <div className={tableScrollClass}>
-            <table>
+            <table className="fyf-data-table">
             <thead>
               <tr>
                 <th>Fecha</th>
                 <th>Producto</th>
                 <th>Tipo</th>
-                <th>Cantidad</th>
+                <th className="text-center">Cantidad</th>
                 <th>Usuario</th>
                 <th>Motivo</th>
               </tr>
@@ -2266,19 +2051,19 @@ export default function ProductsPage() {
               {movementsPagination.paginatedItems.map((movement) => (
                 <tr key={movement.id}>
                   <td className={dateCellClass}>{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</td>
-                  <td>{movement.productName}</td>
+                  <td className="table-description-cell">{movement.productName}<HistoricalIdentityNote capture={movement.historicalIdentity}/></td>
                   <td>
                     <span className={badgeClass(getMovementTone(movement))}>
                       {MOVEMENT_LABELS[movement.movementType] || movement.movementType}
                     </span>
                   </td>
-                  <td className={numericCellClass}>{movement.quantity}</td>
+                  <td className={`${numericCellClass} text-center`}>{movement.quantity}</td>
                   <td>
                     {movement.userNames || movement.userSurnames
                       ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim()
                       : "Sistema"}
                   </td>
-                  <td>{movement.reason || "Sin motivo"}</td>
+                  <td className="table-description-cell">{movement.reason || "Sin motivo"}</td>
                 </tr>
               ))}
               {filteredMovements.length === 0 && (
@@ -2304,6 +2089,8 @@ export default function ProductsPage() {
           />
         </div>
       )}
+      {canManage && bundleEditor && <ProductBundleEditor key={bundleEditor.familyId || "new"} {...bundleEditor} categories={categories}
+        onClose={() => setBundleEditor(null)} onSaved={loadData} />}
     </section>
   );
 }

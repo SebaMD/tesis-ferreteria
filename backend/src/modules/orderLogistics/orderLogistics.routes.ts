@@ -5,6 +5,7 @@ import { verifyRoles } from "../../middlewares/authorization.middleware.js";
 import { MAX_IMAGE_FILE_SIZE } from "../../utils/imageFiles.js";
 import {
   getDeliveryProofController,
+  getAdministrativeOrderSummaryController,
   getLogisticsHandoffController,
   getLogisticsOrderByIdController,
   getLogisticsOrdersController,
@@ -30,6 +31,7 @@ function parseEvidenceUpload(req: Request, res: Response, next: NextFunction) {
 }
 
 router.use(authenticateJwt);
+router.get("/online/:id/administrative-summary", verifyRoles(["ADMIN", "MANAGER"]), getAdministrativeOrderSummaryController);
 router.get(
   "/scan",
   verifyRoles(["WAREHOUSE"]),

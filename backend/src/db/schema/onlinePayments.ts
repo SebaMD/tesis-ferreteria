@@ -31,10 +31,13 @@ export const onlinePaymentsTable = pgTable(
     transactionDate: timestamp("transaction_date"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    // NULL means provider lookup exhausted: retain the financial result for operational review.
+    nextReconciliationAt: timestamp("next_reconciliation_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
     index("online_payments_order_id_idx").on(table.orderId),
     index("online_payments_status_idx").on(table.status),
+    index("online_payments_next_reconciliation_idx").on(table.nextReconciliationAt),
     uniqueIndex("online_payments_buy_order_unique").on(table.buyOrder),
     uniqueIndex("online_payments_token_unique").on(table.token),
     check("online_payments_provider_check", sql`${table.provider} = 'WEBPAY_PLUS'`),

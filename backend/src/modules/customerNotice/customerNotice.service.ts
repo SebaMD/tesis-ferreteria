@@ -1,4 +1,7 @@
 import { removeStoredImageFile, saveImageFile } from "../../utils/imageFiles.js";
+import { db } from "../../db/index.js";
+import { currentDeliveryPolicy } from "../deliverySettings/deliverySettings.service.js";
+import { deliveryAnnouncement, publicDeliveryInformation } from "../deliverySettings/deliveryPricing.js";
 import {
   createCustomerNotice,
   deleteCustomerNoticeById,
@@ -13,6 +16,7 @@ import {
   updateCustomerNoticeById,
 } from "./customerNotice.repository.js";
 import type { CatalogPresentationInput, NoticeInput } from "./customerNotice.validation.js";
+import { customerNoticePeriodError } from "./customerNotice.validation.js";
 
 const DEFAULT_PRESENTATION = {
   id: 1,
@@ -24,6 +28,13 @@ const DEFAULT_PRESENTATION = {
 
 function imageUrl(imagePath: string | null | undefined) {
   return imagePath ? `/uploads/${imagePath.replaceAll("\\", "/")}` : null;
+}
+
+function presentDelivery(announcement: ReturnType<typeof deliveryAnnouncement>, presentation: Awaited<ReturnType<typeof findCatalogPresentation>>, admin = false) {
+  if (!announcement) return null;
+  const savedImageUrl = imageUrl(presentation?.deliveryImagePath);
+  const imageVisible = announcement.kind === "LOCAL_FIXED";
+  return {...announcement,imageUrl:imageVisible?savedImageUrl:null,...(admin?{savedImageUrl,imageSuppressed:!imageVisible,revision:presentation?.deliveryImageRevision??0}: {})};
 }
 
 function presentPresentation<T extends {
@@ -48,24 +59,32 @@ function presentNotice<T extends { imagePath?: string | null }>(notice: T) {
 }
 
 export async function getPublicCustomerNoticeService() {
-  const [presentation, notices] = await Promise.all([
+  const [presentation, notices, delivery] = await Promise.all([
     findCatalogPresentation(),
     findPublicCustomerNotices(),
+    db.transaction(async tx => {
+      const policy = await currentDeliveryPolicy(tx);
+      return { announcement: deliveryAnnouncement(policy), information: publicDeliveryInformation(policy) };
+    }),
   ]);
   return {
     presentation: presentPresentation(presentation ?? DEFAULT_PRESENTATION),
     notices: notices.map(presentNotice),
+    deliveryAnnouncement: presentDelivery(delivery.announcement, presentation),
+    deliveryInformation: delivery.information,
   };
 }
 
 export async function getCustomerNoticeConfigurationService() {
-  const [presentation, notices] = await Promise.all([
+  const [presentation, notices, policy] = await Promise.all([
     findCatalogPresentation(),
     findCustomerNotices(),
+    db.transaction(tx => currentDeliveryPolicy(tx)),
   ]);
   return {
     presentation: presentPresentation(presentation ?? DEFAULT_PRESENTATION),
     notices: notices.map(presentNotice),
+    deliveryAnnouncement: presentDelivery(deliveryAnnouncement(policy), presentation, true),
   };
 }
 
@@ -77,13 +96,18 @@ export class CustomerNoticeError extends Error {
 }
 
 export async function createCustomerNoticeService(userId: number, input: NoticeInput) {
+  const error = customerNoticePeriodError(input);
+  if (error) throw new CustomerNoticeError(error, 400);
   return presentNotice(await createCustomerNotice({ ...input, userId }));
 }
 
 export async function updateCustomerNoticeService(userId: number, id: number, input: NoticeInput) {
-  if (!await findCustomerNoticeById(id)) {
+  const current = await findCustomerNoticeById(id);
+  if (!current) {
     throw new CustomerNoticeError("Aviso no encontrado", 404);
   }
+  const error = customerNoticePeriodError(input, current);
+  if (error) throw new CustomerNoticeError(error, 400);
   const updated = await updateCustomerNoticeById(id, { ...input, userId });
   if (!updated) throw new CustomerNoticeError("Aviso no encontrado", 404);
   return presentNotice(updated);

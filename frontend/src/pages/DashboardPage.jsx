@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowLeftRight, DollarSign, PackageCheck, PackageX, ShoppingCart } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -240,7 +240,7 @@ export default function DashboardPage() {
       : metrics.length >= 4
       ? "grid-cols-4"
       : "grid-cols-3";
-  const metricsGridClass = `grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
+  const metricsGridClass = `dashboard-metrics grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2`;
 
   return (
     <section className={`${pageClass} gap-4.5`}>
@@ -256,21 +256,22 @@ export default function DashboardPage() {
       <div className={metricsGridClass}>
         {metrics.map((metric) => {
           const Icon = metric.icon;
+          const longValue = String(metric.value).length > 10;
           return (
             <article
-              className={`${metricCardClass} ${metric.path ? quickLinkClass : ""}`}
+              className={`${metricCardClass} ${longValue ? "dashboard-metric-card--long" : ""} ${metric.path ? quickLinkClass : ""}`}
               key={metric.label}
               {...quickLinkProps(metric.path)}
             >
               <span className={metricIconClasses[metric.tone]}><Icon size={20} /></span>
-              <strong>{metric.value}</strong>
+              <strong>{longValue ? String(metric.value).split(".").map((part, index, parts) => <Fragment key={index}>{part}{index < parts.length - 1 && <>.<wbr /></>}</Fragment>) : metric.value}</strong>
               <span>{metric.label}</span>
             </article>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-stretch gap-4 [&>section]:grid [&>section]:h-full [&>section]:grid-rows-[auto_1fr]">
+      <div className="dashboard-summary-panels grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-4 [&>section]:grid [&>section]:content-start">
         {canViewStockReplenishment && (
           <section
             className={`${dashboardPanelClass} ${ROUTE_PERMISSIONS.products.includes(user?.role) ? quickLinkClass : ""}`}
@@ -284,7 +285,7 @@ export default function DashboardPage() {
               <span className={panelCountClass}>{lowStockProducts.length}</span>
             </div>
 
-            <div className={`grid ${isWarehouse ? "h-full content-center" : "content-start"}`}>
+            <div className="grid content-start">
               {priorityLowStockProducts.length === 0 ? (
                 <p className={emptyStateClass}>No hay productos con stock bajo.</p>
               ) : (
@@ -394,7 +395,7 @@ export default function DashboardPage() {
               <span className={panelCountClass}>{operationalOrders.length}</span>
             </div>
 
-            <div className="grid h-full auto-rows-fr">
+            <div className="grid content-start">
               {priorityOperationalOrders.length === 0 ? (
                 <p className={emptyStateClass}>No hay pedidos pendientes actualmente.</p>
               ) : (

@@ -19,7 +19,7 @@ export default function Sidebar({ open, onNavigate }) {
   const { user } = useAuth();
 
   return (
-    <aside className={`sticky top-0 flex h-screen flex-col bg-ink-950 text-white max-[980px]:fixed max-[980px]:inset-y-0 max-[980px]:left-0 max-[980px]:z-50 max-[980px]:w-64 max-[980px]:transition-transform max-[980px]:duration-200 ${open ? "max-[980px]:translate-x-0" : "max-[980px]:-translate-x-full"}`}>
+    <aside data-loading-sidebar className={`sticky top-0 flex h-screen flex-col bg-ink-950 text-white max-[980px]:fixed max-[980px]:inset-y-0 max-[980px]:left-0 max-[980px]:z-50 max-[980px]:w-64 max-[980px]:transition-transform max-[980px]:duration-200 ${open ? "max-[980px]:translate-x-0" : "max-[980px]:-translate-x-full"}`}>
       <div className="flex h-16.25 items-center gap-2.5 border-b border-white/10 px-5 font-bold">
         <BrandLogo className="size-12" />
         <span className="whitespace-nowrap">FERRETERIA FYF</span>

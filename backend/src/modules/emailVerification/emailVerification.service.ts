@@ -279,6 +279,27 @@ export async function requestGuestEmailVerificationService(guestSessionId: strin
   return issueChallenge({ type: "GUEST", guestSessionHash }, "GUEST_CHECKOUT", email);
 }
 
+export type DeliveryGuestPurpose = "GUEST_DELIVERY_REQUEST" | "GUEST_DELIVERY_ACCESS";
+export async function requestDeliveryGuestVerificationService(session: string, email: string, purpose: DeliveryGuestPurpose) {
+  if (!["GUEST_DELIVERY_REQUEST", "GUEST_DELIVERY_ACCESS"].includes(purpose)) throw new EmailVerificationError("Propósito inválido",400);
+  let guestSessionHash: string;
+  try { guestSessionHash=hashGuestSessionId(session); } catch { throw new EmailVerificationError("Sesión de invitado inválida",400); }
+  return issueChallenge({type:"GUEST",guestSessionHash},purpose,email);
+}
+export async function verifyDeliveryGuestService(session: string, challengeId: number, pin: string, purpose: DeliveryGuestPurpose) {
+  if (!["GUEST_DELIVERY_REQUEST", "GUEST_DELIVERY_ACCESS"].includes(purpose)) throw new EmailVerificationError("Propósito inválido",400);
+  let guestSessionHash: string;
+  try { guestSessionHash=hashGuestSessionId(session); } catch { throw new EmailVerificationError("Sesión de invitado inválida",400); }
+  const result=await db.transaction(async tx=>{
+    const challenge=await verifyChallenge(tx,{challengeId,pin,purpose,owner:{type:"GUEST",guestSessionHash}});
+    if(challenge instanceof EmailVerificationError)return challenge;
+    const now=new Date();await markChallengeVerified(tx,challenge.id,now,false);
+    return {challengeId:challenge.id,email:challenge.email,verifiedAt:now.toISOString()};
+  });
+  if(result instanceof EmailVerificationError)throw result;
+  return result;
+}
+
 export async function requestInternalEmailVerificationService(
   userId: number,
   options: { reuseActive?: boolean } = {},

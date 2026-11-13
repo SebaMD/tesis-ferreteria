@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const sizeClasses = {
@@ -9,33 +9,76 @@ const sizeClasses = {
   xlarge: "max-w-[1180px]",
 };
 
+const activeModalLocks = new Set();
+let originalBodyOverflow = "";
+
 export default function AppModal({
   open,
+  suspended = false,
   title,
   description,
   onClose,
   children,
   footer,
+  flowActions,
   headerActions,
   size = "medium",
   panelClassName = "",
   overlayClassName = "",
+  initialFocusSelector,
+  fitVisualViewport = false,
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
+  const overlayRef = useRef(null);
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
+  const lastFocusedRef = useRef(null);
+  const [sideActions, setSideActions] = useState(false);
+  const hasFlowActions = Boolean(flowActions);
+
+  useLayoutEffect(() => {
+    if (!open || !fitVisualViewport || !window.visualViewport) return undefined;
+    const viewport = window.visualViewport;
+    const update = () => {
+      overlayRef.current?.style.setProperty("height", `${viewport.height}px`);
+      overlayRef.current?.style.setProperty("top", `${viewport.offsetTop}px`);
+      dialogRef.current?.style.setProperty("max-height", `${Math.max(120, viewport.height - 24)}px`);
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); };
+  }, [open, fitVisualViewport]);
+
+  useLayoutEffect(() => {
+    if (!open || suspended || !hasFlowActions) return undefined;
+    const panel = dialogRef.current;
+    const measure = () => {
+      const { left, right } = panel.getBoundingClientRect();
+      // Each action needs 210px plus a 12px gap and a safe viewport margin.
+      setSideActions(Math.min(left, window.innerWidth - right) >= 234);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    window.addEventListener("resize", measure);
+    return () => { observer.disconnect(); window.removeEventListener("resize", measure); };
+  }, [open, suspended, hasFlowActions, size]);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || suspended) return undefined;
 
-    const previousOverflow = document.body.style.overflow;
     const previousActiveElement = document.activeElement;
+    const lock = dialogRef.current;
+    if (!activeModalLocks.size) originalBodyOverflow = document.body.style.overflow;
+    activeModalLocks.add(lock);
+    let active = true;
 
     const handleKeyDown = (event) => {
       const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
@@ -48,13 +91,17 @@ export default function AppModal({
 
       if (event.key !== "Tab" || !dialogRef.current) return;
 
-      const focusableElements = dialogRef.current.querySelectorAll(
+      const focusableElements = [...dialogRef.current.querySelectorAll(
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+      )].filter(element => element.getClientRects().length > 0 && !element.closest("[inert]"));
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
 
       if (!firstElement || !lastElement) return;
+
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault(); firstElement.focus(); return;
+      }
 
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
@@ -67,29 +114,42 @@ export default function AppModal({
 
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
-    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    queueMicrotask(() => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (!active || dialogs[dialogs.length - 1] !== dialogRef.current) return;
+      const previous = lastFocusedRef.current;
+      const initial = initialFocusSelector && dialogRef.current?.querySelector(initialFocusSelector);
+      (previous?.isConnected && previous.getClientRects().length ? previous : initial && !initial.matches(':disabled') ? initial : closeButtonRef.current)?.focus();
+    });
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      active = false;
+      activeModalLocks.delete(lock);
+      document.body.style.overflow = activeModalLocks.size ? "hidden" : originalBodyOverflow;
       window.removeEventListener("keydown", handleKeyDown);
-      previousActiveElement?.focus?.();
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      const top = dialogs[dialogs.length - 1];
+      if (!top || top.contains(previousActiveElement)) previousActiveElement?.focus?.();
     };
-  }, [open]);
+  }, [open, suspended, initialFocusSelector]);
 
   if (!open) return null;
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-900 grid place-items-center overflow-hidden bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${overlayClassName}`}
+      ref={overlayRef}
+      className={`fixed inset-0 z-900 grid place-items-center overflow-clip bg-[rgba(10,14,21,0.62)] p-6 max-[720px]:p-2.5 ${suspended ? "hidden!" : ""} ${overlayClassName}`}
+      hidden={suspended}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
       <section
-        className={`app-modal-panel flex max-h-[calc(100dvh-48px)] w-full flex-col overflow-hidden rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
+        className={`app-modal-panel relative flex max-h-[calc(100dvh-48px)] w-full flex-col ${hasFlowActions && sideActions ? "overflow-visible" : "overflow-hidden"} rounded-md border border-t-4 border-slate-200 border-t-rust-500 bg-white shadow-[0_24px_70px_rgba(10,14,21,0.3)] max-[720px]:max-h-[calc(100dvh-20px)] ${sizeClasses[size] || sizeClasses.medium} ${panelClassName}`}
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        onFocusCapture={event => { lastFocusedRef.current = event.target; }}
+        role={suspended ? undefined : "dialog"}
+        aria-modal={suspended ? undefined : true}
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
       >
@@ -113,7 +173,11 @@ export default function AppModal({
           </div>
         </header>
         <div className="min-h-0 overflow-y-auto overscroll-contain p-5 max-[720px]:px-4">{children}</div>
-        {footer && <footer className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}
+        {footer && <footer className="admin-form-actions shrink-0 border-t border-slate-200 px-5 py-3.5 max-[720px]:px-4">{footer}</footer>}
+        {flowActions && <footer className="modal-flow-actions" data-placement={sideActions ? "side" : "footer"} aria-label="Continuar registro">
+          {flowActions.left && <div className="modal-flow-action modal-flow-action--left">{flowActions.left}</div>}
+          {flowActions.right && <div className="modal-flow-action modal-flow-action--right">{flowActions.right}</div>}
+        </footer>}
       </section>
     </div>,
     document.body,

@@ -1,4 +1,4 @@
-import { CalendarClock, Edit3, Percent, Plus, Power, Tag, Trash2 } from "lucide-react";
+import { CalendarClock, Edit3, Percent, Plus, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
@@ -6,6 +6,8 @@ import AppModal from "../components/AppModal.jsx";
 import AppSelect from "../components/AppSelect.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import PromotionTargetPicker from "../components/PromotionTargetPicker.jsx";
+import { pageClass, pageHeaderClass } from "../helpers/uiClasses.js";
+import { localDateTime, promotionDates, PROMOTION_START_PAST, PROMOTION_END_ORDER } from "../helpers/promotionDates.js";
 import {
   createPromotionRequest,
   deletePromotionRequest,
@@ -26,18 +28,12 @@ const STATUS = {
   EXPIRED: ["Vencida", "bg-amber-100 text-amber-800"],
 };
 
-function localDateTime(value = new Date()) {
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function emptyForm() {
+function emptyForm(now = Date.now()) {
   return {
     name: "",
     type: "PERCENTAGE_DISCOUNT",
     percentage: "",
-    startsAt: localDateTime(),
+    startsAt: localDateTime(now),
     endsAt: "",
     isActive: false,
     productIds: [],
@@ -58,13 +54,13 @@ function formFromPromotion(promotion) {
   };
 }
 
-function payloadFromForm(form) {
+function payloadFromForm(form, dates) {
   return {
     name: form.name.trim(),
     type: form.type,
     percentage: form.type === "PERCENTAGE_DISCOUNT" ? Number(form.percentage) : null,
-    startsAt: new Date(form.startsAt).toISOString(),
-    endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+    startsAt: dates.startsAt.toISOString(),
+    endsAt: dates.endsAt ? dates.endsAt.toISOString() : null,
     isActive: form.isActive,
     productIds: form.productIds.map(Number),
     categoryIds: form.categoryIds.map(Number),
@@ -78,12 +74,25 @@ export default function PromotionsPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [dateNow, setDateNow] = useState(Date.now);
+  const [dateTouched, setDateTouched] = useState({});
+  const [serverDateErrors, setServerDateErrors] = useState({});
+  const isOpen = Boolean(editing);
+  const dates = promotionDates(form, editing?.id ? editing : null, dateNow);
+  const dateErrors = { ...dates.errors, ...serverDateErrors };
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const timer = window.setInterval(() => setDateNow(Date.now() + serverOffset), 15_000);
+    return () => window.clearInterval(timer);
+  }, [isOpen, serverOffset]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [promotionRows, targetRows] = await Promise.all([
-        getPromotionsRequest(),
+        getPromotionsRequest({ onServerTime: setServerOffset }),
         getPromotionTargetsRequest(),
       ]);
       setPromotions(promotionRows);
@@ -105,22 +114,44 @@ export default function PromotionsPage() {
     category: new Map(targets.categories.map((item) => [Number(item.id), item.name])),
   }), [targets]);
 
-  const openCreate = () => { setEditing({ id: null }); setForm(emptyForm()); };
-  const openEdit = (promotion) => { setEditing(promotion); setForm(formFromPromotion(promotion)); };
+  const openCreate = () => { const now = Date.now() + serverOffset; setEditing({ id: null }); setForm(emptyForm(now)); setDateNow(now); setDateTouched({}); setServerDateErrors({}); };
+  const openEdit = (promotion, now) => { setEditing(promotion); setForm(formFromPromotion(promotion)); setDateNow(now); setDateTouched({}); setServerDateErrors({}); };
   const close = () => { if (!saving) setEditing(null); };
+  const changeDate = (field, value) => {
+    setForm(current => ({ ...current, [field]: value }));
+    setDateNow(Date.now() + serverOffset);
+    setServerDateErrors({});
+    setDateTouched(current => ({ ...current, [field]: true, ...(field === 'startsAt' && form.endsAt ? { endsAt: true } : {}) }));
+  };
+  const invalidDate = (event, field) => {
+    event.preventDefault();
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched(current => ({ ...current, [field]: true }));
+    const message = event.target.validity.rangeUnderflow ? (field === 'startsAt' ? PROMOTION_START_PAST : PROMOTION_END_ORDER) : `La fecha de ${field === 'startsAt' ? 'inicio' : 'término'} no es válida`;
+    setServerDateErrors(current => ({ ...current, [field]: message }));
+  };
 
   const submit = async (event) => {
     event.preventDefault();
+    const checkedDates = promotionDates(form, editing?.id ? editing : null, Date.now() + serverOffset);
+    setDateNow(Date.now() + serverOffset);
+    setDateTouched({ startsAt: true, endsAt: true });
+    if (Object.keys(checkedDates.errors).length) return;
     setSaving(true);
     try {
-      const payload = payloadFromForm(form);
+      const payload = payloadFromForm(form, checkedDates);
       if (editing?.id) await updatePromotionRequest(editing.id, payload);
       else await createPromotionRequest(payload);
       toast.success(editing?.id ? "Promoción actualizada" : "Promoción creada");
       setEditing(null);
       await load();
     } catch (error) {
-      toast.error(getApiError(error, "No se pudo guardar la promoción"));
+      const message = getApiError(error, "No se pudo guardar la promoción");
+      if (/fecha|vigencia/i.test(message)) {
+        if (/término|termino/i.test(message)) setServerDateErrors({ endsAt: message });
+        else if (/inicio/i.test(message)) setServerDateErrors({ startsAt: message });
+      }
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -148,14 +179,14 @@ export default function PromotionsPage() {
   };
 
   return (
-    <main className="relative mx-auto grid w-full max-w-320 gap-5 px-6 py-8 max-[720px]:px-3.5">
+    <main className={`relative ${pageClass} gap-5 py-8`}>
       <LoadingOverlay active={loading} />
-      <header className="flex flex-wrap items-center justify-between gap-3 max-[620px]:text-center">
-        <div className="max-[620px]:w-full"><h1 className="m-0 flex items-center gap-2 text-2xl text-ink-950 max-[620px]:justify-center"><Tag size={24} /> Promociones</h1><p className="mt-1 mb-0 text-sm text-slate-500">Beneficios exclusivos del catálogo online.</p></div>
+      <header className={pageHeaderClass}>
+        <div><h1>Promociones</h1><p>Beneficios exclusivos del catálogo online.</p></div>
         <button className="max-[620px]:w-full max-[620px]:justify-center" type="button" onClick={openCreate}><Plus size={18} /> Nueva promoción</button>
       </header>
 
-      <section className="grid gap-3">
+      <section className="grid w-full gap-3">
         {promotions.map((promotion) => {
           const [statusLabel, statusClass] = STATUS[promotion.status] || STATUS.INACTIVE;
           const productNames = promotion.productIds.map((id) => targetNames.product.get(Number(id))).filter(Boolean);
@@ -165,7 +196,7 @@ export default function PromotionsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="m-0 text-lg text-ink-950">{promotion.name}</h2><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${statusClass}`}>{statusLabel}</span>{promotion.isIndefinite && promotion.status !== "INACTIVE" && <span className="text-xs font-bold text-slate-500">· Indefinida</span>}</div><p className="mt-1 mb-0 text-sm font-bold text-rust-600">{promotion.type === "BUY_2_PAY_1" ? "2x1 · por producto" : `${promotion.percentage}% de descuento`}</p></div>
                 <div className="flex flex-wrap gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
-                  <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
+                  <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion, Date.now() + serverOffset)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggle(promotion)} aria-label={`${promotion.isActive ? "Desactivar" : "Activar"} ${promotion.name}`} title={promotion.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{promotion.isActive ? "Desactivar" : "Activar"}</span></button>
                   <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
                 </div>
@@ -183,12 +214,22 @@ export default function PromotionsPage() {
             <label className="grid gap-1.5 text-xs font-bold text-slate-600">Nombre<input required maxLength="160" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej: Día del tornillo" /></label>
             <label className="grid gap-1.5 text-xs font-bold text-slate-600">Tipo<AppSelect value={form.type} onChange={(value) => setForm((current) => ({ ...current, type: value, percentage: value === "BUY_2_PAY_1" ? "" : current.percentage }))} options={TYPES} ariaLabel="Tipo de promoción" /></label>
             {form.type === "PERCENTAGE_DISCOUNT" && <label className="grid gap-1.5 text-xs font-bold text-slate-600">Porcentaje<input required type="number" min="1" max="99" step="1" value={form.percentage} onChange={(event) => setForm((current) => ({ ...current, percentage: event.target.value }))} /></label>}
-            <label className="grid gap-1.5 text-xs font-bold text-slate-600">Inicio<input required type="datetime-local" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-slate-600">Término <span className="font-normal text-slate-400">(vacío = indefinido)</span><input type="datetime-local" value={form.endsAt} min={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
+            <label className="col-start-1 grid content-start self-start gap-1.5 text-xs font-bold text-slate-600"><span>Inicio</span>
+              <input required aria-label="Inicio" type="datetime-local" step="60" value={form.startsAt} min={dates.startUnchanged ? undefined : localDateTime(dateNow)}
+                aria-invalid={Boolean(dateTouched.startsAt && dateErrors.startsAt)} aria-describedby={dateTouched.startsAt && dateErrors.startsAt ? 'promotion-start-error' : undefined}
+                onChange={event => changeDate('startsAt', event.target.value)} onBlur={() => { setDateNow(Date.now() + serverOffset); setDateTouched(current => ({ ...current, startsAt: true })); }} onInvalid={event => invalidDate(event, 'startsAt')} />
+              {dateTouched.startsAt && dateErrors.startsAt && <span id="promotion-start-error" className="text-critical-600" role="alert">{dateErrors.startsAt}</span>}
+            </label>
+            <label className="grid min-w-0 content-start self-start gap-1.5 text-xs font-bold text-slate-600"><span className="flex items-baseline justify-between gap-2"><span>Término</span><span id="promotion-end-help" className="font-normal text-slate-400">(vacío = indefinido)</span></span>
+              <input aria-label="Término" type="datetime-local" step="60" value={form.endsAt} min={form.startsAt}
+                aria-invalid={Boolean(dateTouched.endsAt && dateErrors.endsAt)} aria-describedby={`promotion-end-help${dateTouched.endsAt && dateErrors.endsAt ? ' promotion-end-error' : ''}`}
+                onChange={event => changeDate('endsAt', event.target.value)} onBlur={() => setDateTouched(current => ({ ...current, endsAt: true }))} onInvalid={event => invalidDate(event, 'endsAt')} />
+              {dateTouched.endsAt && dateErrors.endsAt && <span id="promotion-end-error" className="text-critical-600" role="alert">{dateErrors.endsAt}</span>}
+            </label>
             <label className="grid min-h-10 cursor-pointer grid-cols-[16px_minmax(0,1fr)] items-center gap-2 self-end rounded-[5px] px-2 text-sm font-bold text-ink-950 hover:bg-slate-100"><input className="size-4 min-h-4 w-4 shrink-0 accent-rust-600" type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Activar promoción</span></label>
           </div>
           <PromotionTargetPicker products={targets.products} categories={targets.categories} productIds={form.productIds} categoryIds={form.categoryIds} onChange={(selection) => setForm((current) => ({ ...current, ...selection }))} />
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={close} disabled={saving}>Cancelar</button><button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar promoción"}</button></div>
+          <div className="admin-form-actions border-t border-slate-200 pt-4"><button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={close} disabled={saving}>Cancelar</button><button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar promoción"}</button></div>
         </form>
       </AppModal>
     </main>

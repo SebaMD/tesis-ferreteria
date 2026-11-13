@@ -1,11 +1,12 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { db, type DbTransaction } from "../../db/index.js";
+import { historicalProductColumns, orderIdentityJoin } from "../products/historicalIdentity.js";
+import { commercialIdentitySnapshotsTable as identityCapture } from "../../db/schema/commercialIdentitySnapshots.js";
 import {
   clientDeliveryAddressesTable,
   onlineOrderItemsTable,
   onlineOrdersTable,
   onlinePaymentsTable,
-  productsTable,
   rolesTable,
   usersTable,
   type NewOnlineOrderItem,
@@ -76,7 +77,10 @@ export async function deleteClientDeliveryAddress(clientId: number) {
   return deleted ?? null;
 }
 
+import { orderAmountColumns } from "./orderAmountColumns.js";
+import { buildCommercialAmounts } from "./commercialAmounts.js";
 const orderColumns = {
+  ...orderAmountColumns,
   id: onlineOrdersTable.id,
   clientId: onlineOrdersTable.clientId,
   clientNames: usersTable.names,
@@ -220,6 +224,7 @@ export async function findOrderByCheckoutKey(
   const [order] = await tx
     .select({
       id: onlineOrdersTable.id,
+      checkoutRequestHash: onlineOrdersTable.checkoutRequestHash,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
@@ -243,6 +248,7 @@ export async function findOrderByGuestCheckoutKey(
   const [order] = await tx
     .select({
       id: onlineOrdersTable.id,
+      checkoutRequestHash: onlineOrdersTable.checkoutRequestHash,
       status: onlineOrdersTable.status,
       total: onlineOrdersTable.total,
       reservationExpiresAt: onlineOrdersTable.reservationExpiresAt,
@@ -266,8 +272,7 @@ export async function findPendingOrderForClient(
 ) {
   const conditions = [
     eq(onlineOrdersTable.clientId, clientId),
-    eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-    sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+    unresolvedPaymentOrder(),
   ];
 
   if (excludedOrderId !== undefined) conditions.push(ne(onlineOrdersTable.id, excludedOrderId));
@@ -289,8 +294,7 @@ export async function findPendingOrderForGuestSession(
   const conditions = [
     eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
     isNull(onlineOrdersTable.clientId),
-    eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-    sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+    unresolvedPaymentOrder(),
   ];
 
   if (excludedOrderId !== undefined) conditions.push(ne(onlineOrdersTable.id, excludedOrderId));
@@ -304,6 +308,24 @@ export async function findPendingOrderForGuestSession(
   return order ?? null;
 }
 
+// A provider result that is still unknown must not stop blocking just because the stock lease ended.
+function unresolvedPaymentOrder() {
+  return sql`(
+    (${onlineOrdersTable.status} = 'PENDING_PAYMENT' and ${onlineOrdersTable.reservationExpiresAt} > now())
+    or (${onlineOrdersTable.status} in ('PENDING_PAYMENT', 'PAYMENT_REVIEW') and exists (
+      select 1 from ${onlinePaymentsTable} p where p.order_id = ${onlineOrdersTable.id}
+      and p.token is not null and p.status in ('CREATED', 'PROCESSING')
+    ))
+  )`;
+}
+
+export async function findUnresolvedPaymentForOrder(tx: DbTransaction, orderId: number) {
+  const [payment] = await tx.select({ id: onlinePaymentsTable.id }).from(onlinePaymentsTable)
+    .where(and(eq(onlinePaymentsTable.orderId, orderId), inArray(onlinePaymentsTable.status, ["CREATED", "PROCESSING"])))
+    .limit(1);
+  return payment ?? null;
+}
+
 export async function createOnlineOrder(
   tx: DbTransaction,
   data: {
@@ -314,6 +336,14 @@ export async function createOnlineOrder(
     guestSessionHash?: string | null;
     guestDeviceHash?: string | null;
     checkoutKey: string;
+    checkoutRequestHash: string;
+    productsSubtotal: string;
+    productsDiscountTotal: string;
+    deliveryFee: string;
+    deliveryPolicyRevisionId: number;
+    deliveryFeeReason: string;
+    deliveryQuoteRequestId?: number;
+    deliveryQuoteAcceptanceId?: number;
     total: string;
     reservationExpiresAt: Date;
     deliveryType: "PICKUP" | "DELIVERY";
@@ -614,20 +644,23 @@ export async function findPaymentsNeedingReconciliation(
   scope: {
     clientId?: number;
     guestSessionHash?: string;
+    guestDeviceHash?: string;
     orderId?: number;
   } = {},
 ) {
   const conditions = [
     isNotNull(onlinePaymentsTable.token),
+    lte(onlinePaymentsTable.nextReconciliationAt, sql`now()`),
     sql`(
       (
         ${onlinePaymentsTable.status} = 'CREATED'
-        and ${onlineOrdersTable.status} = 'PENDING_PAYMENT'
-        and ${onlineOrdersTable.reservationExpiresAt} <= now() + interval '2 minutes'
+        and ${onlineOrdersTable.status} in ('PENDING_PAYMENT', 'PAYMENT_REVIEW')
+        and (${onlineOrdersTable.reservationExpiresAt} <= now() + interval '2 minutes'
+          or ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore.toISOString()}::timestamp)
       )
       or (
         ${onlinePaymentsTable.status} = 'PROCESSING'
-        and ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore}
+        and ${onlinePaymentsTable.updatedAt} <= ${processingStaleBefore.toISOString()}::timestamp
       )
     )`,
   ];
@@ -637,6 +670,10 @@ export async function findPaymentsNeedingReconciliation(
   }
   if (scope.guestSessionHash !== undefined) {
     conditions.push(eq(onlineOrdersTable.guestSessionHash, scope.guestSessionHash));
+  }
+  if (scope.guestDeviceHash !== undefined) {
+    conditions.push(eq(onlineOrdersTable.guestDeviceHash, scope.guestDeviceHash));
+    conditions.push(isNull(onlineOrdersTable.clientId));
   }
   if (scope.orderId !== undefined) {
     conditions.push(eq(onlineOrdersTable.id, scope.orderId));
@@ -648,6 +685,7 @@ export async function findPaymentsNeedingReconciliation(
       paymentStatus: onlinePaymentsTable.status,
       paymentCreatedAt: onlinePaymentsTable.createdAt,
       paymentUpdatedAt: onlinePaymentsTable.updatedAt,
+      nextReconciliationAt: onlinePaymentsTable.nextReconciliationAt,
       token: onlinePaymentsTable.token,
       orderId: onlineOrdersTable.id,
       orderStatus: onlineOrdersTable.status,
@@ -658,10 +696,36 @@ export async function findPaymentsNeedingReconciliation(
     .from(onlinePaymentsTable)
     .innerJoin(onlineOrdersTable, eq(onlinePaymentsTable.orderId, onlineOrdersTable.id))
     .where(and(...conditions))
-    .orderBy(asc(onlinePaymentsTable.updatedAt), asc(onlinePaymentsTable.id))
+    .orderBy(asc(onlinePaymentsTable.nextReconciliationAt), asc(onlinePaymentsTable.id))
     .limit(50);
 
   return rows;
+}
+
+// Persist a bounded status-query lease, shared by workers and authorized refreshes.
+// Does not change payment.updatedAt (also used by the commit reconciliation lease).
+export async function claimPaymentStatusQuery(orderId: number, paymentId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    const payment = await findPaymentForUpdateById(tx, paymentId);
+    if (!order || !payment || payment.orderId !== order.id
+      || !["CREATED", "PROCESSING"].includes(payment.status)
+      || !payment.nextReconciliationAt) return false;
+    const claimed = await tx.update(onlinePaymentsTable).set({ nextReconciliationAt: sql`now() + interval '1 minute'` })
+      .where(and(eq(onlinePaymentsTable.id, payment.id), lte(onlinePaymentsTable.nextReconciliationAt, sql`now()`)))
+      .returning({ id: onlinePaymentsTable.id });
+    return claimed.length === 1;
+  });
+}
+
+export async function stopExpiredProviderQueries(orderId: number, paymentId: number) {
+  return db.transaction(async tx => {
+    const order = await findOrderForUpdate(tx, orderId);
+    const payment = await findPaymentForUpdateById(tx, paymentId);
+    if (!order || !payment || payment.orderId !== order.id || !["CREATED", "PROCESSING"].includes(payment.status)) return;
+    await tx.update(onlinePaymentsTable).set({ nextReconciliationAt: null }).where(eq(onlinePaymentsTable.id, paymentId));
+    if (order.status === "PENDING_PAYMENT") await updateOrderStatus(tx, order.id, "PAYMENT_REVIEW", ["PENDING_PAYMENT"]);
+  });
 }
 
 export async function claimPaymentReconciliationLease(
@@ -807,7 +871,7 @@ export async function updateOrderStatus(
   return order ?? null;
 }
 
-async function attachOrderData<T extends { id: number }>(orders: T[]) {
+async function attachOrderData<T extends { id: number; total: string }>(orders: T[]) {
   if (orders.length === 0) return [];
   const orderIds = orders.map((order) => order.id);
 
@@ -816,8 +880,7 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
       .select({
         orderId: onlineOrderItemsTable.orderId,
         productId: onlineOrderItemsTable.productId,
-        productName: productsTable.name,
-        unitMeasure: productsTable.unitMeasure,
+        ...historicalProductColumns,
         quantity: onlineOrderItemsTable.quantity,
         unitPrice: onlineOrderItemsTable.unitPrice,
         subtotal: onlineOrderItemsTable.subtotal,
@@ -828,7 +891,7 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
         promotionValueSnapshot: onlineOrderItemsTable.promotionValueSnapshot,
       })
       .from(onlineOrderItemsTable)
-      .innerJoin(productsTable, eq(onlineOrderItemsTable.productId, productsTable.id))
+      .leftJoin(identityCapture, orderIdentityJoin(onlineOrderItemsTable.orderId, onlineOrderItemsTable.productId))
       .where(inArray(onlineOrderItemsTable.orderId, orderIds)),
     db
       .select(paymentColumns)
@@ -874,19 +937,25 @@ async function attachOrderData<T extends { id: number }>(orders: T[]) {
       redirectUrl: null,
     };
     const orderStatus = String((order as { status?: string }).status || "");
-    const reservationExpiresAt = (order as { reservationExpiresAt?: Date }).reservationExpiresAt;
     const terminalOrder = ["PAYMENT_FAILED", "CANCELLED", "EXPIRED"].includes(orderStatus);
     const terminalPayment = !payment || ["FAILED", "CANCELLED", "EXPIRED"].includes(payment.status);
 
     return {
       ...order,
       items: itemsByOrder.get(order.id) ?? [],
+      commercialAmounts: buildCommercialAmounts({ ...order, items: itemsByOrder.get(order.id) ?? [] }),
       payment: payment ? clientPayment : null,
-      canContinuePayment: orderStatus === "PENDING_PAYMENT"
-        && payment?.status === "CREATED"
-        && Boolean(token && redirectUrl)
-        && Boolean(reservationExpiresAt && reservationExpiresAt.getTime() > Date.now()),
-      canRetryPayment: terminalOrder,
+      // INITIALIZED does not prove that an already opened external form can be reopened.
+      canContinuePayment: false,
+      blocksNewPayment: false,
+      requiresPaymentAttention: orderStatus === "PENDING_PAYMENT"
+        || ["CREATED", "PROCESSING"].includes(payment?.status || ""),
+      paymentRecoveryMessage: ["PENDING_PAYMENT", "PAYMENT_REVIEW"].includes(orderStatus)
+        ? payment?.status === "AUTHORIZED"
+          ? "El pago fue autorizado y requiere revisión del pedido. No vuelvas a pagar este pedido."
+          : "Aún no podemos confirmar el resultado de este pago. No vuelvas a pagarlo. Puedes actualizar su estado o consultar con la ferretería indicando el folio del pedido."
+        : null,
+      canRetryPayment: terminalOrder && terminalPayment,
       canArchive: terminalOrder && terminalPayment,
     };
   });
@@ -1052,8 +1121,7 @@ export async function findPendingOrderDetailsForGuestSession(guestSessionHash: s
     .where(and(
       eq(onlineOrdersTable.guestSessionHash, guestSessionHash),
       isNull(onlineOrdersTable.clientId),
-      eq(onlineOrdersTable.status, "PENDING_PAYMENT"),
-      sql`${onlineOrdersTable.reservationExpiresAt} > now()`,
+      unresolvedPaymentOrder(),
     ))
     .limit(1);
 

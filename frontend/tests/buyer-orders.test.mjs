@@ -1,10 +1,46 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { groupBuyerOrders } from "../src/helpers/buyerOrderGroups.js";
 import { getOnlineOrderStatus } from "../src/helpers/onlineOrders.js";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("Mis pedidos respeta movimiento reducido al desplazarse al pedido sin cambiar el destino", async () => {
+  const source = await read("src/pages/ClientOrdersPage.jsx");
+  const effect = source.match(/useEffect\(\(\) => \{\s*(if \(loading \|\| !location\.hash\.startsWith\("#order-"\)[\s\S]*?)\}, \[loading, location\.hash, location\.key, orders\]\);/)?.[1];
+  assert.ok(effect, "debe conservar el efecto de navegación al pedido");
+  const runEffect = ({ reducedMotion = false, loading = false, hash = "#order-42", exists = true, scrolledLocation = {current:null} } = {}) => {
+    const calls = [];
+    const queries = [];
+    const ids = [];
+    runInNewContext(`(() => { ${effect} })()`, {
+      loading,
+      location: { hash, key: 'navigation-1' },
+      scrolledLocation,
+      window: { matchMedia: query => { queries.push(query); return { matches: reducedMotion }; } },
+      document: { getElementById: id => {
+        ids.push(id);
+        return exists ? { scrollIntoView: options => calls.push({ ...options }) } : null;
+      } },
+    });
+    return { calls, queries, ids };
+  };
+  for (const reducedMotion of [false, true]) {
+    const result = runEffect({ reducedMotion });
+    assert.deepEqual(result.queries, ["(prefers-reduced-motion: reduce)"]);
+    assert.deepEqual(result.ids, ["order-42"]);
+    assert.deepEqual(result.calls, [{ behavior: reducedMotion ? "instant" : "smooth", block: "center" }]);
+  }
+  for (const input of [{ loading: true }, { hash: "" }, { hash: "#other" }]) {
+    assert.deepEqual(runEffect(input), { calls: [], queries: [], ids: [] });
+  }
+  assert.deepEqual(runEffect({ exists: false }).calls, []);
+  const scrolledLocation = {current:null};
+  assert.equal(runEffect({scrolledLocation}).calls.length,1);
+  assert.equal(runEffect({scrolledLocation}).calls.length,0,'Refreshing the same order must not move the scroll again');
+});
 
 test("los intentos de pago no se clasifican como pedidos operativos", () => {
   const orders = [
@@ -26,6 +62,23 @@ test("los intentos de pago no se clasifican como pedidos operativos", () => {
   assert.deepEqual(grouped.delivered.map(({ id }) => id), [9]);
 });
 
+test("las tarjetas normales no ofrecen ocultar; los modales y la restauración local lo conservan", async () => {
+  const [client, guest, card] = await Promise.all([
+    read("src/pages/ClientOrdersPage.jsx"), read("src/pages/GuestDeviceOrdersPage.jsx"), read("src/components/orders/OrderSummaryCard.jsx"),
+  ]);
+  assert.doesNotMatch(client, /afterDetailActions=/);
+  assert.match(client, /actions=\{selectedOrder \? <>[\s\S]*?\{actionsFor\(selectedOrder\)\}/);
+  const incompleteSection = guest.split('<OrdersSection title="No completados"')[1].split("/>")[0];
+  assert.doesNotMatch(incompleteSection, /renderAfterDetail/);
+  assert.match(guest, /title="Intentos ocultos"[^\n]*renderAfterDetail=\{visibilityActionFor\}/);
+  assert.match(guest, /actions=\{selectedOrder \? <>[\s\S]*?\{actionsFor\(selectedOrder\)\}\{visibilityActionFor\(selectedOrder\)\}/);
+  assert.match(card, /isOnlineOrderPaid\(order.status\) && order.status !== "DELIVERED"/);
+  assert.doesNotMatch(card, /max-\[680px\]:row-start-1/);
+  assert.equal((card.match(/order-summary-status/g) || []).length, 1);
+  const css = await read("src/styles/styles.css");
+  assert.match(css, /\.order-summary-status\s*\{[^}]*grid-row:\s*3/);
+});
+
 test("cada intento no completado conserva un mensaje acorde a su estado real", () => {
   const cancelled = getOnlineOrderStatus("CANCELLED");
   const expired = getOnlineOrderStatus("EXPIRED");
@@ -33,10 +86,11 @@ test("cada intento no completado conserva un mensaje acorde a su estado real", (
   const pending = getOnlineOrderStatus("PENDING_PAYMENT");
 
   assert.equal(cancelled.label, "Compra cancelada");
-  assert.match(cancelled.description, /no se realizó ningún cargo/i);
+  assert.match(cancelled.description, /cancelación del intento/i);
+  assert.doesNotMatch(cancelled.description, /ningún cargo/i);
   assert.doesNotMatch(cancelled.description, /expir/);
   assert.equal(expired.label, "Reserva expirada");
-  assert.match(expired.description, /venció.*reserva de stock fue liberada/i);
+  assert.match(expired.description, /no demuestra por sí solo el resultado financiero/i);
   assert.equal(failed.label, "Pago no completado");
   assert.doesNotMatch(failed.description, /expir/);
   assert.equal(pending.label, "Pendiente de pago");
@@ -62,7 +116,9 @@ test("cliente e invitado comparten la clasificación y no reciben navegación lo
   assert.match(clientOrders, /Ocultar/);
   assert.match(guestOrders, /retryGuestDeviceOrderPaymentRequest/);
   assert.match(guestOrders, /Reintentar pago/);
-  assert.doesNotMatch(guestOrders, /Ocultar/);
+  assert.match(guestOrders, /Mostrar ocultos/);
+  assert.match(guestOrders, /writeHiddenGuestOrderIds\(sessionStorage, next\)/);
+  assert.doesNotMatch(guestOrders, /archiveOnlineOrderRequest|restoreArchivedOnlineOrderRequest/);
   assert.match(guestTracking, /isPaid && order\.buyerEmail/);
   assert.match(paymentResult, /retryOnlineOrderPaymentRequest/);
   assert.match(paymentResult, /Reintentar pago/);

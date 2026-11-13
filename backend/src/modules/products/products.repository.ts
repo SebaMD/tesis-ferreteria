@@ -3,9 +3,13 @@ import { db, type DbTransaction } from "../../db/index.js";
 import { categoriesTable, productsTable, type NewProduct } from "../../db/schema/index.js";
 import { findProductImagesByProductIds } from "../productImages/productImages.repository.js";
 import { presentProductImage } from "../productImages/productImages.presenter.js";
+import { attachVariantValues } from "../productFamilies/productFamilies.service.js";
 
 const productColumns = {
     id: productsTable.id,
+    familyId: productsTable.familyId,
+    variantKey: productsTable.variantKey,
+    familyName: sql<string | null>`(select name from product_families where id = ${productsTable.familyId})`,
     categoryId: productsTable.categoryId,
     categoryName: categoriesTable.name,
     name: productsTable.name,
@@ -20,6 +24,7 @@ const productColumns = {
     status: productsTable.status,
     createdAt: productsTable.createdAt,
     updatedAt: productsTable.updatedAt,
+    hasHistory: sql<boolean>`(exists(select 1 from sale_details where product_id=${productsTable.id}) or exists(select 1 from online_order_items where product_id=${productsTable.id}) or exists(select 1 from inventory_movements where product_id=${productsTable.id}))`,
 };
 
 async function attachProductImages<T extends { id: number }>(products: T[]) {
@@ -33,16 +38,29 @@ async function attachProductImages<T extends { id: number }>(products: T[]) {
         imagesByProduct.set(image.productId, currentImages);
     }
 
-    return products.map((product) => ({
+    return attachVariantValues(products.map((product) => ({
         ...product,
         images: imagesByProduct.get(product.id) ?? [],
-    }));
+    })));
 }
 
 export async function findProducts(includeInactive = false) {
     const query = db.select(productColumns).from(productsTable).innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id));
     const products = includeInactive ? await query : await query.where(eq(productsTable.status, true));
     return attachProductImages(products);
+}
+
+export async function findProductsByFamilyId(familyId: number) {
+    const products = await db.select(productColumns).from(productsTable)
+        .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+        .where(eq(productsTable.familyId, familyId));
+    return attachProductImages(products);
+}
+
+export async function findProductsByIds(ids: number[]) {
+    if (!ids.length) return [];
+    return attachProductImages(await db.select(productColumns).from(productsTable)
+        .innerJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id)).where(inArray(productsTable.id, ids)));
 }
 
 export async function findProductById(id: number, includeInactive = false) {
@@ -137,8 +155,8 @@ export async function updateProductByIdTx(tx: DbTransaction, id: number, data: P
     return product ?? null;
 }
 
-export async function deleteProductById(id: number) {
-    const [product] = await db
+export async function deleteProductById(id: number, executor: typeof db | DbTransaction = db) {
+    const [product] = await executor
         .update(productsTable)
         .set({
             status: false,

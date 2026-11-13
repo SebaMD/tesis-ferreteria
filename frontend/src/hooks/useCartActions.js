@@ -1,35 +1,50 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import useAuth from "./useAuth.js";
+import { informationNavigationState } from "../helpers/informationNavigation.js";
+import { explorationOwner } from "../helpers/explorationNavigation.js";
 import { toast } from "sonner";
 import useCart from "./useCart.js";
+import { CART_UNDO_DURATION } from "../helpers/cartUndo.js";
+
+function offerUndo(undo, message, restoredMessage) {
+  if (!undo) return;
+  toast.success(message, {
+    duration: CART_UNDO_DURATION,
+    action: {
+      label: "Deshacer",
+      onClick: async () => {
+        const result = await undo();
+        if (result.success) toast.success(result.preservedCount
+          ? `${restoredMessage}. Se conservaron las cantidades de los productos agregados después.`
+          : restoredMessage);
+        else toast.error(result.message);
+      },
+    },
+  });
+}
 
 export default function useCartActions() {
-  const { addItem, removeItem } = useCart();
+  const { addItem, removeItem, clearCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
 
   const addProduct = (product, quantity, { showSuccessToast = true } = {}) => {
     const result = addItem(product, quantity);
     if (!result.success) toast.error(result.message);
     else if (showSuccessToast) toast.success("Producto agregado al carrito", {
-      action: { label: "Ver carrito", onClick: () => navigate("/cart") },
+      action: { label: "Ver carrito", onClick: () => navigate("/cart", { state: { ...informationNavigationState(location, '/cart'), cartOwner: explorationOwner(user) } }) },
     });
     return result;
   };
 
   const removeProduct = (productId) => {
-    const undo = removeItem(productId);
-    if (!undo) return;
-    toast.success("Producto eliminado del carrito", {
-      duration: 8000,
-      action: {
-        label: "Deshacer",
-        onClick: async () => {
-          const result = await undo();
-          if (result.success) toast.success("Producto restaurado en el carrito");
-          else toast.error(result.message);
-        },
-      },
-    });
+    offerUndo(removeItem(productId), "Producto eliminado del carrito", "Producto restaurado en el carrito");
   };
 
-  return { addProduct, removeProduct };
+  const clearProducts = () => {
+    offerUndo(clearCart(), "Carrito vaciado", "Carrito restaurado");
+  };
+
+  return { addProduct, removeProduct, clearProducts };
 }

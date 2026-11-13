@@ -9,6 +9,7 @@ import { ROUTE_PERMISSIONS } from "./helpers/roles.js";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProductsPage from "./pages/ProductsPage.jsx";
+import ProductAuditHistoryPage from "./pages/ProductAuditHistoryPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import SalesPage from "./pages/SalesPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
@@ -23,6 +24,7 @@ import ClientOrdersPage from "./pages/ClientOrdersPage.jsx";
 import PaymentResultPage from "./pages/PaymentResultPage.jsx";
 import OnlineOrdersManagementPage from "./pages/OnlineOrdersManagementPage.jsx";
 import ProductDetailPage from "./pages/ProductDetailPage.jsx";
+import ProductFamilyPage from "./pages/ProductFamilyPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import FavoritesPage from "./pages/FavoritesPage.jsx";
 import ClientEmailVerificationPage from "./pages/ClientEmailVerificationPage.jsx";
@@ -33,6 +35,9 @@ import LogisticsScanPage from "./pages/LogisticsScanPage.jsx";
 import StatisticsPage from "./pages/StatisticsPage.jsx";
 import PromotionsPage from "./pages/PromotionsPage.jsx";
 import ClientReactivationPage from "./pages/ClientReactivationPage.jsx";
+import ReturnsInformationPage from "./pages/ReturnsInformationPage.jsx";
+import DeliveryConditionsPage from "./pages/DeliveryConditionsPage.jsx";
+import DeliveryQuotesPage from "./pages/DeliveryQuotesPage.jsx";
 
 function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -95,7 +100,12 @@ export default function App() {
       <Route path="/reactivate-account" element={<ClientReactivationPage />} />
       <Route path="/verify-work-email" element={<InternalEmailVerificationPage />} />
       <Route path="/catalog" element={<StorePage><CatalogPage /></StorePage>} />
+      <Route path="/changes-and-returns" element={<StorePage><ReturnsInformationPage /></StorePage>} />
+      <Route path="/delivery-conditions" element={<StorePage><DeliveryConditionsPage /></StorePage>} />
+      <Route path="/delivery-quotes/:id?" element={<StorePage><DeliveryQuotesPage /></StorePage>} />
+      <Route path="/delivery-requests/:id?" element={<ProtectedPage allowedRoles={ROUTE_PERMISSIONS.onlineOrdersManagement}><DeliveryQuotesPage /></ProtectedPage>} />
       <Route path="/catalog/products/:id" element={<StorePage><ProductDetailPage /></StorePage>} />
+      <Route path="/catalog/families/:id" element={<StorePage><ProductFamilyPage /></StorePage>} />
       <Route path="/cart" element={<StorePage><ClientCartPage /></StorePage>} />
       <Route path="/checkout-options" element={<StorePage><CheckoutChoicePage /></StorePage>} />
       <Route path="/account" element={<ProtectedClientPage><ClientAccountPage /></ProtectedClientPage>} />
@@ -113,6 +123,10 @@ export default function App() {
             <DashboardPage />
           </ProtectedPage>
         }
+      />
+      <Route
+        path="/products/administrative-changes"
+        element={<ProtectedPage allowedRoles={ROUTE_PERMISSIONS.productAudits}><ProductAuditHistoryPage /></ProtectedPage>}
       />
       <Route
         path="/products"

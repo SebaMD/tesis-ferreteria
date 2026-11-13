@@ -55,4 +55,4 @@ export const codeCellClass = "font-mono text-xs font-semibold text-ink-950";
 export const dateCellClass = "whitespace-nowrap text-xs text-slate-600";
 export const emptyTableCellClass = "h-24 text-center text-slate-500";
 
-export const formActionsClass = "flex flex-wrap items-center justify-end gap-3 max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>*]:w-full";
+export const formActionsClass = "admin-form-actions";

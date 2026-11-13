@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { classifyWebpayReturn } from "./webpayReturn.js";
 import { FRONTEND_URL } from "../../config/configEnv.js";
 import type { AuthenticatedRequest } from "../../middlewares/authentication.middleware.js";
 import {
@@ -14,6 +15,7 @@ import {
   restoreArchivedClientOrderService,
   cancelWebpayPaymentService,
   confirmWebpayPaymentService,
+  inspectWebpayReturnService,
   continueOnlineOrderPaymentService,
   continueGuestOnlineOrderPaymentService,
   createCheckoutService,
@@ -47,6 +49,27 @@ import {
   validateClientDeliveryAddressBody,
 } from "./onlineOrders.validation.js";
 import { ensureGuestDeviceCookie } from "./guestDeviceCookie.js";
+import { DeliveryPolicyError } from "../deliverySettings/deliveryPricing.js";
+import { quoteOnlineOrderService } from "./onlineOrders.service.js";
+
+export async function quoteOnlineOrderController(req: Request, res: Response) {
+  try {
+    const input = req.body;
+    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["items", "deliveryType", "deliveryCommune"].includes(k))) {
+      return handleErrorClient(res, 400, "La cotización contiene campos no permitidos");
+    }
+    // Preview validates the structured commune, not the physical street address.
+    const validation = validateCreateCheckoutBody({ ...input, checkoutKey: "quote-preview-0000000",
+      deliveryRecipientName: "Cotización", deliveryPhone: "123456789", deliveryAddress: "Por confirmar" });
+    if (!validation.success) return handleErrorClient(res, 400, validation.error);
+    res.setHeader("Cache-Control", "no-store");
+    return handleSuccess(res, 200, "Resumen calculado", await quoteOnlineOrderService(validation.value));
+  } catch (e) {
+    if (e instanceof DeliveryPolicyError) return res.status(e.statusCode).json({ status: "error", message: e.message, code: e.code });
+    if (e instanceof OnlineOrderError) return handleErrorClient(res, e.statusCode, e.message);
+    return handleErrorServer(res, 500, "No se pudo cotizar. Intenta nuevamente.", e);
+  }
+}
 
 function parseId(value: unknown) {
   const id = Number(value);
@@ -72,6 +95,7 @@ export async function createCheckoutController(req: AuthenticatedRequest, res: R
     const payment = await createCheckoutService(requireClient(req), validation.value);
     return handleSuccess(res, 201, "Pedido reservado y pago Webpay iniciado", payment);
   } catch (error) {
+    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message, code: error.code });
     if (error instanceof OnlineOrderError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
@@ -101,6 +125,7 @@ export async function createGuestCheckoutController(req: Request, res: Response)
     );
     return handleSuccess(res, 201, "Pedido invitado reservado y pago Webpay iniciado", payment);
   } catch (error) {
+    if (error instanceof DeliveryPolicyError) return res.status(error.statusCode).json({ status: "error", message: error.message, code: error.code });
     if (error instanceof OnlineOrderError) {
       return handleErrorClient(res, error.statusCode, error.message);
     }
@@ -494,14 +519,6 @@ export async function getMyOrderDeliveryProofController(
   }
 }
 
-function returnValue(req: Request, field: string) {
-  const bodyValue = req.body && typeof req.body === "object"
-    ? (req.body as Record<string, unknown>)[field]
-    : undefined;
-  const value = bodyValue ?? req.query[field];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
   if (orderId) {
     const guestAccess = await issueGuestOrderTrackingAccessService(orderId, status);
@@ -514,35 +531,21 @@ async function paymentResultUrl(orderId?: number, status = "PROCESSING") {
 }
 
 export async function webpayReturnController(req: Request, res: Response) {
-  const tokenWs = returnValue(req, "token_ws");
-  const tbkToken = returnValue(req, "TBK_TOKEN");
-  const buyOrder = returnValue(req, "TBK_ORDEN_COMPRA");
-  const sessionId = returnValue(req, "TBK_ID_SESION");
+  const returned = classifyWebpayReturn(req.body, req.query);
+  if (returned.kind === "invalid") return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
 
   try {
-    if (tbkToken || (!tokenWs && buyOrder && sessionId)) {
-      const result = await cancelWebpayPaymentService({
-        token: tbkToken,
-        buyOrder,
-        sessionId,
-        outcome: req.method === "GET" ? "expired" : tokenWs ? "failed" : "cancelled",
-      });
-      return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
-    }
-
-    if (!tokenWs) return res.redirect(303, await paymentResultUrl(undefined, "INVALID_RETURN"));
-
-    const result = await confirmWebpayPaymentService(tokenWs);
+    const result = returned.kind === "authorization"
+      ? await confirmWebpayPaymentService(returned.token)
+      : returned.kind === "error"
+        ? await inspectWebpayReturnService(returned)
+        : await cancelWebpayPaymentService({ ...returned, outcome: returned.kind });
     return res.redirect(303, await paymentResultUrl(result.orderId, result.orderStatus));
   } catch (error) {
     logServerError("Error al procesar retorno Webpay", error);
     let orderId: number | null = null;
     try {
-      orderId = await findOrderIdByPaymentReturnService({
-        token: tbkToken || tokenWs,
-        buyOrder,
-        sessionId,
-      });
+      orderId = await findOrderIdByPaymentReturnService(returned);
     } catch {
       // El resultado queda consultable desde Mis pedidos aunque falle esta recuperación.
     }

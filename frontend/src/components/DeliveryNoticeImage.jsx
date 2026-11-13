@@ -41,7 +41,7 @@ export default function DeliveryNoticeImage({announcement,onSaved}){
   </article>
   {editing&&<div className="mt-3"><NoticeInlineEditor ref={editorRef} aria-label="Editar aviso automático de despacho" onSubmit={event=>{event.preventDefault();if(!busy&&(file||remove))save();}} onCancel={close} busy={busy}>
     <strong className="text-sm text-ink-950">Editar aviso automático de despacho</strong>
-    <h3 className="m-0 break-words text-base">{content.title}</h3><p className="m-0 whitespace-pre-wrap break-words text-sm">{content.message}</p>
+    <h3 className="m-0 wrap-break-word text-base">{content.title}</h3><p className="m-0 whitespace-pre-wrap wrap-break-word text-sm">{content.message}</p>
     <p className="m-0 text-xs text-slate-500">Texto de solo lectura. Usa una imagen decorativa sin precios ni promesas de cobertura o gratuidad.</p>
     {content.kind!=='LOCAL_FIXED'&&<p role="status" className="m-0 text-sm">La imagen queda guardada, pero no se publica mientras el despacho local no esté disponible.</p>}
     <NoticeImageField currentUrl={announcement.savedImageUrl} file={file} removeImage={remove} disabled={busy}

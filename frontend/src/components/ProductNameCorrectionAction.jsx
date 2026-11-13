@@ -16,7 +16,7 @@ export default function ProductNameCorrectionAction({ product, dirty, busy, onRe
     if (open) onOpenChange(true);
     return () => { if (open) onOpenChange(false); };
   }, [open, onOpenChange]);
-  if (user.role !== "ADMIN") return asField ? <div className="grid min-w-0 gap-1"><span className="text-sm font-semibold">{label}</span><p className="m-0 break-words text-sm">{product.name}</p></div> : null;
+  if (user.role !== "ADMIN") return asField ? <div className="grid min-w-0 gap-1"><span className="text-sm font-semibold">{label}</span><p className="m-0 wrap-break-word text-sm">{product.name}</p></div> : null;
   const close = () => { setTarget(null); requestAnimationFrame(() => requestAnimationFrame(() => trigger.current?.focus())); };
   const begin = () => {
     if (dirty) { toast.warning("Guarda o descarta explícitamente los cambios pendientes antes de corregir el nombre. Tu borrador se conserva."); return; }

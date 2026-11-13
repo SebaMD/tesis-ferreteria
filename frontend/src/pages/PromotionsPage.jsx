@@ -1,5 +1,5 @@
 import { CalendarClock, Edit3, Percent, Plus, Power, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
@@ -72,6 +72,11 @@ export default function PromotionsPage() {
   const [targets, setTargets] = useState({ products: [], categories: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteInFlight = useRef(false);
+  const deleteTrigger = useRef(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [serverOffset, setServerOffset] = useState(0);
@@ -167,14 +172,31 @@ export default function PromotionsPage() {
     }
   };
 
-  const remove = async (promotion) => {
-    if (!window.confirm(`¿Eliminar la promoción "${promotion.name}"?`)) return;
+  const closeDelete = () => {
+    if (deleteInFlight.current) return;
+    setDeleteTarget(null);
+    // Backdrop mousedown can otherwise move focus to the body after the modal closes.
+    window.requestAnimationFrame(() => {
+      if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus();
+    });
+  };
+
+  const remove = async () => {
+    if (!deleteTarget || deleteInFlight.current) return;
+    deleteInFlight.current = true;
+    setDeleting(true);
+    setDeleteError("");
     try {
-      await deletePromotionRequest(promotion.id);
+      await deletePromotionRequest(deleteTarget.id);
+      setPromotions(current => current.filter(promotion => promotion.id !== deleteTarget.id));
+      setDeleteTarget(null);
       toast.success("Promoción eliminada");
       await load();
     } catch (error) {
-      toast.error(getApiError(error, "No se pudo eliminar la promoción"));
+      setDeleteError(getApiError(error, "No se pudo eliminar la promoción"));
+    } finally {
+      deleteInFlight.current = false;
+      setDeleting(false);
     }
   };
 
@@ -198,15 +220,36 @@ export default function PromotionsPage() {
                 <div className="flex flex-wrap gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion, Date.now() + serverOffset)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggle(promotion)} aria-label={`${promotion.isActive ? "Desactivar" : "Activar"} ${promotion.name}`} title={promotion.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{promotion.isActive ? "Desactivar" : "Activar"}</span></button>
-                  <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => remove(promotion)} disabled={promotion.usageCount > 0} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
+                  <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={(event) => { deleteTrigger.current = event.currentTarget; setDeleteError(""); setDeleteTarget(promotion); }} disabled={promotion.usageCount > 0 || deleting} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
                 </div>
               </div>
+              {promotion.usageCount > 0 && <p className="m-0 text-xs text-slate-600">Esta promoción ya fue utilizada y debe conservarse como trazabilidad. Puede desactivarla.</p>}
               <div className="grid grid-cols-2 gap-3 text-xs max-[700px]:grid-cols-1"><div className="rounded-md bg-slate-50 p-3"><strong className="flex items-center gap-2 text-ink-950"><CalendarClock size={15} /> Vigencia</strong><span className="mt-1 block text-slate-600">Desde {new Date(promotion.startsAt).toLocaleString("es-CL")}</span><span className="block text-slate-600">{promotion.endsAt ? `Hasta ${new Date(promotion.endsAt).toLocaleString("es-CL")}` : "Sin término"}</span></div><div className="rounded-md bg-slate-50 p-3"><strong className="text-ink-950">Aplicación</strong><span className="mt-1 block text-slate-600">{productNames.length ? `${productNames.length} producto(s): ${productNames.join(", ")}` : "Sin productos directos"}</span><span className="block text-slate-600">{categoryNames.length ? `${categoryNames.length} categoría(s): ${categoryNames.join(", ")}` : "Sin categorías"}</span></div></div>
             </article>
           );
         })}
         {!loading && promotions.length === 0 && <div className="grid min-h-64 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center"><div><Percent className="mx-auto text-slate-400" size={40} /><h2 className="mb-1 text-lg text-ink-950">Aún no hay promociones</h2><p className="m-0 text-sm text-slate-500">Crea un descuento porcentual o una promoción 2x1.</p></div></div>}
       </section>
+
+      <AppModal
+        open={Boolean(deleteTarget)}
+        onClose={closeDelete}
+        title="Eliminar promoción"
+        description="Esta acción elimina la promoción de forma permanente."
+        size="small"
+        initialFocusSelector="[data-promotion-delete-cancel]"
+        footer={(
+          <>
+            <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100" type="button" onClick={closeDelete} disabled={deleting} data-promotion-delete-cancel>Cancelar</button>
+            <button className="border-critical-600 bg-critical-600 hover:bg-red-700" type="button" onClick={remove} disabled={deleting}>{deleting ? "Eliminando..." : "Eliminar"}</button>
+          </>
+        )}
+      >
+        <div aria-busy={deleting}>
+          <p className="m-0 wrap-break-word text-sm text-slate-600">¿Eliminar “{deleteTarget?.name}”?</p>
+          {deleteError && <p className="mt-3 mb-0 text-sm text-critical-600" role="alert">{deleteError}</p>}
+        </div>
+      </AppModal>
 
       <AppModal open={Boolean(editing)} onClose={close} title={editing?.id ? "Editar promoción" : "Nueva promoción"} description="La aplicación final siempre será validada por el servidor." size="xlarge">
         <form className="grid gap-4" onSubmit={submit}>

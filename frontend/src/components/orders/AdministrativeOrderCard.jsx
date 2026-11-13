@@ -47,7 +47,7 @@ export default function AdministrativeOrderCard({ orderId, role }) {
   const fieldsSection = (section, economic = false, boxed = false) => <section className={boxed ? "grid min-w-0 gap-2.5 rounded-md border border-slate-200 bg-slate-50 p-3" : "grid gap-2.5"} key={section.title}>
     <h4 className="m-0 text-xs font-bold uppercase tracking-wide text-slate-600">{section.title}</h4>
     <dl className={`m-0 grid gap-x-4 gap-y-2.5 max-[620px]:grid-cols-1 ${economic ? "grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-3" : "grid-cols-2"}`}>
-      {section.fields.map(([label, value]) => <div key={label}><dt className="text-xs font-semibold text-slate-500">{label}</dt><dd className="mt-1 ml-0 break-words text-sm font-semibold text-ink-950">{value}</dd></div>)}
+      {section.fields.map(([label, value]) => <div key={label}><dt className="text-xs font-semibold text-slate-500">{label}</dt><dd className="mt-1 ml-0 wrap-break-word text-sm font-semibold text-ink-950">{value}</dd></div>)}
     </dl>
   </section>;
   const promotionItem = (item) => ({ ...item, promotionTypeSnapshot: item.promotionType, promotionNameSnapshot: item.promotionName, promotionValueSnapshot: item.promotionValue });

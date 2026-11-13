@@ -19,7 +19,7 @@ function VariantPicker({ group, product, role, onSelect }) {
     ariaLabel={`Elegir variante de ${group.name}. Actual: #${product.id} ${product.name}`}
     options={group.products.map(p => ({ value:p.id, label:`Producto #${p.id} · ${p.name}`, product:p }))}
     renderValue={() => label}
-    renderOption={option => <span className="grid gap-1 py-2"><span className="break-words text-xs font-semibold">{option.label}</span><span className="break-words text-xs text-slate-500">{inventoryVariantLabel(option.product)}</span><StockBadge product={option.product} role={role} alert /></span>} />;
+    renderOption={option => <span className="grid gap-1 py-2"><span className="wrap-break-word text-xs font-semibold">{option.label}</span><span className="wrap-break-word text-xs text-slate-500">{inventoryVariantLabel(option.product)}</span><StockBadge product={option.product} role={role} alert /></span>} />;
 }
 
 function IndividualActivationNotice() {
@@ -67,7 +67,7 @@ export default function GroupedInventoryTable({ groups, allProducts = [], role, 
   </MobileDetailGrid>{canManage && <div className="inventory-mobile-actions"><MobileRowActions>{actions(product, group)}</MobileRowActions></div>}</>;
   return <ResponsiveTableView rows={groups} getRowKey={g => g.key} getRowLabel={g => selected(g).name} emptyMessage="No se encontraron productos con los filtros seleccionados."
     renderSummary={group => { const product = selected(group); return <div className="grid min-w-0 gap-2">
-      {picker(group)}<span className="break-words text-xs text-slate-500">{inventoryGroupIdentity(group)}</span>
+      {picker(group)}<span className="wrap-break-word text-xs text-slate-500">{inventoryGroupIdentity(group)}</span>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><strong className="font-mono">{formatClp(product.price)}</strong><span>Stock: {product.currentStock}</span><StockBadge product={product} role={role} /></div>
     </div>; }}
     renderDetails={group => details(selected(group), group)}

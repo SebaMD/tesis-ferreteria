@@ -29,7 +29,7 @@ function Detail({ label, children }) {
   return (
     <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-3">
       <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</span>
-      <span className="break-words text-sm font-semibold text-ink-950">{children}</span>
+      <span className="wrap-break-word text-sm font-semibold text-ink-950">{children}</span>
     </div>
   );
 }

@@ -67,7 +67,7 @@ export default function ProductFamilyPage() {
                 aria-label={`${attribute.name}: ${o.label}${!option.available ? ` — ${option.reason}` : ""}`}
                 onClick={() => select(option)}
                 className={`inline-flex min-h-11 max-w-full items-center justify-center gap-1.5 rounded-[5px] border px-3 py-2 text-left text-sm leading-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rust-600 ${!option.available ? "border-slate-200 bg-slate-100 text-slate-500 disabled:opacity-100" : pressed ? "border-rust-600 bg-rust-50 text-ink-950 hover:bg-rust-100" : "border-slate-300 bg-white text-ink-700 hover:border-rust-600 hover:bg-slate-50"}`}>
-                {pressed && <Check size={14} className="shrink-0" aria-hidden="true" />}<span className={!option.available ? "break-words line-through" : "break-words"}>{o.label}</span>
+                {pressed && <Check size={14} className="shrink-0" aria-hidden="true" />}<span className={!option.available ? "wrap-break-word line-through" : "wrap-break-word"}>{o.label}</span>
                 {!option.available && <span className="text-xs font-normal">({option.reason})</span>}
               </button>;
             })}</div>

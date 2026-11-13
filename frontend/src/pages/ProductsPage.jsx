@@ -1882,8 +1882,8 @@ export default function ProductsPage() {
           )}
           {selectedMovementProduct && (
             <div className={`grid gap-1 border-l-4 px-3.25 py-2.75 ${estimatedLowStock ? "border-l-rust-500 bg-rust-50 text-[#92400e]" : "border-l-positive-600 bg-positive-50"}`}>
-              <strong className="break-words text-sm">#{selectedMovementProduct.id} · {selectedMovementProduct.name}</strong>
-              {inventoryVariantLabel(selectedMovementProduct) && <span className="break-words text-xs">{inventoryVariantLabel(selectedMovementProduct)}</span>}
+              <strong className="wrap-break-word text-sm">#{selectedMovementProduct.id} · {selectedMovementProduct.name}</strong>
+              {inventoryVariantLabel(selectedMovementProduct) && <span className="wrap-break-word text-xs">{inventoryVariantLabel(selectedMovementProduct)}</span>}
               <span className="text-xs">Stock final estimado</span>
               <strong>
                 {estimatedStock} unidades · mínimo {selectedMovementProduct.minimumStock}

@@ -2,7 +2,7 @@ import { bundleRowLabels, bundleRowName } from "../helpers/productBundleForm.js"
 import { formatClp } from "../helpers/formatters.js";
 import { formatQuantityWithUnit } from "../helpers/units.js";
 
-const sectionClass = "grid min-w-0 gap-2 rounded border border-slate-200 p-3 [overflow-wrap:anywhere]";
+const sectionClass = "grid min-w-0 gap-2 rounded border border-slate-200 p-3 wrap-anywhere";
 
 export default function ProductConversionSummary({ draft }) {
   const original = draft.original;

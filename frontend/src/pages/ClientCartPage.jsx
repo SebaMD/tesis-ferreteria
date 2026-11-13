@@ -108,8 +108,8 @@ export default function ClientCartPage() {
                     {image ? <img className="block max-h-full max-w-full object-contain object-center" src={image.imageUrl} alt={row.product.name} /> : <ShoppingCart className="text-slate-400" size={26} />}
                   </Link>
                   <div className="grid min-w-0 gap-1.5">
-                    <Link className="break-words font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
-                    {variantLabel(row.product)&&<span className="break-words text-xs text-slate-500">{variantLabel(row.product)}</span>}
+                    <Link className="wrap-break-word font-bold text-ink-950 no-underline hover:text-rust-600" to={`/catalog/products/${row.product.id}`} state={CART_PRODUCT_DETAIL_STATE}>{row.product.name}</Link>
+                    {variantLabel(row.product)&&<span className="wrap-break-word text-xs text-slate-500">{variantLabel(row.product)}</span>}
                     <span className="text-xs text-slate-500">Precio por {getDisplayUnit(1, row.product.unitMeasure)}</span>
                     <ProductPromotionPrice product={row.product} quantity={row.quantity} showLineSummary />
                     {row.available ? <ProductEstimatedAvailability product={row.product} compact inCart /> : (

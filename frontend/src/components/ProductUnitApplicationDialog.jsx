@@ -6,16 +6,16 @@ export default function ProductUnitApplicationDialog({ plan, onClose, onConfirm 
   const [confirmed, setConfirmed] = useState(false);
   return <AppModal open title="Aplicar unidad general" description="Vista previa del borrador. Esta acción no escribe en la base de datos ni convierte cantidades." size="large" onClose={onClose}>
     <div className="grid min-w-0 gap-3">
-      <p className="m-0 break-words text-sm">Unidad seleccionada: <strong>{plan.target || "Indica una unidad válida"}</strong></p>
+      <p className="m-0 wrap-break-word text-sm">Unidad seleccionada: <strong>{plan.target || "Indica una unidad válida"}</strong></p>
       {plan.loading ? <p role="status" className="m-0 text-sm">Consultando historial y compromisos de los SKU existentes…</p>
         : plan.error ? <p role="alert" className="m-0 text-sm text-critical-600">{plan.error}</p>
         : <p className="m-0 text-sm"><strong>{plan.changing}</strong> {plan.changing===1?"variante recibiría":"variantes recibirían"} el cambio · <strong>{plan.same}</strong> {plan.same===1?"ya utiliza":"ya utilizan"} esta unidad · <strong>{plan.blocked}</strong> {plan.blocked===1?"bloqueada":"bloqueadas"}.</p>}
       {plan.eligibility && <p className="m-0 text-xs text-slate-500">Elegibilidad orientativa al consultar. Al guardar se volverá a validar todo el conjunto; si hay un conflicto, no se guardará ninguna variante.</p>}
       <div className="grid max-h-[45dvh] min-w-0 gap-2 overflow-y-auto overscroll-contain" tabIndex={0} aria-label="Variantes y unidades de la vista previa">
         {plan.rows.map(row => <article key={row.key} className={`min-w-0 rounded border p-3 text-sm ${row.state === "blocked" ? "border-critical-600 bg-critical-50" : "border-slate-200 bg-slate-50"}`}>
-          <div className="flex min-w-0 flex-wrap items-start justify-between gap-2"><strong className="min-w-0 break-words">Variante {row.index}{row.id ? ` · Producto #${row.id}` : " · Nueva sin ID"}{!row.active ? " · Inactiva" : ""}</strong><span className="text-xs text-slate-500">{row.kind}</span></div>
-          {row.name && <p className="mt-1 mb-0 break-words">{row.name}</p>}
-          <p className="my-2 break-words [overflow-wrap:anywhere]">{row.before || "Unidad no indicada"} <span aria-hidden="true">→</span><span className="sr-only"> a </span> <strong>{row.after || "Unidad no indicada"}</strong></p>
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-2"><strong className="min-w-0 wrap-break-word">Variante {row.index}{row.id ? ` · Producto #${row.id}` : " · Nueva sin ID"}{!row.active ? " · Inactiva" : ""}</strong><span className="text-xs text-slate-500">{row.kind}</span></div>
+          {row.name && <p className="mt-1 mb-0 wrap-break-word">{row.name}</p>}
+          <p className="my-2 wrap-break-word wrap-anywhere">{row.before || "Unidad no indicada"} <span aria-hidden="true">→</span><span className="sr-only"> a </span> <strong>{row.after || "Unidad no indicada"}</strong></p>
           {!row.id && <p className="my-1 text-xs text-slate-500">Stock inicial del borrador: {row.initialStock ?? 0}. Su cantidad no se convertirá.</p>}
           <p className={`m-0 text-xs ${row.state === "blocked" ? "text-critical-600" : "text-slate-500"}`}>{row.reason}</p>
         </article>)}

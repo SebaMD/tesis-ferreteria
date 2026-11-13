@@ -87,7 +87,7 @@ export default function ClientNavbar() {
           </Link>
         </nav>
 
-        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-none min-[1024px]:ml-2 min-[1024px]:min-w-40 min-[1024px]:flex-1" role="search" onSubmit={(event) => event.preventDefault()}>
+        <form className="relative order-4 w-full min-w-0 min-[1024px]:order-0 min-[1024px]:ml-2 min-[1024px]:min-w-40 min-[1024px]:flex-1" role="search" onSubmit={(event) => event.preventDefault()}>
           <label className="sr-only" htmlFor="catalog-navbar-search">Buscar producto</label>
           <Search className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" size={17} aria-hidden="true" />
           <input

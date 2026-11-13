@@ -27,7 +27,7 @@ export default function ReturnsInformationPage() {
           return <div className="grid min-w-0 content-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-3" key={contact.kind}>
             <dt className="flex items-center gap-2 text-xs font-bold text-slate-500"><Icon size={16} aria-hidden="true" />{contact.label}</dt>
             <dd className="m-0 grid min-w-0 gap-2 text-sm text-ink-950">
-              <span className="break-words">{contact.text}</span>
+              <span className="wrap-break-word">{contact.text}</span>
               <a className="inline-flex min-h-11 items-center justify-center rounded-[5px] border border-slate-300 bg-white px-3 text-xs font-bold text-ink-700 no-underline hover:bg-slate-100" href={contact.href} target={contact.external ? "_blank" : undefined} rel={contact.external ? "noopener noreferrer" : undefined}>{contact.action}</a>
               {contact.kind === "address" && <span className="text-xs leading-5 text-slate-500">La búsqueda usa esta dirección de referencia y no identifica necesariamente la entrada exacta del local.</span>}
             </dd>

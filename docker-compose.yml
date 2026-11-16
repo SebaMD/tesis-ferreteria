@@ -106,18 +106,6 @@ services:
     networks:
       - frontend_network
 
-  python:
-    build:
-      context: ./python
-      dockerfile: Dockerfile
-      target: production
-    container_name: ferreteria-python
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    networks:
-      - backend_network
-
 networks:
   backend_network:
     driver: bridge

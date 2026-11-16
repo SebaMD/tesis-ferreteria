@@ -1,4 +1,4 @@
-import { LockKeyhole, Mail } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const { isAuthenticated, login } = useAuth();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState(readSessionNotice);
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +48,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative isolate grid h-dvh min-h-0 grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
+    <main className="practice-login relative isolate grid h-dvh min-h-0 grid-cols-[minmax(400px,44%)_1fr] overflow-hidden bg-[#f7f8f9] max-[720px]:grid-cols-1">
       <LoadingOverlay active={loading} fullScreen />
 
       <section className="relative z-10 grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r-2 border-r-rust-500 bg-ink-950 bg-[linear-gradient(rgba(217,119,6,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(217,119,6,0.14)_1px,transparent_1px)] bg-size-[32px_32px] p-12 text-white max-[720px]:hidden">
@@ -70,14 +71,14 @@ export default function LoginPage() {
         fetchPriority="high"
       />
       <section
-        className="relative z-1 grid h-full min-h-0 place-items-center overflow-hidden p-8 max-[720px]:p-6"
+        className="practice-login-content relative z-1 grid h-full min-h-0 place-items-center overflow-hidden p-8 max-[720px]:p-6"
       >
         <form className="z-10 grid w-full max-w-110 min-w-0 gap-6 rounded-md border-2 border-rust-500 bg-white p-7.5 shadow-[0_14px_38px_rgba(16,21,31,0.09)] max-[720px]:w-[calc(100vw-48px)] max-[720px]:gap-4 max-[720px]:px-5 max-[720px]:py-6" onSubmit={handleSubmit}>
           <div className="hidden items-center justify-center gap-2.5 text-ink-950 max-[720px]:flex">
             <BrandLogo className="size-13" />
             <strong className="text-[17px] font-bold">FERRETERIA FYF</strong>
           </div>
-          <div>
+          <div className="practice-auth-heading">
             <h2 className="m-0 text-2xl font-bold text-ink-950">Iniciar sesión</h2>
             <p className="mt-1.5 mb-0 text-sm text-slate-500">Ingresa con tu cuenta institucional para continuar.</p>
           </div>
@@ -106,8 +107,8 @@ export default function LoginPage() {
             <span className="relative block">
               <LockKeyhole className="absolute top-1/2 left-3 z-1 -translate-y-1/2 text-[#8d97a4]" size={17} />
               <input
-                className="pl-9.75"
-                type="password"
+                className="pl-9.75 pr-12"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => {
                   clearExpiredSessionMessage();
@@ -117,6 +118,9 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
               />
+              <button className="absolute top-1/2 right-1 size-10 min-h-10 -translate-y-1/2 border-0 bg-transparent p-0 text-slate-500 hover:bg-slate-100 hover:text-ink-950" type="button" aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={showPassword} onClick={() => setShowPassword(current => !current)}>
+                {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+              </button>
             </span>
           </label>
 

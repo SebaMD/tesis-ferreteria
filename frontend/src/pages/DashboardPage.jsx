@@ -209,7 +209,7 @@ export default function DashboardPage() {
       : metrics.length >= 4
       ? "grid-cols-4"
       : "grid-cols-3";
-  const metricsGridClass = `grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
+  const metricsGridClass = `practice-dashboard-metrics grid gap-3.5 ${metricsGridColumnsClass} max-[980px]:grid-cols-2 max-[720px]:grid-cols-1`;
 
   return (
     <section className={`${pageClass} gap-4.5`}>

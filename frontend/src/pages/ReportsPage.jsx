@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { getApiError } from "../api/httpClient.js";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../components/ResponsiveTableView.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
 import { formatWorkSchedule, getPaymentMethodLabel, getSaleStatusLabel } from "../helpers/labels.js";
@@ -232,7 +234,7 @@ export default function ReportsPage() {
               <p className="mt-1 mb-0 text-xs text-slate-500">Selecciona fecha o rango. No se permiten fechas futuras.</p>
             </div>
           </div>
-          <div className="flex w-fit max-w-full shrink-0 gap-2 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
+          <div className="practice-report-period flex w-fit max-w-full shrink-0 gap-2 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
               className={`min-h-11 rounded-sm border-2 px-5 py-2 text-sm font-extrabold ${dateMode === "single" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
@@ -402,7 +404,8 @@ export default function ReportsPage() {
               hasFilters: true,
             })}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools exportAction={{ onClick: handleExportSales, disabled: loading || reportSales.length === 0, label: "Exportar reporte a Excel" }} />
+          <div className="flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             <button
               className={`${secondaryButtonClass} mr-0`}
               type="button"
@@ -414,6 +417,27 @@ export default function ReportsPage() {
             </button>
           </div>
         </div>
+        <ResponsiveTableView
+          rows={salesPagination.paginatedItems}
+          getRowKey={sale => sale.id}
+          getRowLabel={sale => formatSaleFolio(sale.id)}
+          resetKey={`${salesPagination.page}|${appliedFilters.from}|${appliedFilters.to}|${appliedFilters.cashierId}|${appliedFilters.paymentMethod}`}
+          emptyMessage="No hay ventas para los filtros seleccionados."
+          renderSummary={sale => <div className="grid min-w-0 gap-2">
+            <div className="flex min-w-0 items-start justify-between gap-3"><strong className="font-mono text-sm text-ink-950">{formatSaleFolio(sale.id)}</strong><span className={badgeClass(getSaleStatusTone(sale.status))}>{getSaleStatusLabel(sale.status)}</span></div>
+            <div className="flex flex-wrap items-end justify-between gap-2"><span className="text-xs text-slate-500">{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</span><strong className="font-mono text-sm text-ink-950">{formatClp(getSaleTotals(sale).netTotal)}</strong></div>
+          </div>}
+          renderDetails={sale => <MobileDetailGrid>
+            <MobileDetailField label="ID">#{sale.id}</MobileDetailField>
+            <MobileDetailField label="Fecha y hora">{formatDate(sale.date, REPORT_DATE_OPTIONS, "-")}</MobileDetailField>
+            <MobileDetailField label="Cajero" wide>{sale.cashierNames} {sale.cashierSurnames}</MobileDetailField>
+            <MobileDetailField label="Método">{getPaymentMethodLabel(sale.paymentMethod)}</MobileDetailField>
+            <MobileDetailField label="Estado">{getSaleStatusLabel(sale.status)}</MobileDetailField>
+            <MobileDetailField label="Total original">{formatClp(getSaleTotals(sale).originalTotal)}</MobileDetailField>
+            <MobileDetailField label="Devuelto">{formatClp(getSaleTotals(sale).returnedTotal)}</MobileDetailField>
+            <MobileDetailField label="Total neto">{formatClp(getSaleTotals(sale).netTotal)}</MobileDetailField>
+          </MobileDetailGrid>}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
             <thead>
@@ -452,6 +476,8 @@ export default function ReportsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={salesPagination.page}
           pageSize={salesPagination.pageSize}

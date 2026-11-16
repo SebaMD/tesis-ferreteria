@@ -6,6 +6,8 @@ import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import { downloadExcel } from "../helpers/excelExport.js";
 import { compareByNewest, formatClp, formatDate, formatTableRecordCount } from "../helpers/formatters.js";
 import { getMovementTone, getStockStatus, isLowStockProduct, isOutOfStockProduct } from "../helpers/inventory.js";
@@ -1113,7 +1115,7 @@ export default function ProductsPage() {
           <p>Listado y gestión de productos</p>
         </div>
         {canViewHistory && (
-          <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
+          <div className="practice-equal-mobile-navigation ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
               className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "inventory" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
@@ -1159,7 +1161,7 @@ export default function ProductsPage() {
           </select>
         </div>
         {activeView === "inventory" && (canManage || canCreateMovement) && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2.25 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
+          <div className="practice-product-actions flex shrink-0 flex-wrap items-center justify-end gap-2.25 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:[&>button]:w-full">
             {canManage && (
               <>
                 <button className={`${secondaryButtonClass} mr-0`} type="button" onClick={openCategoryForm}>
@@ -1721,9 +1723,8 @@ export default function ProductsPage() {
 
       {activeView === "inventory" && (
       <div className={tablePanelClass}>
-        <div className={tableHeadingClass}>
+        <div className={`${tableHeadingClass} practice-inventory-heading practice-count-only`}>
           <div>
-            <h2>Inventario de productos</h2>
             <p>{formatTableRecordCount({
               visibleCount: productsPagination.paginatedItems.length,
               totalCount: visibleStatusProducts.length,
@@ -1731,7 +1732,21 @@ export default function ProductsPage() {
               hasFilters: hasListFilters,
             })}</p>
           </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <MobileTableTools
+            showFilters={canViewInactiveProducts || canViewLowStockFilter}
+            hasActiveFilters={Boolean(showInactiveProducts || lowStockOnly || outOfStockOnly)}
+            value={{ showInactiveProducts, lowStockOnly, outOfStockOnly }}
+            clearValue={{ showInactiveProducts: false, lowStockOnly: false, outOfStockOnly: false }}
+            onApply={next => { setShowInactiveProducts(next.showInactiveProducts); setLowStockOnly(next.lowStockOnly); setOutOfStockOnly(next.outOfStockOnly); }}
+            exportAction={canExportInventory ? { onClick: handleExportProducts, disabled: filteredProducts.length === 0, label: "Exportar inventario a Excel" } : null}
+          >
+            {(draft, setDraft) => <>
+              {canViewInactiveProducts && <button className={`${secondaryButtonClass} ${draft.showInactiveProducts ? "border-rust-500! bg-rust-50! text-rust-700!" : ""}`} type="button" disabled={draft.lowStockOnly || draft.outOfStockOnly} aria-pressed={draft.showInactiveProducts} onClick={() => setDraft(current => ({ ...current, showInactiveProducts: !current.showInactiveProducts, lowStockOnly: false, outOfStockOnly: false }))}>{draft.showInactiveProducts ? "Mostrar productos activos" : "Mostrar productos desactivados"}</button>}
+              {canViewLowStockFilter && <button className={`${secondaryButtonClass} ${draft.lowStockOnly ? "border-rust-500! bg-rust-50! text-rust-700!" : ""}`} type="button" disabled={draft.showInactiveProducts || draft.outOfStockOnly} aria-pressed={draft.lowStockOnly} onClick={() => setDraft(current => ({ ...current, lowStockOnly: !current.lowStockOnly, outOfStockOnly: false }))}>{draft.lowStockOnly ? "Mostrar todos los productos" : "Mostrar productos a reponer"}</button>}
+              {canViewLowStockFilter && <button className={`${secondaryButtonClass} ${draft.outOfStockOnly ? "border-rust-500! bg-rust-50! text-rust-700!" : ""}`} type="button" disabled={draft.showInactiveProducts || draft.lowStockOnly} aria-pressed={draft.outOfStockOnly} onClick={() => setDraft(current => ({ ...current, outOfStockOnly: !current.outOfStockOnly, lowStockOnly: false }))}>{draft.outOfStockOnly ? "Mostrar todos los productos" : "Mostrar productos sin stock"}</button>}
+            </>}
+          </MobileTableTools>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-[720px]:hidden">
             {canViewInactiveProducts && (
               <button
                 className={`mr-0 min-h-9 px-3 text-xs ${lowStockOnly || outOfStockOnly ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : showInactiveProducts ? "bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
@@ -1788,6 +1803,38 @@ export default function ProductsPage() {
             )}
           </div>
         </div>
+        <ResponsiveTableView
+          rows={productsPagination.paginatedItems}
+          getRowKey={product => product.id}
+          getRowLabel={product => product.name}
+          resetKey={`${productsPagination.page}|${categoryFilter}|${lowStockOnly}|${outOfStockOnly}|${showInactiveProducts}|${normalizedSearch}`}
+          emptyMessage="No se encontraron productos con los filtros seleccionados."
+          renderSummary={product => {
+            const stockStatus = getStockStatus(product, user?.role);
+            return <div className="grid min-w-0 gap-2">
+              <strong className="block truncate text-sm text-ink-950">{product.name}</strong>
+              <span className="text-xs text-slate-500">{product.categoryName}</span>
+              <div className="flex flex-wrap items-end justify-between gap-2"><strong className="font-mono text-sm text-ink-950">{formatClp(product.price)}</strong><span className="text-xs text-slate-600">Stock: {product.currentStock}</span></div>
+              <span className={`${badgeClass(product.status === false ? "neutral" : stockStatus.tone)} w-fit`}>{product.status === false ? "Desactivado" : stockStatus.label}</span>
+            </div>;
+          }}
+          renderDetails={product => <>
+            <MobileDetailGrid>
+              <MobileDetailField label="ID">#{product.id}</MobileDetailField>
+              <MobileDetailField label="Producto" wide>{product.name}</MobileDetailField>
+              <MobileDetailField label="Categoría" wide>{product.categoryName}</MobileDetailField>
+              <MobileDetailField label="Precio">{formatClp(product.price)}</MobileDetailField>
+              <MobileDetailField label="Stock">{product.currentStock}</MobileDetailField>
+              <MobileDetailField label="Unidad">{product.unitMeasure}</MobileDetailField>
+              {canViewAdministrativeStock && <MobileDetailField label="Mínimo">{product.minimumStock}</MobileDetailField>}
+              <MobileDetailField label="Estado stock">{product.status === false ? "Desactivado" : getStockStatus(product, user?.role).label}</MobileDetailField>
+            </MobileDetailGrid>
+            {canManage && <MobileRowActions>
+              <button className={secondaryButtonClass} type="button" onClick={() => startEditing(product)}><Pencil size={17} />Editar</button>
+              {product.status === false ? <button type="button" onClick={() => openProductStatusModal(product)}><CheckCircle size={17} />Activar</button> : <button className={dangerButtonClass} type="button" onClick={() => openProductStatusModal(product)}><XCircle size={17} />Desactivar</button>}
+            </MobileRowActions>}
+          </>}
+          desktop={(
         <div className={tableScrollClass}>
           <table>
           <thead>
@@ -1857,6 +1904,8 @@ export default function ProductsPage() {
           </tbody>
           </table>
         </div>
+          )}
+        />
         <Pagination
           page={productsPagination.page}
           pageSize={productsPagination.pageSize}
@@ -1869,9 +1918,8 @@ export default function ProductsPage() {
 
       {canViewHistory && activeView === "history" && (
         <div className={tablePanelClass}>
-          <div className={tableHeadingClass}>
+          <div className={`${tableHeadingClass} practice-count-only`}>
             <div>
-              <h2>Historial de inventario</h2>
               <p>{formatTableRecordCount({
                 visibleCount: movementsPagination.paginatedItems.length,
                 totalCount: sortedMovements.length,
@@ -1879,9 +1927,12 @@ export default function ProductsPage() {
                 hasFilters: hasMovementFilters,
               })}</p>
             </div>
+            <MobileTableTools
+              exportAction={canExportInventory ? { onClick: handleExportMovements, disabled: filteredMovements.length === 0, label: "Exportar movimientos a Excel" } : null}
+            />
             {canExportInventory && (
               <button
-                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"
+                className="ml-auto mr-0 border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950 max-[720px]:hidden"
                 type="button"
                 onClick={handleExportMovements}
                 disabled={filteredMovements.length === 0}
@@ -1891,6 +1942,26 @@ export default function ProductsPage() {
               </button>
             )}
           </div>
+          <ResponsiveTableView
+            rows={movementsPagination.paginatedItems}
+            getRowKey={movement => movement.id}
+            getRowLabel={movement => `movimiento ${movement.id} de ${movement.productName}`}
+            resetKey={`${movementsPagination.page}|${categoryFilter}|${normalizedSearch}`}
+            emptyMessage={sortedMovements.length === 0 ? "No hay movimientos registrados." : "No se encontraron movimientos con los filtros seleccionados."}
+            renderSummary={movement => <div className="grid min-w-0 gap-2">
+              <strong className="truncate text-sm text-ink-950">{movement.productName}</strong>
+              <div className="flex flex-wrap items-center justify-between gap-2"><span className={badgeClass(getMovementTone(movement))}>{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</span><strong className="font-mono text-sm text-ink-950">{movement.quantity}</strong></div>
+              <span className="text-xs text-slate-500">{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</span>
+            </div>}
+            renderDetails={movement => <MobileDetailGrid>
+              <MobileDetailField label="Fecha">{formatDate(movement.date || movement.createdAt, INVENTORY_DATE_OPTIONS)}</MobileDetailField>
+              <MobileDetailField label="Producto" wide>{movement.productName}</MobileDetailField>
+              <MobileDetailField label="Tipo">{MOVEMENT_LABELS[movement.movementType] || movement.movementType}</MobileDetailField>
+              <MobileDetailField label="Cantidad">{movement.quantity}</MobileDetailField>
+              <MobileDetailField label="Usuario" wide>{movement.userNames || movement.userSurnames ? `${movement.userNames || ""} ${movement.userSurnames || ""}`.trim() : "Sistema"}</MobileDetailField>
+              <MobileDetailField label="Motivo" wide>{movement.reason || "Sin motivo"}</MobileDetailField>
+            </MobileDetailGrid>}
+            desktop={(
           <div className={tableScrollClass}>
             <table>
             <thead>
@@ -1934,6 +2005,8 @@ export default function ProductsPage() {
             </tbody>
             </table>
           </div>
+            )}
+          />
           <Pagination
             page={movementsPagination.page}
             pageSize={movementsPagination.pageSize}

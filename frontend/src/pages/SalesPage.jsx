@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, Plus, RotateCcw, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock3, Eye, EyeOff, Plus, RotateCcw, Search, Send, ShoppingCart, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -6,6 +6,8 @@ import { getApiError } from "../api/httpClient.js";
 import AppModal from "../components/AppModal.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
 import Pagination from "../components/Pagination.jsx";
+import ResponsiveTableView, { MobileDetailField, MobileDetailGrid, MobileRowActions } from "../components/ResponsiveTableView.jsx";
+import MobileTableTools from "../components/MobileTableTools.jsx";
 import { compareByNewest, formatClp, formatDate, formatSaleFolio, formatTableRecordCount, getSaleTotals } from "../helpers/formatters.js";
 import { getAvailableStockStatus } from "../helpers/inventory.js";
 import {
@@ -47,6 +49,14 @@ const SALE_TIME_OPTIONS = {
   hour: "2-digit",
   minute: "2-digit",
 };
+
+function ReviewActionContent({ wide }) {
+  if (!wide) return <><Send size={16} aria-hidden="true" />Revisar</>;
+  return <>
+    <span className="invisible inline-flex items-center gap-2" aria-hidden="true"><RotateCcw size={17} />Registrar devolución</span>
+    <span className="absolute inset-0 inline-flex items-center justify-center gap-2"><Send size={16} aria-hidden="true" />Revisar</span>
+  </>;
+}
 const SALE_DATE_TIME_OPTIONS = {
   day: "2-digit",
   month: "2-digit",
@@ -763,6 +773,18 @@ export default function SalesPage() {
     setSearch("");
   };
 
+  const [reviewSize, setReviewSize] = useState(null);
+  useEffect(() => {
+    if (user?.role !== "ADMIN") return undefined;
+    const sources = [...document.querySelectorAll("[data-return-size-source]")];
+    const observer = new ResizeObserver(() => {
+      const box = sources.map(element => element.getBoundingClientRect()).find(rect => rect.width > 0);
+      if (box?.width) setReviewSize(current => current?.width === box.width && current?.height === box.height ? current : { width: box.width, height: box.height });
+    });
+    sources.forEach(element => observer.observe(element));
+    return () => observer.disconnect();
+  }, [filteredSales, salesPagination.page, activeView, user?.role]);
+
   return (
     <section className={`${pageClass} gap-3 py-4`}>
       <LoadingOverlay active={loading} />
@@ -773,24 +795,27 @@ export default function SalesPage() {
           <p>{canCreate && activeView === "sales" ? "Punto de venta presencial con carrito." : "Historial de ventas presenciales registradas."}</p>
         </div>
         {canReviewCancellation && pendingCancellationSales.length > 0 && (
-          <div className="ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:flex-wrap">
-            <span className="text-sm font-bold">
-              Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes
+          <div className="ml-auto flex min-h-11 items-center gap-3 rounded-[5px] border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:gap-2">
+            <span className="min-w-0 text-left text-sm font-bold max-[720px]:flex-1">
+              <span className="max-[720px]:hidden">Tienes {pendingCancellationSales.length} solicitudes de devolución pendientes</span>
+              <span className="hidden max-[720px]:inline">{pendingCancellationSales.length} {pendingCancellationSales.length === 1 ? "solicitud de devolución pendiente" : "solicitudes de devolución pendientes"}</span>
             </span>
             <button
-              className="min-h-8 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700"
+              className="min-h-8 shrink-0 border-amber-700 bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700 max-[720px]:size-11 max-[720px]:min-h-11 max-[720px]:p-0"
               type="button"
+              aria-label={salesFilter === "pending" ? "Volver a ventas vigentes" : "Ver solicitudes de devolución pendientes"}
               onClick={() => {
                 setActiveView("history");
                 applySalesFilter(salesFilter === "pending" ? "current" : "pending");
               }}
             >
-              {salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}
+              <span className="max-[720px]:hidden">{salesFilter === "pending" ? "Ver ventas vigentes" : "Ver solicitudes"}</span>
+              <span className="hidden max-[720px]:inline-flex" aria-hidden="true">{salesFilter === "pending" ? <EyeOff size={20} /> : <Eye size={20} />}</span>
             </button>
           </div>
         )}
         {canCreate && (
-          <div className="ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
+          <div className="practice-equal-mobile-navigation ml-auto flex shrink-0 items-center justify-end gap-2 max-[720px]:ml-0 max-[720px]:w-full max-[720px]:[&>button]:flex-1">
             <button
               className={`min-h-11 rounded-sm border-2 px-4 py-2 text-sm font-extrabold ${activeView === "sales" ? "border-rust-700 bg-rust-500 text-white hover:bg-rust-600" : "border-ink-950 bg-white text-ink-950 hover:border-rust-500 hover:bg-rust-50"}`}
               type="button"
@@ -958,6 +983,34 @@ export default function SalesPage() {
                   Seleccionar todos
                 </label>
               </div>
+              <ResponsiveTableView
+                rows={returnableDetails}
+                getRowKey={detail => `${detail.saleId}-${detail.productId}`}
+                getRowLabel={detail => detail.productName || `producto ${detail.productId}`}
+                resetKey={`${saleForReturn?.id || ""}|${returnMode || ""}`}
+                renderSummary={detail => <div className="flex min-w-0 items-center gap-3">
+                  <input className="size-5 shrink-0" type="checkbox" checked={returnQuantities[String(detail.productId)] !== undefined} onChange={event => toggleReturnProduct(detail, event.target.checked)} aria-label={`Seleccionar ${detail.productName || `producto ${detail.productId}`}`} />
+                  <div className="min-w-0"><strong className="block truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><span className="font-mono text-[11px] text-slate-500">ID {detail.productId}</span></div>
+                </div>}
+                renderDetails={detail => {
+                  const selected = returnQuantities[String(detail.productId)] !== undefined;
+                  const quantityValue = selected ? returnQuantities[String(detail.productId)] : "";
+                  const quantityError = selected ? getReturnQuantityError(quantityValue, detail.availableQuantity) : "";
+                  return <>
+                    <MobileDetailGrid>
+                      <MobileDetailField label="Producto" wide>{detail.productName || `Producto #${detail.productId}`}</MobileDetailField>
+                      <MobileDetailField label="Vendida">{detail.soldQuantity}</MobileDetailField>
+                      <MobileDetailField label="Ya devuelta">{detail.returnedQuantity}</MobileDetailField>
+                      <MobileDetailField label="Disponible">{detail.availableQuantity}</MobileDetailField>
+                      <MobileDetailField label="Subtotal devolución">{selected && !quantityError ? formatClp(Number(detail.unitPrice || 0) * Number(quantityValue)) : "-"}</MobileDetailField>
+                    </MobileDetailGrid>
+                    <label className="mt-4 grid gap-1 text-xs font-bold text-slate-600">Cantidad solicitada
+                      <input className={`min-h-11 w-full ${quantityError ? "border-critical-600 focus:border-critical-600" : ""}`} type="number" min="1" max={detail.availableQuantity} step="1" inputMode="numeric" value={quantityValue} onChange={event => updateReturnQuantity(detail, event.target.value)} onKeyDown={preventNonIntegerQuantityKey} onPaste={preventNonIntegerQuantityPaste} disabled={!selected} required={selected} aria-invalid={Boolean(quantityError)} aria-describedby={quantityError ? `mobile-return-quantity-error-${detail.productId}` : undefined} aria-label={`Cantidad a devolver de ${detail.productName || detail.productId}`} />
+                      {quantityError && <span className="text-[11px] font-semibold leading-tight text-critical-600" id={`mobile-return-quantity-error-${detail.productId}`}>{quantityError}</span>}
+                    </label>
+                  </>;
+                }}
+                desktop={(
               <div className={tableScrollClass}>
                 <table className="min-w-205">
                   <thead>
@@ -1042,6 +1095,8 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
+                )}
+              />
             </div>
           )}
 
@@ -1156,6 +1211,23 @@ export default function SalesPage() {
             <div className="border-b border-slate-200 px-3.5 py-3">
                 <h3 className="m-0 text-sm font-bold text-ink-950">Productos solicitados</h3>
             </div>
+            <ResponsiveTableView
+              rows={requestToReview?.details || []}
+              getRowKey={detail => detail.productId}
+              getRowLabel={detail => detail.productName || `producto ${detail.productId}`}
+              resetKey={requestToReview?.id || ""}
+              emptyMessage="No hay productos asociados a esta solicitud."
+              renderSummary={detail => <div className="grid min-w-0 gap-2"><strong className="truncate text-sm text-ink-950">{detail.productName || `Producto #${detail.productId}`}</strong><div className="flex flex-wrap justify-between gap-2"><span className="text-xs text-slate-500">Solicitada: {detail.requestedQuantity}</span><strong className="font-mono text-sm text-ink-950">{formatClp(detail.requestedSubtotal)}</strong></div></div>}
+              renderDetails={detail => <MobileDetailGrid>
+                <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
+                <MobileDetailField label="Producto" wide>{detail.productName || `Producto #${detail.productId}`}</MobileDetailField>
+                <MobileDetailField label="Vendida">{detail.soldQuantity}</MobileDetailField>
+                <MobileDetailField label="Ya devuelta">{detail.returnedQuantity}</MobileDetailField>
+                <MobileDetailField label="Solicitada">{detail.requestedQuantity}</MobileDetailField>
+                <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
+                <MobileDetailField label="Subtotal devolución">{formatClp(detail.requestedSubtotal)}</MobileDetailField>
+              </MobileDetailGrid>}
+              desktop={(
             <div className={tableScrollClass}>
               <table>
                 <thead>
@@ -1189,6 +1261,8 @@ export default function SalesPage() {
                 </tbody>
               </table>
             </div>
+              )}
+            />
           </div>
 
           <label className="grid gap-2 text-sm font-semibold text-ink-700">
@@ -1284,6 +1358,23 @@ export default function SalesPage() {
                 <div className="border-b border-slate-200 px-3.5 py-3">
                   <h3 className="m-0 text-sm font-bold text-ink-950">Productos vendidos</h3>
                 </div>
+                <ResponsiveTableView
+                  rows={getSaleDetails(saleDetail)}
+                  getRowKey={detail => `${detail.saleId}-${detail.productId}`}
+                  getRowLabel={detail => detail.productName || detail.name || `producto ${detail.productId}`}
+                  resetKey={saleDetail.id}
+                  emptyMessage="No hay productos asociados a esta venta."
+                  renderSummary={detail => <div className="grid min-w-0 gap-2"><strong className="truncate text-sm text-ink-950">{detail.productName || detail.name || `Producto #${detail.productId}`}</strong><div className="flex flex-wrap justify-between gap-2"><span className="text-xs text-slate-500">Vendida: {detail.quantity}</span><strong className="font-mono text-sm text-ink-950">{formatClp(detail.subtotal)}</strong></div></div>}
+                  renderDetails={detail => <MobileDetailGrid>
+                    <MobileDetailField label="ID">#{detail.productId}</MobileDetailField>
+                    <MobileDetailField label="Producto" wide>{detail.productName || detail.name || `Producto #${detail.productId}`}</MobileDetailField>
+                    <MobileDetailField label="Vendida">{detail.quantity}</MobileDetailField>
+                    <MobileDetailField label="Devuelta">{detail.returnedQuantity || 0}</MobileDetailField>
+                    <MobileDetailField label="Disponible">{Math.max(0, Number(detail.quantity || 0) - Number(detail.returnedQuantity || 0))}</MobileDetailField>
+                    <MobileDetailField label="Precio unitario">{formatClp(detail.unitPrice)}</MobileDetailField>
+                    <MobileDetailField label="Subtotal">{formatClp(detail.subtotal)}</MobileDetailField>
+                  </MobileDetailGrid>}
+                  desktop={(
                 <div className={tableScrollClass}>
                   <table>
                     <thead>
@@ -1317,6 +1408,8 @@ export default function SalesPage() {
                     </tbody>
                   </table>
                 </div>
+                  )}
+                />
               </div>
 
               {detailReturnRequests.length > 0 && (
@@ -1349,7 +1442,7 @@ export default function SalesPage() {
                                 onClick={() => setExpandedReturnRequestId((current) => current === request.id ? null : request.id)}
                                 aria-expanded={requestOpen}
                               >
-                                <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2">
+                                <div className="practice-return-summary flex w-full flex-wrap items-center gap-x-4 gap-y-2">
                                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <span className={badgeClass(getCancellationRequestTone(request.status))}>
                                       {getCancellationRequestStatusLabel(request.status)}
@@ -1390,7 +1483,7 @@ export default function SalesPage() {
                                   <div className="grid gap-1.5 border-t border-slate-200 pt-2 text-xs">
                                     {(request.details || []).map((detail) => (
                                       <div
-                                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 max-[720px]:grid-cols-[minmax(0,1fr)_auto]"
+                                        className="practice-return-product grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 max-[720px]:grid-cols-[minmax(0,1fr)_auto]"
                                         key={`${request.id}-${detail.productId}`}
                                       >
                                         <span className="truncate text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span>
@@ -1659,7 +1752,18 @@ export default function SalesPage() {
                   hasFilters: hasSalesFilters,
                 })}</p>
               </div>
-              <div className="ml-auto flex flex-wrap justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
+              <MobileTableTools
+                hasActiveFilters={salesFilter !== "current"}
+                value={{ salesFilter }}
+                clearValue={{ salesFilter: "current" }}
+                onApply={next => { if (next.salesFilter !== salesFilter) applySalesFilter(next.salesFilter); }}
+              >
+                {(draft, setDraft) => <>
+                  <button className={`${secondaryButtonClass} ${draft.salesFilter === "partial" ? "border-rust-500! bg-rust-50! text-rust-700!" : ""}`} type="button" disabled={draft.salesFilter === "cancelled"} aria-pressed={draft.salesFilter === "partial"} onClick={() => setDraft({ salesFilter: draft.salesFilter === "partial" ? "current" : "partial" })}>{draft.salesFilter === "partial" ? "Mostrar ventas activas" : "Devueltas parcialmente"}</button>
+                  <button className={`${secondaryButtonClass} ${draft.salesFilter === "cancelled" ? "border-rust-500! bg-rust-50! text-rust-700!" : ""}`} type="button" disabled={draft.salesFilter === "partial"} aria-pressed={draft.salesFilter === "cancelled"} onClick={() => setDraft({ salesFilter: draft.salesFilter === "cancelled" ? "current" : "cancelled" })}>{draft.salesFilter === "cancelled" ? "Mostrar ventas activas" : "Canceladas"}</button>
+                </>}
+              </MobileTableTools>
+              <div className="ml-auto flex flex-wrap justify-end gap-2 max-[720px]:hidden max-[720px]:w-full max-[720px]:justify-start">
                 <button
                   className={`mr-0 min-h-9 px-3 text-xs ${salesFilter === "cancelled" ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 hover:bg-slate-100" : salesFilter === "partial" ? "border-ink-950 bg-rust-500 text-white hover:bg-rust-600" : "border-slate-300 bg-white text-ink-700 hover:border-[#adb5bf] hover:bg-slate-100 hover:text-ink-950"}`}
                   type="button"
@@ -1680,6 +1784,36 @@ export default function SalesPage() {
                 </button>
               </div>
             </div>
+            <ResponsiveTableView
+              rows={salesPagination.paginatedItems}
+              getRowKey={sale => sale.id}
+              getRowLabel={sale => formatSaleFolio(sale.id)}
+              resetKey={`${salesPagination.page}|${salesFilter}|${normalizedSearch}`}
+              emptyMessage={sales.length === 0 ? "No hay ventas registradas." : salesFilter === "pending" && canReviewCancellation ? "No hay solicitudes de devolución pendientes." : salesFilter === "partial" ? "No hay ventas devueltas parcialmente con los filtros ingresados." : salesFilter === "cancelled" ? "No hay ventas canceladas con los filtros ingresados." : "No se encontraron ventas con los filtros ingresados."}
+              renderSummary={sale => <div className="grid min-w-0 gap-2">
+                <div className="flex min-w-0 items-start justify-between gap-3"><strong className="font-mono text-sm text-ink-950">{formatSaleFolio(sale.id)}</strong><span className={badgeClass(getSaleStatusTone(sale.status))}>{getSaleStatusLabel(sale.status)}</span></div>
+                <div className="flex flex-wrap items-end justify-between gap-2"><span className="text-xs text-slate-500">{formatDate(sale.date || sale.createdAt, SALE_DATE_TIME_OPTIONS, "Sin fecha")}</span><strong className="font-mono text-sm text-ink-950">{formatClp(getSaleTotals(sale).netTotal)}</strong></div>
+              </div>}
+              renderDetails={sale => <>
+                <MobileDetailGrid>
+                  <MobileDetailField label="Folio">{formatSaleFolio(sale.id)} · ID {sale.id}</MobileDetailField>
+                  <MobileDetailField label="Fecha y hora">{formatDate(sale.date || sale.createdAt, SALE_DATE_TIME_OPTIONS, "Sin fecha")}</MobileDetailField>
+                  <MobileDetailField label="Usuario" wide>{sale.userNames} {sale.userSurnames}</MobileDetailField>
+                  <MobileDetailField label="Método">{getPaymentMethodLabel(sale.paymentMethod)}</MobileDetailField>
+                  <MobileDetailField label="Estado">{getSaleStatusLabel(sale.status)}</MobileDetailField>
+                  <MobileDetailField label="Total original">{formatClp(getSaleTotals(sale).originalTotal)}</MobileDetailField>
+                  <MobileDetailField label="Devuelto">{formatClp(getSaleTotals(sale).returnedTotal)}</MobileDetailField>
+                  <MobileDetailField label="Total neto">{formatClp(getSaleTotals(sale).netTotal)}</MobileDetailField>
+                </MobileDetailGrid>
+                <MobileRowActions>
+                  <button className={secondaryButtonClass} type="button" onClick={() => openDetailModal(sale)} disabled={loadingSaleDetail}><Eye size={17} />Detalle</button>
+                  {canRequestCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && <button className={`${secondaryButtonClass} border-rust-500 text-rust-600`} type="button" onClick={() => openCancellationRequestModal(sale)} disabled={submitting}><Send size={16} />Solicitar devolución</button>}
+                  {canRequestCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && <button className={`${secondaryButtonClass} border-amber-400 bg-amber-50 text-amber-800 disabled:cursor-not-allowed disabled:opacity-100`} type="button" disabled><Clock3 size={16} />Solicitud pendiente</button>}
+                  {canReviewCancellation && isReturnableSale(sale) && sale.cancellationRequest?.status === "PENDING" && <button style={user?.role === "ADMIN" ? reviewSize : undefined} aria-label="Revisar solicitud de devolución" className={`relative ${user?.role === "ADMIN" ? "shrink-0" : ""} ${secondaryButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`} type="button" onClick={() => openReviewModal(sale)} disabled={submitting}><ReviewActionContent wide={user?.role === "ADMIN" && !reviewSize} /></button>}
+                  {canCancel && isReturnableSale(sale) && sale.cancellationRequest?.status !== "PENDING" && <button data-return-size-source className={`${secondaryButtonClass} border-rust-500 text-rust-600`} type="button" onClick={() => openDirectReturnModal(sale)} disabled={submitting}><RotateCcw size={17} />Registrar devolución</button>}
+                </MobileRowActions>
+              </>}
+              desktop={(
             <div className={tableScrollClass}>
               <table>
                 <thead>
@@ -1759,13 +1893,12 @@ export default function SalesPage() {
                             isReturnableSale(sale) &&
                             sale.cancellationRequest?.status === "PENDING" && (
                               <button
-                                className={`${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
+                                style={user?.role === "ADMIN" ? reviewSize : undefined} aria-label="Revisar solicitud de devolución" className={`relative ${user?.role === "ADMIN" ? "shrink-0" : ""} ${secondaryButtonClass} ${tableActionButtonClass} border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100`}
                                 type="button"
                                 onClick={() => openReviewModal(sale)}
                                 disabled={submitting}
                               >
-                                <Send size={16} />
-                                Revisar solicitud
+                                <ReviewActionContent wide={user?.role === "ADMIN" && !reviewSize} />
                               </button>
                             )}
                           {canCancel &&
@@ -1775,6 +1908,7 @@ export default function SalesPage() {
                               className={`${secondaryButtonClass} ${tableActionButtonClass} border-rust-500 text-rust-600`}
                               type="button"
                               onClick={() => openDirectReturnModal(sale)}
+                              data-return-size-source
                               disabled={submitting}
                             >
                               <RotateCcw size={17} />
@@ -1803,6 +1937,8 @@ export default function SalesPage() {
                 </tbody>
               </table>
             </div>
+              )}
+            />
             <Pagination
               page={salesPagination.page}
               pageSize={salesPagination.pageSize}

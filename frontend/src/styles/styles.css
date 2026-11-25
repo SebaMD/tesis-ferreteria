@@ -773,7 +773,7 @@
   border-color: var(--color-rust-500) !important;
 }
 
-[data-sonner-toaster][data-sonner-theme="light"] [data-sonner-toast].app-toast-warning [data-description] {
+[data-sonner-toaster][data-sonner-theme="light"] [data-sonner-toast]:is(.app-toast-warning, .app-toast-error) [data-description] {
   color: inherit;
 }
 

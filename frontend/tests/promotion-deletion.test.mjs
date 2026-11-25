@@ -40,7 +40,9 @@ test('shared modal, current role restrictions and backend DELETE endpoint are pr
   const routes = await readFile(new URL('../../backend/src/modules/promotions/promotions.routes.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(page, /window\.confirm/);
   assert.match(page, /title="Eliminar promoción"/);
-  assert.match(page, /disabled=\{promotion\.usageCount > 0 \|\| deleting\}/);
+  assert.match(page, /disabled=\{deleting\} aria-disabled=\{promotion\.usageCount > 0 \|\| deleting\}/);
+  assert.match(page, /if \(promotion\.usageCount > 0\) \{ toast\.error\("No se puede eliminar la promoción\."/);
+  assert.match(page, /setDeleteError\(message\);\s*toast\.error\("No se puede eliminar la promoción\.", \{ description: message \}\)/);
   assert.match(page, /deleteInFlight\.current = true/);
   assert.match(routes, /verifyRoles\(\["ADMIN", "MANAGER"\]\)/);
   assert.match(routes, /router\.delete\("\/:id", deletePromotionController\)/);

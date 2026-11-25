@@ -193,7 +193,9 @@ export default function PromotionsPage() {
       toast.success("Promoción eliminada");
       await load();
     } catch (error) {
-      setDeleteError(getApiError(error, "No se pudo eliminar la promoción"));
+      const message = getApiError(error, "No se pudo eliminar la promoción");
+      setDeleteError(message);
+      toast.error("No se puede eliminar la promoción.", { description: message });
     } finally {
       deleteInFlight.current = false;
       setDeleting(false);
@@ -220,7 +222,7 @@ export default function PromotionsPage() {
                 <div className="flex flex-wrap gap-2 max-[620px]:grid max-[620px]:w-full max-[620px]:grid-cols-3 max-[620px]:gap-1.5">
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => openEdit(promotion, Date.now() + serverOffset)} aria-label={`Editar ${promotion.name}`} title="Editar"><Edit3 size={16} /> <span className="max-[620px]:sr-only">Editar</span></button>
                   <button className="border-slate-300 bg-white text-ink-700 hover:bg-slate-100 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={() => toggle(promotion)} aria-label={`${promotion.isActive ? "Desactivar" : "Activar"} ${promotion.name}`} title={promotion.isActive ? "Desactivar" : "Activar"}><Power size={16} /> <span className="max-[620px]:sr-only">{promotion.isActive ? "Desactivar" : "Activar"}</span></button>
-                  <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={(event) => { deleteTrigger.current = event.currentTarget; setDeleteError(""); setDeleteTarget(promotion); }} disabled={promotion.usageCount > 0 || deleting} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
+                  <button className="border-critical-600 bg-white text-critical-600 hover:bg-critical-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 max-[620px]:min-h-11 max-[620px]:w-full max-[620px]:px-2" type="button" onClick={(event) => { if (promotion.usageCount > 0) { toast.error("No se puede eliminar la promoción.", { description: "Esta promoción ya fue aplicada a un pedido y debe conservarse para mantener el historial de compras." }); return; } deleteTrigger.current = event.currentTarget; setDeleteError(""); setDeleteTarget(promotion); }} disabled={deleting} aria-disabled={promotion.usageCount > 0 || deleting} aria-label={`Eliminar ${promotion.name}`} title={promotion.usageCount > 0 ? "Una promoción utilizada debe conservarse" : "Eliminar"}><Trash2 size={16} /> <span className="max-[620px]:sr-only">Eliminar</span></button>
                 </div>
               </div>
               {promotion.usageCount > 0 && <p className="m-0 text-xs text-slate-600">Esta promoción ya fue utilizada y debe conservarse como trazabilidad. Puede desactivarla.</p>}

@@ -23,6 +23,7 @@ import {
 } from "../helpers/labels.js";
 import { PAYMENT_METHODS } from "../helpers/options.js";
 import { getOnlineAvailableStock } from "../helpers/productAvailability.js";
+import { getPosCartQuantityError } from "../helpers/posCartQuantity.js";
 import { DELIVERY_COMMUNE } from "../helpers/delivery.js";
 import { formatRutInput, isValidRut, normalizeRut } from "../helpers/rut.js";
 import useAuth from "../hooks/useAuth.js";
@@ -173,6 +174,8 @@ export default function SalesPage() {
   const [saleDeliveryType, setSaleDeliveryType] = useState("IMMEDIATE");
   const [saleDelivery, setSaleDelivery] = useState(EMPTY_SALE_DELIVERY);
   const [cartItems, setCartItems] = useState([]);
+  const [cartQuantityDrafts, setCartQuantityDrafts] = useState({});
+  const checkoutPointerIntent = useRef(false);
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [lastScannedProduct, setLastScannedProduct] = useState(null);
   const [salesScannerOpen, setSalesScannerOpen] = useState(false);
@@ -390,6 +393,10 @@ export default function SalesPage() {
   );
   const cartTotal = cartRows.reduce((total, row) => total + row.subtotal, 0);
   const cartHasInvalidStock = cartRows.some((row) => row.quantity < 1 || row.quantity > getOnlineAvailableStock(row.product));
+  const invalidCartQuantityRow = cartRows.find((row) => getPosCartQuantityError(
+    cartQuantityDrafts[String(row.product.id)] ?? row.quantity,
+    getOnlineAvailableStock(row.product),
+  ));
   const isCashPayment = paymentMethod === "efectivo";
   const receivedAmount = Number(cashReceived || 0);
   const cashChange = receivedAmount - cartTotal;
@@ -398,6 +405,7 @@ export default function SalesPage() {
     !submitting &&
     cartRows.length > 0 &&
     !cartHasInvalidStock &&
+    !invalidCartQuantityRow &&
     (!isCashPayment || (cashReceived !== "" && receivedAmount >= cartTotal)) &&
     (saleDeliveryType === "IMMEDIATE" || (
       saleDelivery.recipientName.trim().length >= 3 &&
@@ -449,6 +457,14 @@ export default function SalesPage() {
       (detail) => Number(returnQuantities[String(detail.productId)]) === detail.availableQuantity,
     );
 
+  const clearCartQuantityDraft = (productId) => {
+    setCartQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[String(productId)];
+      return next;
+    });
+  };
+
   const getCartQuantity = (productId) => {
     const item = cartItems.find((cartItem) => String(cartItem.productId) === String(productId));
     return Number(item?.quantity || 0);
@@ -468,6 +484,7 @@ export default function SalesPage() {
       return false;
     }
 
+    clearCartQuantityDraft(product.id);
     setCartItems((current) => {
       const exists = current.some((item) => String(item.productId) === String(product.id));
 
@@ -547,12 +564,10 @@ export default function SalesPage() {
   const updateCartQuantity = (productId, value) => {
     const product = productById.get(String(productId));
     const availableStock = getOnlineAvailableStock(product);
-    const requestedQuantity = Math.max(1, Number(value || 1));
-    const nextQuantity = availableStock > 0 ? Math.min(requestedQuantity, availableStock) : 1;
-
-    if (requestedQuantity > availableStock) {
-      toast.warning("La cantidad no puede superar el stock disponible");
-    }
+    checkoutPointerIntent.current = false;
+    setCartQuantityDrafts((current) => ({ ...current, [String(productId)]: value }));
+    if (getPosCartQuantityError(value, availableStock)) return;
+    const nextQuantity = Number(value);
 
     setCartItems((current) =>
       current.map((item) =>
@@ -563,12 +578,31 @@ export default function SalesPage() {
     );
   };
 
+  const restoreCartQuantity = (productId, event) => {
+    const checkoutIntent = checkoutPointerIntent.current || event.relatedTarget?.closest?.("[data-pos-checkout]");
+    checkoutPointerIntent.current = false;
+    // Keep an invalid draft for the checkout guard, even when pointer blur has no relatedTarget.
+    if (checkoutIntent && getPosCartQuantityError(event.currentTarget.value, getOnlineAvailableStock(productById.get(String(productId))))) return;
+    clearCartQuantityDraft(productId);
+  };
+
+  const rejectInvalidCartQuantity = () => {
+    if (!invalidCartQuantityRow) return false;
+    const id = String(invalidCartQuantityRow.product.id);
+    toast.warning("Revisa la cantidad del carrito", { description: `${invalidCartQuantityRow.product.name}: ${getPosCartQuantityError(cartQuantityDrafts[id] ?? invalidCartQuantityRow.quantity, getOnlineAvailableStock(invalidCartQuantityRow.product))}` });
+    document.getElementById(`pos-cart-quantity-${id}`)?.focus();
+    return true;
+  };
+
   const removeCartItem = (productId) => {
+    clearCartQuantityDraft(productId);
     setCartItems((current) => current.filter((item) => String(item.productId) !== String(productId)));
   };
 
   const clearCart = () => {
     setCartItems([]);
+    setCartQuantityDrafts({});
+    checkoutPointerIntent.current = false;
     setPaymentMethod("efectivo");
     setCashReceived("");
     setSaleDeliveryType("IMMEDIATE");
@@ -580,6 +614,8 @@ export default function SalesPage() {
       toast.warning("Agrega al menos un producto al carrito");
       return;
     }
+
+    if (rejectInvalidCartQuantity()) return;
 
     if (cartHasInvalidStock) {
       toast.warning("Revisa las cantidades del carrito antes de finalizar la venta");
@@ -603,6 +639,7 @@ export default function SalesPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (rejectInvalidCartQuantity()) return;
 
     if (cartRows.length === 0) {
       toast.warning("Agrega al menos un producto al carrito");
@@ -1839,11 +1876,12 @@ export default function SalesPage() {
                                         className="sale-return-product"
                                         key={`${request.id}-${detail.productId}`}
                                       >
-                                        <div className="min-w-0"><span className="block wrap-break-word text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}/></div>
-                                        <div className="sale-return-values font-mono"><span className="return-quantity text-slate-500">{detail.requestedQuantity} {Number(detail.requestedQuantity) === 1 ? "unidad" : "unidades"}</span><span aria-hidden="true">·</span>
+                                        <div className="min-w-0"><span className="block wrap-break-word text-ink-700">{detail.productName || `Producto #${detail.productId}`}</span><HistoricalIdentityNote capture={detail.historicalIdentity}>
+                                        <span className="sale-return-values font-mono"><span className="return-quantity text-slate-500">{detail.requestedQuantity} {Number(detail.requestedQuantity) === 1 ? "unidad" : "unidades"}</span><span aria-hidden="true">·</span>
                                         <strong className="text-ink-950">
                                           {formatClp(detail.requestedSubtotal)}
-                                        </strong></div>
+                                        </strong></span>
+                                        </HistoricalIdentityNote></div>
                                       </div>
                                     ))}
                                   </div>
@@ -2024,7 +2062,10 @@ export default function SalesPage() {
                   Agrega productos desde el catálogo para iniciar la venta.
                 </p>
               ) : (
-                cartRows.map((row) => (
+                cartRows.map((row) => {
+                  const quantityValue = cartQuantityDrafts[String(row.product.id)] ?? row.quantity;
+                  const quantityError = getPosCartQuantityError(quantityValue, getOnlineAvailableStock(row.product));
+                  return (
                   <article className="grid gap-2 rounded-[5px] border border-slate-200 bg-[#fafbfc] p-2.5" key={row.product.id}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="grid min-w-0 gap-0.5">
@@ -2048,12 +2089,22 @@ export default function SalesPage() {
                         Cantidad
                         <input
                           type="number"
+                          id={`pos-cart-quantity-${row.product.id}`}
+                          aria-label={`Cantidad de ${row.product.name}`}
                           min="1"
+                          step="1"
                           max={getOnlineAvailableStock(row.product)}
-                          value={row.quantity}
+                          value={quantityValue}
                           onChange={(event) => updateCartQuantity(row.product.id, event.target.value)}
+                          onBlur={(event) => restoreCartQuantity(row.product.id, event)}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onKeyDown={preventNonIntegerQuantityKey}
+                          onPaste={preventNonIntegerQuantityPaste}
+                          aria-invalid={Boolean(quantityError)}
+                          aria-describedby={quantityError ? `pos-quantity-error-${row.product.id}` : undefined}
                           required
                         />
+                        {quantityError && <span className="block text-[11px] font-semibold text-critical-600" id={`pos-quantity-error-${row.product.id}`}>{quantityError}</span>}
                       </label>
                       <div className="grid justify-items-end gap-0.5 text-right">
                         <span className="text-[11px] text-slate-500">Subtotal</span>
@@ -2061,7 +2112,8 @@ export default function SalesPage() {
                       </div>
                     </div>
                   </article>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -2081,7 +2133,7 @@ export default function SalesPage() {
                 <span className="text-sm font-bold text-slate-600">Total</span>
                 <strong className="font-mono text-2xl text-ink-950">{formatClp(cartTotal)}</strong>
               </div>
-              <button type="button" onClick={openPaymentModal} disabled={cartRows.length === 0 || cartHasInvalidStock || submitting}>
+              <button type="button" data-pos-checkout onPointerDownCapture={() => { checkoutPointerIntent.current = true; }} onPointerUp={() => { checkoutPointerIntent.current = false; }} onPointerCancel={() => { checkoutPointerIntent.current = false; }} onClick={openPaymentModal} disabled={cartRows.length === 0 || cartHasInvalidStock || submitting}>
                 Finalizar venta
               </button>
             </div>

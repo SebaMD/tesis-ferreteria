@@ -8,6 +8,7 @@ import { formatClp } from "../../helpers/formatters.js";
 import ResponsiveTableView, { MobileDetailField, MobileDetailGrid } from "../ResponsiveTableView.jsx";
 import OrderItemPromotion from "./OrderItemPromotion.jsx";
 import HistoricalIdentityNote from "../HistoricalIdentityNote.jsx";
+import { copyText } from "../../helpers/clipboard.js";
 
 export default function AdministrativeOrderCard({ orderId, role }) {
   const allowed = canViewAdministrativeOrder(role);
@@ -31,8 +32,7 @@ export default function AdministrativeOrderCard({ orderId, role }) {
     if (!model || copying) return;
     setCopying(true);
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Portapapeles no disponible");
-      await navigator.clipboard.writeText(formatAdministrativeOrderText(model));
+      await copyText(formatAdministrativeOrderText(model));
       toast.success("Datos copiados para registro manual");
     } catch {
       toast.error("No se pudo copiar. Puedes seleccionar los datos o imprimir la ficha.");
